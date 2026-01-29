@@ -170,8 +170,9 @@ export interface EmitSink {
   writeEvent(envelope: EventEnvelope): Promise<void>
 
   /**
-   * Write artifact binary data.
-   * Called after the artifact metadata event.
+   * Write artifact binary data (chunk frames).
+   * Per CONTRACT_IPC.md, bytes are written BEFORE the artifact event.
+   * The artifact event is the commit record.
    * The sink handles chunking per CONTRACT_IPC.md.
    */
   writeArtifactData(artifact_id: ArtifactId, data: Buffer | Uint8Array): Promise<void>

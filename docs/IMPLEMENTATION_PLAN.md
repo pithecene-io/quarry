@@ -255,3 +255,31 @@ Quarry is ready to expand when:
 - Loss (if any) is intentional and observable
 - Lode partitions are consistent across policies
 - No escape hatches were required during dogfooding
+
+---
+
+## Contract Change Protocol
+
+Any change to SDK, executor, runtime, or policy that affects contract behavior
+must follow this protocol.
+
+### Pre-merge checklist
+
+**For SDK envelope/event type changes:**
+- [ ] Update `docs/CONTRACT_EMIT.md`
+- [ ] Update impacted contract docs (if any)
+- [ ] Verify SDK types match contract definitions
+
+**For IPC/streaming changes:**
+- [ ] Update `docs/CONTRACT_IPC.md`
+- [ ] Verify executor and runtime implementations align
+
+**For run identity/lineage changes:**
+- [ ] Update `docs/CONTRACT_RUN.md`
+
+### PR requirements
+
+PRs that modify contract behavior must:
+1. Reference the specific contract section changed.
+2. Include a **compatibility note** (breaking vs additive).
+3. Update `contract_version` if the change is breaking.
