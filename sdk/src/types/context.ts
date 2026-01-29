@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
-import type { EmitAPI } from '../emit.js'
-import type { JobId, RunId } from './events.js'
+import type { EmitAPI } from '../emit'
+import type { JobId, RunId } from './events'
 
 /**
  * Run metadata available to scripts.

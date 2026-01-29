@@ -44,9 +44,10 @@ When applicable, the following fields must be set:
   - For first attempt runs, this field is absent.
 
 - `attempt`
-  - Integer retry count.
-  - Starts at 1 for the first run of a job.
-  - Incremented for each retry run.
+  - Integer attempt number. **Always present.**
+  - Starts at **1** for the initial run of a job.
+  - Incremented by 1 for each retry run.
+  - A run with `attempt: 1` and no `parent_run_id` is an initial run.
 
 ---
 

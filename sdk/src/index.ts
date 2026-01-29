@@ -1,4 +1,4 @@
-// Event types
+// Event types (from sdk/src/types/events.ts)
 export type {
   ContractVersion,
   EventType,
@@ -24,7 +24,7 @@ export type {
 
 export { CONTRACT_VERSION } from './types/events'
 
-// Context types
+// Context types (from sdk/src/types/context.ts)
 export type { RunMeta, QuarryContext, QuarryScript } from './types/context'
 
 // Emit types
@@ -50,10 +50,10 @@ export type {
   QuarryScriptModule
 } from './hooks'
 
-// Errors (public, useful for catching)
-export { TerminalEventError, SinkFailedError } from './emit-impl'
+// Errors (public — useful for user scripts to catch)
+export { TerminalEventError } from './emit-impl'
 
-// Internal exports for executor-node (marked @internal in source)
+// Internal exports for executor-node (@internal — not for user scripts)
 export type { EmitSink } from './emit'
 export type { CreateContextOptions } from './context'
 export { createContext } from './context'

@@ -187,8 +187,8 @@ export interface EventEnvelopeBase {
   readonly job_id?: JobId
   /** Parent run ID, included when run is a retry or child run */
   readonly parent_run_id?: RunId
-  /** Retry attempt number when applicable */
-  readonly attempt?: number
+  /** Attempt number. Always present. Starts at 1. */
+  readonly attempt: number
 }
 
 /**

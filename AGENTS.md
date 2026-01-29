@@ -167,6 +167,13 @@ Agents must never introduce:
 - `require`, `exports`, `module`
 - `any`
 - `// eslint-disable`
-- Barrel files that hide dependency structure
+- Internal barrel files that hide dependency structure
 - Framework magic without explicit wiring
+
+### 11. Barrel File Policy
+
+- **Allowed**: One public entrypoint per package (e.g., `sdk/src/index.ts`).
+- **Forbidden**: Internal barrel files (e.g., `sdk/src/types/index.ts`).
+- Public entrypoints must use **explicit imports** from source files,
+  not re-export from internal barrels.
 

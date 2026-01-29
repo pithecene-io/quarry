@@ -48,8 +48,8 @@ All fields are required unless marked optional.
   - Included when known at emit-time.
 - `parent_run_id` (string, optional)
   - Included when the run is a retry or child run.
-- `attempt` (integer, optional)
-  - Retry attempt number when applicable.
+- `attempt` (integer)
+  - Attempt number. Always present. Starts at 1 for initial runs.
 
 The envelope must be **stable** and **parseable without schema discovery**.
 
@@ -73,7 +73,11 @@ Required payload fields:
 - `content_type` (string)
 - `size_bytes` (integer)
 
-Artifacts are transmitted via IPC framing and chunking rules in CONTRACT_IPC.md.
+The **artifact event is the commit record** for an artifact. Artifact bytes
+may be transmitted before this event (see CONTRACT_IPC.md for ordering,
+chunking, and `is_last` signaling).
+
+Orphaned bytes (no corresponding artifact event) are eligible for GC.
 
 ### 3) `checkpoint`
 Represents an explicit script checkpoint.

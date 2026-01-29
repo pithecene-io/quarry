@@ -132,10 +132,12 @@ export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
         const artifact_id = randomUUID() as ArtifactId
         const size_bytes = options.data.byteLength
 
-        // Write bytes first, then emit event (event = commit record).
-        // If bytes fail, no event is emitted.
-        // If event fails after bytes, we leak an unreferenced blob.
-        // GC strategy: objects older than N days with no manifest reference.
+        // Per CONTRACT_IPC.md: artifact bytes may be written before the artifact event.
+        // The artifact event is the commit record.
+        //
+        // Failure modes:
+        // - Bytes fail → no event emitted, no orphan.
+        // - Event fails after bytes → orphaned blob, eligible for GC.
         await sink.writeArtifactData(artifact_id, options.data)
 
         const envelope = createEnvelope('artifact', {

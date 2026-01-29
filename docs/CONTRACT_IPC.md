@@ -54,26 +54,54 @@ Artifacts larger than 16 MiB must be chunked (see below).
 
 ## Artifact Chunking
 
-Artifacts are emitted as:
-1) An `artifact` event (metadata envelope).
-2) One or more **artifact chunk frames**.
+Artifacts are transmitted as:
+1) One or more **artifact chunk frames** (bytes).
+2) An `artifact` event (metadata envelope) — the **commit record**.
 
 Chunk rules:
 - **Chunk size**: up to 8 MiB of raw bytes.
-- **Ordering**: strictly in order after the `artifact` event.
-- **Reassembly**: consumer reassembles based on:
-  - `artifact_id`
-  - chunk sequence
-  - total size bytes from metadata
+- **Ordering**: strictly in order; chunk `seq` starts at 1.
+- **Completion**: the final chunk has `is_last: true`.
+- **Reassembly**: consumer reassembles using `artifact_id` and `seq`.
+  Reassembly does not require the artifact event; `is_last` signals
+  when all bytes have arrived.
 
 Chunk frame payload layout (msgpack-encoded envelope):
 - `type` = `artifact_chunk`
 - `artifact_id` (string)
 - `seq` (integer, starting at 1)
+- `is_last` (boolean)
 - `data` (bytes)
 
 The `artifact_chunk` envelope is not a normal emit event and does not use
 the standard event envelope. It is a stream-level construct.
+
+---
+
+## Artifact Commit Semantics
+
+The **artifact event** is the authoritative **commit record** for an artifact.
+
+### Ordering Guarantees
+
+- Artifact bytes (chunk frames) **MAY** precede the artifact event.
+- The runtime **MUST** accept artifact chunk frames keyed by `artifact_id`
+  even if the corresponding artifact event has not yet been observed.
+- The runtime **MUST NOT** treat an artifact as "existent" until the
+  artifact event is received.
+
+### Orphaned Blobs
+
+- If artifact bytes arrive but no artifact event follows (e.g., script crash),
+  the bytes are **orphaned** and eligible for garbage collection.
+- GC strategy is implementation-defined (e.g., blobs older than N hours with
+  no manifest reference).
+
+### Size Constraints
+
+- Maximum artifact size: implementation-defined (recommended: 1 GiB).
+- Maximum chunk size: 8 MiB (per Artifact Chunking above).
+- Artifacts exceeding the maximum size **MUST** be rejected by the runtime.
 
 ---
 
