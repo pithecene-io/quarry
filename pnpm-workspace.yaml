@@ -1,4 +1,6 @@
 packages:
-  - "sdk"
-  - "executor-node"
+  - sdk
+  - executor-node
 
+onlyBuiltDependencies:
+  - puppeteer

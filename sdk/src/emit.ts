@@ -1,9 +1,4 @@
-import type {
-  ArtifactId,
-  CheckpointId,
-  EventEnvelope,
-  LogLevel
-} from './types/events'
+import type { ArtifactId, CheckpointId, EventEnvelope, LogLevel } from './types/events'
 
 /**
  * Options for emitting an item.
