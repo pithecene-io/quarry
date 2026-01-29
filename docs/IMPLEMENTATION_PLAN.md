@@ -45,7 +45,7 @@ Establish development discipline before any architectural commitments harden.
 - Taskfile scaffolding for lint / test / build
 
 ### Mini-milestones
-- [ ] Repo structure committed
+- [x] Repo structure committed
 - [ ] Taskfile targets exist (even if stubbed)
 - [ ] Guardrails reviewed and accepted
 

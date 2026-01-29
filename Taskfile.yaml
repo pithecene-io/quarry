@@ -1,0 +1,67 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build Go module and TS packages
+    deps: [go:build, ts:build]
+
+  lint:
+    desc: Lint Go module and TS packages
+    deps: [go:lint, ts:lint]
+
+  test:
+    desc: Test Go module and TS packages
+    deps: [go:test, ts:test]
+
+  format:
+    desc: Format Go module and TS packages
+    deps: [go:format, ts:format]
+    aliases: [fmt]
+
+  go:build:
+    desc: Build Go module
+    dir: quarry
+    cmds:
+      - go build ./...
+
+  go:lint:
+    desc: Lint Go module
+    dir: quarry
+    cmds:
+      - golangci-lint run ./...
+
+  go:test:
+    desc: Test Go module
+    dir: quarry
+    cmds:
+      - go test ./...
+
+  go:format:
+    desc: Format Go module via golangci-lint fix
+    dir: quarry
+    cmds:
+      - golangci-lint run --fix ./...
+
+  ts:build:
+    desc: Build TS packages
+    cmds:
+      - pnpm -C sdk run build
+      - pnpm -C executor-node run build
+
+  ts:lint:
+    desc: Lint TS packages
+    cmds:
+      - pnpm -C sdk run lint
+      - pnpm -C executor-node run lint
+
+  ts:test:
+    desc: Test TS packages
+    cmds:
+      - pnpm -C sdk run test
+      - pnpm -C executor-node run test
+
+  ts:format:
+    desc: Format TS packages
+    cmds:
+      - pnpm -C sdk run format
+      - pnpm -C executor-node run format
