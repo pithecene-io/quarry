@@ -1,7 +1,7 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
-import type { QuarryContext, RunMeta } from './types/context'
 import type { EmitSink } from './emit'
 import { createEmitAPI } from './emit-impl'
+import type { QuarryContext, RunMeta } from './types/context'
 
 /**
  * Options for creating a QuarryContext.

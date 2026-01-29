@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "biome check . && tsc --noEmit",
-    "format": "biome format --write .",
+    "format": "biome check --write .",
     "test": "vitest run"
   },
   "peerDependencies": {

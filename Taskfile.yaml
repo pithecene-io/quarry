@@ -1,67 +1,91 @@
 version: '3'
 
+vars:
+  TS_PACKAGES: sdk executor-node
+
 tasks:
+  # ====================
+  # Top-level (CI-facing)
+  # ====================
+
   build:
-    desc: Build Go module and TS packages
+    desc: Build all packages (Go + TS)
     deps: [go:build, ts:build]
 
   lint:
-    desc: Lint Go module and TS packages
+    desc: Lint all packages (Go + TS)
     deps: [go:lint, ts:lint]
 
   test:
-    desc: Test Go module and TS packages
+    desc: Test all packages (Go + TS)
     deps: [go:test, ts:test]
 
   format:
-    desc: Format Go module and TS packages
-    deps: [go:format, ts:format]
+    desc: Format all packages (Go + TS)
     aliases: [fmt]
+    deps: [go:format, ts:format]
+
+  # ==========
+  # Go tasks
+  # ==========
 
   go:build:
     desc: Build Go module
+    aliases: [go:b]
     dir: quarry
     cmds:
       - go build ./...
 
   go:lint:
     desc: Lint Go module
+    aliases: [go:l]
     dir: quarry
     cmds:
       - golangci-lint run ./...
 
   go:test:
     desc: Test Go module
+    aliases: [go:t]
     dir: quarry
     cmds:
       - go test ./...
 
   go:format:
-    desc: Format Go module via golangci-lint fix
+    desc: Format Go module
+    aliases: [go:fmt]
     dir: quarry
     cmds:
       - golangci-lint run --fix ./...
 
+  # ==================
+  # TypeScript tasks
+  # ==================
+
   ts:build:
-    desc: Build TS packages
+    desc: Build all TS packages
+    aliases: [ts:b]
     cmds:
-      - pnpm -C sdk run build
-      - pnpm -C executor-node run build
+      - for: { var: TS_PACKAGES }
+        cmd: pnpm -C {{.ITEM}} run build
 
   ts:lint:
-    desc: Lint TS packages
+    desc: Lint all TS packages
+    aliases: [ts:l]
     cmds:
-      - pnpm -C sdk run lint
-      - pnpm -C executor-node run lint
+      - for: { var: TS_PACKAGES }
+        cmd: pnpm -C {{.ITEM}} run lint
 
   ts:test:
-    desc: Test TS packages
+    desc: Test all TS packages
+    aliases: [ts:t]
     cmds:
-      - pnpm -C sdk run test
-      - pnpm -C executor-node run test
+      - for: { var: TS_PACKAGES }
+        cmd: pnpm -C {{.ITEM}} run test
 
   ts:format:
-    desc: Format TS packages
+    desc: Format all TS packages
+    aliases: [ts:fmt]
     cmds:
-      - pnpm -C sdk run format
-      - pnpm -C executor-node run format
+      - for: { var: TS_PACKAGES }
+        cmd: pnpm -C {{.ITEM}} run format
+  
