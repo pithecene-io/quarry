@@ -38,3 +38,135 @@ Before adding code, ask:
 > Does this make the system easier to reason about for a future reader?
 
 If the answer is no, reconsider the change.
+
+## TypeScript Code Style & Conventions (Quarry)
+
+Quarry’s TypeScript codebase is **TypeScript-first, ESM-native, and modern by default**. Agents must follow these rules strictly.
+
+### 1. Language & Module System
+
+- **TypeScript only** (`.ts`, `.tsx` if ever needed)
+- **ESM only**
+  - Use `import` / `export`
+  - Never use `require`, `module.exports`, or CommonJS patterns
+- **Do not import `.js` files**
+  - All imports must resolve to TypeScript sources
+  - Use extensionless imports when supported by tooling
+- Target **ES2022+** semantics (async/await, top-level await allowed where appropriate)
+
+### 2. Strictness & Types
+
+- Assume **`strict: true`**
+- No `any`
+  - Use `unknown` + narrowing if necessary
+- Prefer **explicit return types** on exported functions
+- Prefer **type aliases** over interfaces unless extension is intentional
+- Model domain concepts with **rich types**, not comments
+
+    // good
+    export type JobId = string & { readonly __brand: "JobId" }
+
+    // bad
+    export type JobId = string
+
+### 3. Imports & Exports
+
+- Prefer **named exports**
+- Avoid default exports except for:
+  - Framework entrypoints
+  - Single-purpose modules
+- Group imports:
+  1. Node built-ins
+  2. External dependencies
+  3. Internal modules
+
+    import fs from "node:fs/promises"
+
+    import { z } from "zod"
+
+    import { TaskGraph } from "@/runtime/task-graph"
+
+### 4. File & Directory Conventions
+
+- `kebab-case.ts` for files
+- One primary concept per file
+- Avoid “utility dumping grounds”
+- Prefer **small, composable modules**
+
+    runtime/
+      scheduler.ts
+      task-graph.ts
+      execution-context.ts
+
+### 5. Functions & Control Flow
+
+- Prefer **pure functions**
+- Prefer **expression-oriented code**
+- Early returns over deep nesting
+- No implicit mutation unless performance-critical and justified
+
+    // good
+    export function isTerminal(state: State): boolean {
+      return state.kind === "done" || state.kind === "failed"
+    }
+
+    // bad
+    export function isTerminal(state: any) {
+      if (state) {
+        if (state.kind === "done") {
+          return true
+        } else {
+          if (state.kind === "failed") {
+            return true
+          }
+        }
+      }
+      return false
+    }
+
+### 6. Async & Concurrency
+
+- Use `async` / `await`
+- Never mix promise chains with `await`
+- Errors must be explicitly handled or propagated
+- No floating promises
+
+    await queue.enqueue(task)
+    queue.enqueue(task) // forbidden
+
+### 7. Errors & Results
+
+- Prefer explicit error types or result objects over exceptions for control flow
+- If throwing:
+  - Throw `Error` subclasses
+  - Never throw raw strings
+
+    throw new ExecutionError("task timed out", { taskId })
+
+### 8. Formatting & Linting
+
+- Formatting is automated (Biome / Prettier-equivalent)
+- Agents must not hand-format
+- Assume:
+  - 2-space indentation
+  - Trailing commas where valid
+  - Semicolons optional but consistent
+
+### 9. Comments & Documentation
+
+- Comments explain **why**, not **what**
+- Prefer types over comments
+- No commented-out code
+- Use TSDoc only for exported APIs
+
+### 10. Forbidden Patterns
+
+Agents must never introduce:
+
+- JavaScript files (`.js`)
+- `require`, `exports`, `module`
+- `any`
+- `// eslint-disable`
+- Barrel files that hide dependency structure
+- Framework magic without explicit wiring
+

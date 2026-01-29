@@ -26,6 +26,7 @@ Runs are append-only and immutable once complete.
 - Unique, stable identifier for a run.
 - Must be globally unique across all time and jobs.
 - Appears in every event envelope.
+- run_id generation strategy is implementation-defined but must be collision-resistant (e.g., UUIDv7, ULID).
 
 ### `job_id`
 - Identifier for the logical job.
