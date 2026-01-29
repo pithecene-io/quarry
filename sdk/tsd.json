@@ -1,0 +1,7 @@
+{
+  "directory": "test/emit/00-types",
+  "compilerOptions": {
+    "strict": true
+  }
+}
+

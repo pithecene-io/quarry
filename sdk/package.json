@@ -16,17 +16,21 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "biome check . && tsc --noEmit",
+    "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:types": "tsd"
   },
   "peerDependencies": {
     "puppeteer": "^24",
     "puppeteer-extra": "^3"
   },
   "devDependencies": {
+    "fast-check": "^4.1.1",
     "puppeteer": "^24.36.1",
     "puppeteer-extra": "^3.3.6",
+    "tsd": "^0.32.0",
     "tsdown": "^0.20.1"
   }
 }

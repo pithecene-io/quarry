@@ -1,0 +1,60 @@
+[
+  {
+    "contract_version": "0.1.0",
+    "event_id": "EVENT_ID_PLACEHOLDER",
+    "run_id": "00000000-0000-0000-0000-000000000001",
+    "job_id": "00000000-0000-0000-0000-000000000002",
+    "seq": 1,
+    "ts": "TIMESTAMP_PLACEHOLDER",
+    "attempt": 1,
+    "type": "item",
+    "payload": {
+      "item_type": "page",
+      "data": {
+        "url": "https://example.com",
+        "title": "Example"
+      }
+    }
+  },
+  {
+    "contract_version": "0.1.0",
+    "event_id": "EVENT_ID_PLACEHOLDER",
+    "run_id": "00000000-0000-0000-0000-000000000001",
+    "job_id": "00000000-0000-0000-0000-000000000002",
+    "seq": 2,
+    "ts": "TIMESTAMP_PLACEHOLDER",
+    "attempt": 1,
+    "type": "artifact",
+    "payload": {
+      "artifact_id": "ARTIFACT_ID_PLACEHOLDER",
+      "name": "screenshot.png",
+      "content_type": "image/png",
+      "size_bytes": 12
+    }
+  },
+  {
+    "contract_version": "0.1.0",
+    "event_id": "EVENT_ID_PLACEHOLDER",
+    "run_id": "00000000-0000-0000-0000-000000000001",
+    "job_id": "00000000-0000-0000-0000-000000000002",
+    "seq": 3,
+    "ts": "TIMESTAMP_PLACEHOLDER",
+    "attempt": 1,
+    "type": "checkpoint",
+    "payload": {
+      "checkpoint_id": "page-captured",
+      "note": "Screenshot saved"
+    }
+  },
+  {
+    "contract_version": "0.1.0",
+    "event_id": "EVENT_ID_PLACEHOLDER",
+    "run_id": "00000000-0000-0000-0000-000000000001",
+    "job_id": "00000000-0000-0000-0000-000000000002",
+    "seq": 4,
+    "ts": "TIMESTAMP_PLACEHOLDER",
+    "attempt": 1,
+    "type": "run_complete",
+    "payload": {}
+  }
+]
