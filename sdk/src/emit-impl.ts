@@ -4,11 +4,11 @@ import type {
   EmitArtifactOptions,
   EmitCheckpointOptions,
   EmitEnqueueOptions,
+  EmitItemOptions,
   EmitLogOptions,
   EmitRotateProxyOptions,
   EmitRunCompleteOptions,
   EmitRunErrorOptions,
-  EmitItemOptions,
   EmitSink
 } from './emit'
 import type { RunMeta } from './types/context'
