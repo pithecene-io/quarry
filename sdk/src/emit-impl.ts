@@ -12,13 +12,7 @@ import type {
   EmitSink
 } from './emit'
 import type { RunMeta } from './types/context'
-import type {
-  ArtifactId,
-  EventEnvelope,
-  EventId,
-  EventType,
-  PayloadMap
-} from './types/events'
+import type { ArtifactId, EventEnvelope, EventId, EventType, PayloadMap } from './types/events'
 import { CONTRACT_VERSION } from './types/events'
 
 /**

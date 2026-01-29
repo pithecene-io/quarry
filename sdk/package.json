@@ -10,14 +10,23 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
-  "peerDependencies": {
-    "puppeteer-extra": ">=3.3.0"
-  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "biome check . && tsc --noEmit",
     "format": "biome format --write .",
     "test": "vitest run"
+  },
+  "peerDependencies": {
+    "puppeteer": "^24",
+    "puppeteer-extra": "^3"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.36.1",
+    "puppeteer-extra": "^3.3.6",
+    "tsdown": "^0.20.1"
   }
 }
