@@ -17,8 +17,16 @@ tasks:
     deps: [go:lint, ts:lint]
 
   test:
-    desc: Test all packages (Go + TS)
+    desc: Run all tests (Go + TS)
     deps: [go:test, ts:test]
+
+  typecheck:
+    desc: Typecheck implementation (TS)
+    deps: [ts:typecheck]
+
+  types:
+    desc: Typecheck public API contracts (TS)
+    deps: [ts:types]
 
   format:
     desc: Format all packages (Go + TS)
@@ -76,11 +84,24 @@ tasks:
         cmd: pnpm -C {{.ITEM}} run lint
 
   ts:test:
-    desc: Test all TS packages
+    desc: Run runtime tests (Vitest) for all TS packages
     aliases: [ts:t]
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run test
+
+  ts:typecheck:
+    desc: Typecheck TS implementation (tsc --noEmit)
+    aliases: [ts:tc]
+    cmds:
+      - for: { var: TS_PACKAGES }
+        cmd: pnpm -C {{.ITEM}} run typecheck
+
+  ts:types:
+    desc: Validate public TS API contracts (tsd)
+    aliases: [ts:d]
+    cmds:
+      - pnpm -C sdk run test:types
 
   ts:format:
     desc: Format all TS packages
@@ -88,4 +109,4 @@ tasks:
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run format
-  
+
