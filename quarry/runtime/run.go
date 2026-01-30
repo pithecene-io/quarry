@@ -1,0 +1,266 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/justapithecus/quarry/log"
+	"github.com/justapithecus/quarry/policy"
+	"github.com/justapithecus/quarry/types"
+)
+
+// RunConfig configures a single run.
+type RunConfig struct {
+	// ExecutorPath is the path to the executor binary.
+	ExecutorPath string
+	// ScriptPath is the path to the script file.
+	ScriptPath string
+	// Job is the job payload.
+	Job any
+	// RunMeta is the run identity and lineage metadata.
+	RunMeta *types.RunMeta
+	// Policy is the ingestion policy.
+	Policy policy.Policy
+}
+
+// RunResult represents the result of a run.
+type RunResult struct {
+	// RunMeta is the run identity and lineage.
+	RunMeta *types.RunMeta
+	// Outcome is the run outcome.
+	Outcome *types.RunOutcome
+	// Duration is the total run duration.
+	Duration time.Duration
+	// PolicyStats is the policy statistics.
+	PolicyStats policy.Stats
+	// ArtifactStats is the artifact accumulation statistics.
+	ArtifactStats ArtifactStats
+	// OrphanIDs is the list of orphaned artifact IDs.
+	OrphanIDs []string
+	// StderrOutput is the captured executor stderr.
+	StderrOutput string
+	// EventCount is the total number of events processed.
+	EventCount int64
+}
+
+// RunOrchestrator orchestrates a single run.
+type RunOrchestrator struct {
+	config    *RunConfig
+	logger    *log.Logger
+	startTime time.Time
+}
+
+// NewRunOrchestrator creates a new run orchestrator.
+// Returns error if run metadata is invalid.
+func NewRunOrchestrator(config *RunConfig) (*RunOrchestrator, error) {
+	// Validate run metadata per CONTRACT_RUN.md
+	if err := config.RunMeta.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid run metadata: %w", err)
+	}
+
+	// Create logger with run context
+	logger := log.NewLogger(config.RunMeta)
+
+	return &RunOrchestrator{
+		config: config,
+		logger: logger,
+	}, nil
+}
+
+// Execute executes the run end-to-end.
+// This is the main entry point for run orchestration.
+//
+// Execution flow:
+//  1. Start executor process
+//  2. Run IPC ingestion loop (concurrent)
+//  3. Wait for executor exit
+//  4. Flush policy
+//  5. Determine outcome
+//  6. Return result
+func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
+	r.startTime = time.Now()
+
+	r.logger.Info("starting run", map[string]any{
+		"script":   r.config.ScriptPath,
+		"executor": r.config.ExecutorPath,
+	})
+
+	// Create executor
+	execConfig := &ExecutorConfig{
+		ExecutorPath: r.config.ExecutorPath,
+		ScriptPath:   r.config.ScriptPath,
+		Job:          r.config.Job,
+		RunMeta:      r.config.RunMeta,
+	}
+
+	executor := NewExecutorManager(execConfig)
+
+	// Start executor
+	if err := executor.Start(ctx); err != nil {
+		r.logger.Error("failed to start executor", map[string]any{
+			"error": err.Error(),
+		})
+		return r.buildResult(&types.RunOutcome{
+			Status:  types.OutcomeExecutorCrash,
+			Message: fmt.Sprintf("failed to start executor: %v", err),
+		}, "", nil, nil), nil
+	}
+
+	// Create artifact manager
+	artifacts := NewArtifactManager()
+
+	// Create ingestion engine
+	ingestion := NewIngestionEngine(
+		executor.Stdout(),
+		r.config.Policy,
+		artifacts,
+		r.logger,
+		r.config.RunMeta,
+	)
+
+	// Run ingestion in goroutine
+	ingestionDone := make(chan error, 1)
+	go func() {
+		ingestionDone <- ingestion.Run(ctx)
+	}()
+
+	// Wait for executor in goroutine
+	type execResultPair struct {
+		result *ExecutorResult
+		err    error
+	}
+	executorDone := make(chan execResultPair, 1)
+	go func() {
+		result, err := executor.Wait()
+		executorDone <- execResultPair{result, err}
+	}()
+
+	// Wait for both, but kill executor on any ingestion error (policy or stream)
+	var execResult *ExecutorResult
+	var execErr error
+	var ingErr error
+	executorFinished := false
+	ingestionFinished := false
+
+	for !executorFinished || !ingestionFinished {
+		select {
+		case pair := <-executorDone:
+			execResult = pair.result
+			execErr = pair.err
+			executorFinished = true
+		case err := <-ingestionDone:
+			ingErr = err
+			ingestionFinished = true
+
+			// On ANY ingestion error (policy, stream, or canceled), kill executor immediately
+			// This prevents the executor from continuing to emit after we've decided to terminate
+			if err != nil && !executorFinished {
+				r.logger.Warn("killing executor due to ingestion error", map[string]any{
+					"error":     err.Error(),
+					"is_policy": IsPolicyError(err),
+				})
+				_ = executor.Kill()
+			}
+		}
+	}
+
+	// Always attempt policy flush (best effort) on all termination paths
+	// Per CONTRACT_POLICY.md: "Buffered events must be flushed on run_complete, run_error, runtime termination (best effort)"
+	flushErr := r.config.Policy.Flush(ctx)
+	if flushErr != nil {
+		r.logger.Warn("policy flush failed (best effort)", map[string]any{
+			"error": flushErr.Error(),
+		})
+	}
+
+	// Handle executor wait error
+	if execErr != nil {
+		r.logger.Error("executor wait failed", map[string]any{
+			"error": execErr.Error(),
+		})
+		return r.buildResult(&types.RunOutcome{
+			Status:  types.OutcomeExecutorCrash,
+			Message: fmt.Sprintf("executor wait failed: %v", execErr),
+		}, "", artifacts, ingestion), nil
+	}
+
+	// Handle ingestion errors
+	if ingErr != nil {
+		r.logger.Error("ingestion failed", map[string]any{
+			"error":     ingErr.Error(),
+			"exit_code": execResult.ExitCode,
+		})
+
+		// Classify the error
+		var outcome *types.RunOutcome
+		switch {
+		case IsPolicyError(ingErr):
+			outcome = &types.RunOutcome{
+				Status:  types.OutcomePolicyFailure,
+				Message: fmt.Sprintf("policy failure: %v", ingErr),
+			}
+		case IsCanceledError(ingErr):
+			outcome = &types.RunOutcome{
+				Status:  types.OutcomeExecutorCrash,
+				Message: fmt.Sprintf("run canceled: %v", ingErr),
+			}
+		default:
+			// Stream/frame errors are executor crash
+			outcome = &types.RunOutcome{
+				Status:  types.OutcomeExecutorCrash,
+				Message: fmt.Sprintf("stream error: %v", ingErr),
+			}
+		}
+
+		return r.buildResult(outcome, string(execResult.StderrBytes), artifacts, ingestion), nil
+	}
+
+	// If flush failed and there were no other errors, report policy failure
+	if flushErr != nil {
+		return r.buildResult(&types.RunOutcome{
+			Status:  types.OutcomePolicyFailure,
+			Message: fmt.Sprintf("policy flush failed: %v", flushErr),
+		}, string(execResult.StderrBytes), artifacts, ingestion), nil
+	}
+
+	// Determine outcome based on exit code and terminal event
+	terminalEvent, hasTerminal := ingestion.GetTerminalEvent()
+	outcome := DetermineOutcome(execResult.ExitCode, hasTerminal, terminalEvent)
+
+	r.logger.Info("run completed", map[string]any{
+		"outcome":      outcome.Status,
+		"exit_code":    execResult.ExitCode,
+		"duration":     time.Since(r.startTime).String(),
+		"has_terminal": hasTerminal,
+	})
+
+	return r.buildResult(outcome, string(execResult.StderrBytes), artifacts, ingestion), nil
+}
+
+// buildResult constructs the final run result.
+func (r *RunOrchestrator) buildResult(
+	outcome *types.RunOutcome,
+	stderrOutput string,
+	artifacts *ArtifactManager,
+	ingestion *IngestionEngine,
+) *RunResult {
+	result := &RunResult{
+		RunMeta:      r.config.RunMeta,
+		Outcome:      outcome,
+		Duration:     time.Since(r.startTime),
+		PolicyStats:  r.config.Policy.Stats(),
+		StderrOutput: stderrOutput,
+	}
+
+	if artifacts != nil {
+		result.ArtifactStats = artifacts.Stats()
+		result.OrphanIDs = artifacts.GetOrphanIDs()
+	}
+
+	if ingestion != nil {
+		result.EventCount = ingestion.CurrentSeq()
+	}
+
+	return result
+}
