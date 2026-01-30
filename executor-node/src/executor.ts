@@ -5,23 +5,32 @@
  * - Initialize Puppeteer browser/page
  * - Create context with EmitSink
  * - Execute script with lifecycle hooks
- * - Auto-emit terminal events (run_complete/run_error)
+ * - Auto-emit terminal events (run_complete/run_error) if not already emitted
+ * - Determine outcome based on actually written terminal events
  * - Clean up resources
+ *
+ * Outcome determination (in precedence order):
+ * 1. Sink failure at any point → crash
+ * 2. Terminal event successfully written → match that event
+ * 3. Script threw without terminal → error (auto-emit run_error)
+ * 4. Script completed without terminal → completed (auto-emit run_complete)
  *
  * @module
  */
 import type { Writable } from 'node:stream'
-import type { Browser, Page, BrowserContext, LaunchOptions } from 'puppeteer'
-import puppeteer from 'puppeteer'
 import {
-  createContext,
-  type RunMeta,
   type CreateContextOptions,
+  createContext,
+  type JobId,
   type RunId,
-  type JobId
+  type RunMeta,
+  TerminalEventError
 } from '@justapithecus/quarry-sdk'
+import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
+import puppeteer from 'puppeteer'
+import { ObservingSink, SinkAlreadyFailedError, type SinkState } from './ipc/observing-sink.js'
 import { StdioSink } from './ipc/sink.js'
-import { loadScript, type LoadedScript, ScriptLoadError } from './loader.js'
+import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
 
 /**
  * Executor configuration passed from the runtime.
@@ -44,7 +53,12 @@ export interface ExecutorConfig<Job = unknown> {
  */
 export type ExecutionOutcome =
   | { readonly status: 'completed'; readonly summary?: Record<string, unknown> }
-  | { readonly status: 'error'; readonly errorType: string; readonly message: string; readonly stack?: string }
+  | {
+      readonly status: 'error'
+      readonly errorType: string
+      readonly message: string
+      readonly stack?: string
+    }
   | { readonly status: 'crash'; readonly message: string }
 
 /**
@@ -58,6 +72,15 @@ export interface ExecutorResult {
 
 /**
  * Parse and validate run metadata from raw input.
+ *
+ * Lineage rules per CONTRACT_RUN.md (strictly enforced):
+ * - attempt must be >= 1
+ * - If attempt === 1, parent_run_id must be absent (initial run)
+ * - If attempt > 1, parent_run_id must be present (retry run)
+ *
+ * @param input - Raw metadata object
+ * @returns Validated RunMeta
+ * @throws Error if required fields are missing, invalid, or lineage rules are violated
  */
 export function parseRunMeta(input: unknown): RunMeta {
   if (input === null || typeof input !== 'object') {
@@ -74,15 +97,40 @@ export function parseRunMeta(input: unknown): RunMeta {
     throw new Error('attempt must be a positive integer')
   }
 
+  const hasParentRunId = typeof obj.parent_run_id === 'string' && obj.parent_run_id !== ''
+
+  // Strict lineage validation per CONTRACT_RUN.md
+  if (obj.attempt === 1 && hasParentRunId) {
+    throw new Error('initial run (attempt=1) must not have parent_run_id')
+  }
+  if (obj.attempt > 1 && !hasParentRunId) {
+    throw new Error(`retry run (attempt=${obj.attempt}) must have parent_run_id`)
+  }
+
+  // Build RunMeta
   const run: RunMeta = {
     run_id: obj.run_id as RunId,
     attempt: obj.attempt,
     ...(typeof obj.job_id === 'string' && obj.job_id !== '' && { job_id: obj.job_id as JobId }),
-    ...(typeof obj.parent_run_id === 'string' &&
-      obj.parent_run_id !== '' && { parent_run_id: obj.parent_run_id as RunId })
+    ...(hasParentRunId && { parent_run_id: obj.parent_run_id as RunId })
   }
 
   return run
+}
+
+/**
+ * Determine if an error is a sink failure (vs expected TerminalEventError).
+ * SinkAlreadyFailedError is also a sink failure - it wraps the original cause.
+ */
+function isSinkFailure(err: unknown): boolean {
+  if (err instanceof TerminalEventError) {
+    return false
+  }
+  if (err instanceof SinkAlreadyFailedError) {
+    return true
+  }
+  // Any other error from emit is a sink failure
+  return true
 }
 
 /**
@@ -91,15 +139,22 @@ export function parseRunMeta(input: unknown): RunMeta {
  * This function:
  * 1. Loads the script
  * 2. Launches Puppeteer
- * 3. Creates the context
+ * 3. Creates the context with ObservingSink
  * 4. Runs lifecycle hooks + script
- * 5. Emits terminal event if script doesn't
- * 6. Cleans up resources
+ * 5. Determines outcome based on sink state and script behavior
+ * 6. Emits terminal event if script didn't and sink is healthy
+ * 7. Cleans up resources
+ *
+ * Outcome determination (in precedence order):
+ * 1. Sink failure at any point → crash
+ * 2. Terminal event successfully written → match that event
+ * 3. Script threw without terminal → error (auto-emit run_error)
+ * 4. Script completed without terminal → completed (auto-emit run_complete)
  *
  * Lifecycle ordering:
  * - beforeRun → script → afterRun (success path)
  * - beforeRun → script → onError (failure path)
- * - cleanup always runs after terminal emission
+ * - cleanup always runs after terminal emission attempt
  *
  * @remarks
  * **Cleanup hook contract**: The cleanup hook receives the same context but
@@ -112,14 +167,71 @@ export function parseRunMeta(input: unknown): RunMeta {
  */
 export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promise<ExecutorResult> {
   const output = config.output ?? process.stdout
-  const sink = new StdioSink(output)
+  const stdioSink = new StdioSink(output)
+  const sink = new ObservingSink(stdioSink)
 
   let browser: Browser | null = null
   let browserContext: BrowserContext | null = null
   let page: Page | null = null
   let script: LoadedScript<Job> | null = null
   let ctx: ReturnType<typeof createContext<Job>> | null = null
-  let terminalEmitted = false
+  let scriptThrew = false
+  let scriptError: { message: string; stack?: string } | null = null
+
+  /**
+   * Determine final outcome based on sink state and script behavior.
+   * Precedence: sink failure > terminal state > script error > completed
+   */
+  function determineOutcome(sinkState: SinkState): ExecutorResult {
+    // 1. Sink failure at any point → crash
+    if (sinkState.isSinkFailed()) {
+      const failure = sinkState.getSinkFailure()
+      const message = failure instanceof Error ? failure.message : String(failure)
+      return {
+        outcome: { status: 'crash', message },
+        terminalEmitted: sinkState.getTerminalState() !== null
+      }
+    }
+
+    // 2. Terminal event successfully written → match that event
+    const terminalState = sinkState.getTerminalState()
+    if (terminalState !== null) {
+      if (terminalState.type === 'run_error') {
+        return {
+          outcome: {
+            status: 'error',
+            errorType: terminalState.errorType ?? 'unknown',
+            message: terminalState.message ?? 'Unknown error'
+          },
+          terminalEmitted: true
+        }
+      }
+      // run_complete
+      return {
+        outcome: { status: 'completed', summary: terminalState.summary },
+        terminalEmitted: true
+      }
+    }
+
+    // 3. Script threw without terminal → error
+    if (scriptThrew && scriptError) {
+      return {
+        outcome: {
+          status: 'error',
+          errorType: 'script_error',
+          message: scriptError.message,
+          stack: scriptError.stack
+        },
+        terminalEmitted: false
+      }
+    }
+
+    // 4. Script completed without terminal → completed
+    return {
+      outcome: { status: 'completed' },
+      terminalEmitted: false
+    }
+  }
 
   try {
     // 1. Load script
@@ -160,70 +272,65 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       // Main script
       await script.script(ctx)
 
-      // afterRun hook (only on success)
+      // afterRun hook (only on success path)
       if (script.hooks.afterRun) {
         await script.hooks.afterRun(ctx)
       }
-
-      // Auto-emit run_complete if script didn't emit terminal
-      if (!terminalEmitted) {
-        try {
-          await ctx.emit.runComplete()
-          terminalEmitted = true
-        } catch {
-          // TerminalEventError means script already emitted terminal
-          terminalEmitted = true
-        }
-      }
-
-      return {
-        outcome: { status: 'completed' },
-        terminalEmitted
-      }
     } catch (err) {
-      // Script error
-      const message = err instanceof Error ? err.message : String(err)
-      const stack = err instanceof Error ? err.stack : undefined
+      // Script threw - capture for outcome determination
+      scriptThrew = true
+      scriptError = {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined
+      }
 
-      // onError hook
-      if (script.hooks.onError) {
+      // onError hook - only call if no terminal event was emitted.
+      // If a terminal event exists, the outcome is already determined by that event,
+      // and calling onError could cause confusing behavior (e.g., trying to emit
+      // another terminal event, or performing recovery that's no longer meaningful).
+      if (script.hooks.onError && sink.getTerminalState() === null) {
         try {
           await script.hooks.onError(err, ctx)
         } catch {
           // Swallow hook errors to avoid masking original
         }
       }
+    }
 
-      // Auto-emit run_error if not already emitted
-      if (!terminalEmitted) {
-        try {
+    // 5. Auto-emit terminal if needed and sink is healthy
+    if (!sink.isSinkFailed() && sink.getTerminalState() === null) {
+      try {
+        if (scriptThrew && scriptError) {
           await ctx.emit.runError({
             error_type: 'script_error',
-            message,
-            stack
+            message: scriptError.message,
+            stack: scriptError.stack
           })
-          terminalEmitted = true
-        } catch {
-          // TerminalEventError or sink failure
-          terminalEmitted = true
+        } else {
+          await ctx.emit.runComplete()
         }
-      }
-
-      return {
-        outcome: { status: 'error', errorType: 'script_error', message, stack },
-        terminalEmitted
-      }
-    } finally {
-      // cleanup hook (always runs, after terminal emission)
-      // NOTE: cleanup MUST NOT emit events; they will throw TerminalEventError
-      if (script?.hooks.cleanup && ctx) {
-        try {
-          await script.hooks.cleanup(ctx)
-        } catch {
-          // Swallow cleanup errors
+      } catch (err) {
+        // If this is a TerminalEventError, script already emitted terminal
+        // If this is a sink failure, determineOutcome will handle it
+        if (isSinkFailure(err)) {
+          // Sink failed during auto-emit - will be handled by determineOutcome
         }
+        // TerminalEventError means script already emitted - that's fine
       }
     }
+
+    // 6. Cleanup hook (always runs, after terminal emission attempt)
+    // NOTE: cleanup MUST NOT emit events; they will throw TerminalEventError
+    if (script.hooks.cleanup && ctx) {
+      try {
+        await script.hooks.cleanup(ctx)
+      } catch {
+        // Swallow cleanup errors
+      }
+    }
+
+    // 7. Determine final outcome
+    return determineOutcome(sink)
   } catch (err) {
     // Executor-level crash (Puppeteer launch failure, etc.)
     const message = err instanceof Error ? err.message : String(err)

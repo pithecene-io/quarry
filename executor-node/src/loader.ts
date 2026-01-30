@@ -5,9 +5,10 @@
  *
  * @module
  */
+
+import { isAbsolute, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { resolve, isAbsolute } from 'node:path'
-import type { QuarryScriptModule, QuarryScript } from '@justapithecus/quarry-sdk'
+import type { QuarryScript, QuarryScriptModule } from '@justapithecus/quarry-sdk'
 
 /**
  * Error thrown when a script module is invalid.
@@ -49,7 +50,9 @@ function isFunction(value: unknown): value is (...args: unknown[]) => unknown {
 /**
  * Type guard to check if a value is an optional function (undefined or function).
  */
-function isOptionalFunction(value: unknown): value is ((...args: unknown[]) => unknown) | undefined {
+function isOptionalFunction(
+  value: unknown
+): value is ((...args: unknown[]) => unknown) | undefined {
   return value === undefined || isFunction(value)
 }
 
