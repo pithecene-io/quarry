@@ -66,7 +66,7 @@ export type ExecutionOutcome =
  */
 export interface ExecutorResult {
   readonly outcome: ExecutionOutcome
-  /** True if a terminal event was emitted by the executor */
+  /** True if a terminal event was successfully written to the sink (by script or executor) */
   readonly terminalEmitted: boolean
 }
 

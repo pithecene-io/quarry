@@ -1,7 +1,14 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { PassThrough } from 'node:stream'
-import type { RunId, JobId, EmitSink, ArtifactId, EventEnvelope, EventId } from '@justapithecus/quarry-sdk'
-import { parseRunMeta, execute, type ExecutorConfig, type ExecutorResult } from '../src/executor.js'
+import type {
+  ArtifactId,
+  EmitSink,
+  EventEnvelope,
+  EventId,
+  JobId,
+  RunId
+} from '@justapithecus/quarry-sdk'
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
+import { type ExecutorConfig, type ExecutorResult, execute, parseRunMeta } from '../src/executor.js'
 import { ObservingSink, SinkAlreadyFailedError } from '../src/ipc/observing-sink.js'
 import type { LoadedScript } from '../src/loader.js'
 
@@ -9,7 +16,10 @@ import type { LoadedScript } from '../src/loader.js'
 vi.mock('../src/loader.js', () => ({
   loadScript: vi.fn(),
   ScriptLoadError: class ScriptLoadError extends Error {
-    constructor(public scriptPath: string, public reason: string) {
+    constructor(
+      public scriptPath: string,
+      public reason: string
+    ) {
       super(`Failed to load script "${scriptPath}": ${reason}`)
       this.name = 'ScriptLoadError'
     }
@@ -22,8 +32,8 @@ vi.mock('puppeteer', () => ({
   }
 }))
 
-import { loadScript, ScriptLoadError } from '../src/loader.js'
 import puppeteer from 'puppeteer'
+import { loadScript, ScriptLoadError } from '../src/loader.js'
 
 /**
  * Create a mock Puppeteer setup.
@@ -73,7 +83,9 @@ describe('parseRunMeta', () => {
     })
 
     it('throws on missing attempt', () => {
-      expect(() => parseRunMeta({ run_id: 'run-123' })).toThrow('attempt must be a positive integer')
+      expect(() => parseRunMeta({ run_id: 'run-123' })).toThrow(
+        'attempt must be a positive integer'
+      )
     })
 
     it('throws on non-integer attempt', () => {
@@ -265,9 +277,8 @@ describe('execute()', () => {
         expect(result.outcome.errorType).toBe('script_error')
         expect(result.outcome.message).toBe('Script failed')
       }
-      // terminalEmitted is false because WE auto-emitted, not the script
-      // Actually, let's check the implementation - it sets terminalEmitted based on sink state
-      // After auto-emit, the terminal state will be set
+      // terminalEmitted is true after auto-emit because the sink observes the terminal event
+      expect(result.terminalEmitted).toBe(true)
     })
 
     it('auto-emits run_complete when script completes without terminal', async () => {

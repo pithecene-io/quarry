@@ -1,19 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import type { ArtifactId, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
 import { decode as msgpackDecode } from '@msgpack/msgpack'
-import type { ArtifactId, EventEnvelope, RunId, EventId } from '@justapithecus/quarry-sdk'
+import { describe, expect, it } from 'vitest'
 import {
-  encodeFrame,
-  encodeEventFrame,
-  encodeArtifactChunkFrame,
+  type ArtifactChunkFrame,
+  ChunkValidationError,
   calculateChunks,
+  encodeArtifactChunkFrame,
   encodeArtifactChunks,
+  encodeEventFrame,
+  encodeFrame,
   FrameSizeError,
-  MAX_FRAME_SIZE,
-  MAX_PAYLOAD_SIZE,
-  MAX_CHUNK_SIZE,
   LENGTH_PREFIX_SIZE,
-  type EventFrame,
-  type ArtifactChunkFrame
+  MAX_CHUNK_SIZE,
+  MAX_FRAME_SIZE,
+  MAX_PAYLOAD_SIZE
 } from '../../src/ipc/frame.js'
 
 /**
@@ -101,17 +101,20 @@ describe('encodeFrame', () => {
 })
 
 describe('encodeEventFrame', () => {
-  it('encodes event envelope with type discriminant', () => {
+  it('encodes event envelope directly (no wrapper)', () => {
     const envelope = makeEnvelope()
     const frame = encodeEventFrame(envelope)
 
-    // Decode the frame
+    // Decode the frame - should be raw envelope per CONTRACT_IPC
     const payloadLength = frame.readUInt32BE(0)
     const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
-    const decoded = msgpackDecode(payload) as EventFrame
+    const decoded = msgpackDecode(payload) as EventEnvelope
 
-    expect(decoded.type).toBe('event')
-    expect(decoded.envelope).toEqual(envelope)
+    // Envelope is encoded directly, not wrapped
+    expect(decoded.type).toBe('item')
+    expect(decoded.event_id).toBe(envelope.event_id)
+    expect(decoded.run_id).toBe(envelope.run_id)
+    expect(decoded.seq).toBe(envelope.seq)
   })
 
   it('preserves all envelope fields', () => {
@@ -124,11 +127,11 @@ describe('encodeEventFrame', () => {
 
     const payloadLength = frame.readUInt32BE(0)
     const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
-    const decoded = msgpackDecode(payload) as EventFrame
+    const decoded = msgpackDecode(payload) as EventEnvelope
 
-    expect(decoded.envelope.job_id).toBe('job-789')
-    expect(decoded.envelope.parent_run_id).toBe('parent-run')
-    expect(decoded.envelope.attempt).toBe(3)
+    expect(decoded.job_id).toBe('job-789')
+    expect(decoded.parent_run_id).toBe('parent-run')
+    expect(decoded.attempt).toBe(3)
   })
 })
 
@@ -177,6 +180,50 @@ describe('encodeArtifactChunkFrame', () => {
     // Verify data is decoded as Uint8Array (bin type)
     expect(decoded.data).toBeInstanceOf(Uint8Array)
     expect(decoded.data.length).toBe(256)
+  })
+
+  describe('CONTRACT_IPC validation', () => {
+    it('throws ChunkValidationError when seq < 1', () => {
+      const artifactId = 'artifact-123' as ArtifactId
+      const data = new Uint8Array([1, 2, 3])
+
+      expect(() => encodeArtifactChunkFrame(artifactId, 0, false, data)).toThrow(
+        ChunkValidationError
+      )
+      expect(() => encodeArtifactChunkFrame(artifactId, 0, false, data)).toThrow('seq must be >= 1')
+
+      expect(() => encodeArtifactChunkFrame(artifactId, -1, false, data)).toThrow(
+        ChunkValidationError
+      )
+    })
+
+    it('throws ChunkValidationError when data exceeds MAX_CHUNK_SIZE', () => {
+      const artifactId = 'artifact-123' as ArtifactId
+      const data = new Uint8Array(MAX_CHUNK_SIZE + 1)
+
+      expect(() => encodeArtifactChunkFrame(artifactId, 1, false, data)).toThrow(
+        ChunkValidationError
+      )
+      expect(() => encodeArtifactChunkFrame(artifactId, 1, false, data)).toThrow(
+        'exceeds MAX_CHUNK_SIZE'
+      )
+    })
+
+    it('accepts data exactly at MAX_CHUNK_SIZE', () => {
+      const artifactId = 'artifact-123' as ArtifactId
+      const data = new Uint8Array(MAX_CHUNK_SIZE)
+
+      // Should not throw
+      expect(() => encodeArtifactChunkFrame(artifactId, 1, true, data)).not.toThrow()
+    })
+
+    it('accepts seq = 1 (minimum valid)', () => {
+      const artifactId = 'artifact-123' as ArtifactId
+      const data = new Uint8Array([1, 2, 3])
+
+      // Should not throw
+      expect(() => encodeArtifactChunkFrame(artifactId, 1, true, data)).not.toThrow()
+    })
   })
 })
 

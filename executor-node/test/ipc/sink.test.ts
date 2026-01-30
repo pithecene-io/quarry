@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
 import { PassThrough, Writable } from 'node:stream'
+import type { ArtifactId, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
 import { decode as msgpackDecode } from '@msgpack/msgpack'
-import type { ArtifactId, EventEnvelope, RunId, EventId } from '@justapithecus/quarry-sdk'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { type ArtifactChunkFrame, LENGTH_PREFIX_SIZE } from '../../src/ipc/frame.js'
 import { StdioSink, StreamClosedError } from '../../src/ipc/sink.js'
-import { LENGTH_PREFIX_SIZE, type EventFrame, type ArtifactChunkFrame } from '../../src/ipc/frame.js'
 
 /**
  * Helper to create a minimal valid event envelope for testing.
@@ -79,16 +79,18 @@ describe('StdioSink', () => {
   })
 
   describe('writeEvent', () => {
-    it('writes event as framed message', async () => {
+    it('writes event as framed message (raw envelope per CONTRACT_IPC)', async () => {
       const envelope = makeEnvelope()
       await sink.writeEvent(envelope)
 
       const frames = collector.frames
       expect(frames).toHaveLength(1)
 
-      const frame = frames[0] as EventFrame
-      expect(frame.type).toBe('event')
-      expect(frame.envelope).toEqual(envelope)
+      // Per CONTRACT_IPC, event frames contain the envelope directly (no wrapper)
+      const decoded = frames[0] as EventEnvelope
+      expect(decoded.type).toBe('item')
+      expect(decoded.event_id).toBe(envelope.event_id)
+      expect(decoded.run_id).toBe(envelope.run_id)
     })
 
     it('preserves event ordering', async () => {
@@ -102,11 +104,11 @@ describe('StdioSink', () => {
         await sink.writeEvent(envelope)
       }
 
-      const frames = collector.frames as EventFrame[]
+      const frames = collector.frames as EventEnvelope[]
       expect(frames).toHaveLength(3)
-      expect(frames[0].envelope.event_id).toBe('evt-1')
-      expect(frames[1].envelope.event_id).toBe('evt-2')
-      expect(frames[2].envelope.event_id).toBe('evt-3')
+      expect(frames[0].event_id).toBe('evt-1')
+      expect(frames[1].event_id).toBe('evt-2')
+      expect(frames[2].event_id).toBe('evt-3')
     })
 
     it('writes events of different types', async () => {
@@ -135,10 +137,10 @@ describe('StdioSink', () => {
       await sink.writeEvent(itemEnvelope)
       await sink.writeEvent(logEnvelope)
 
-      const frames = collector.frames as EventFrame[]
+      const frames = collector.frames as EventEnvelope[]
       expect(frames).toHaveLength(2)
-      expect(frames[0].envelope.type).toBe('item')
-      expect(frames[1].envelope.type).toBe('log')
+      expect(frames[0].type).toBe('item')
+      expect(frames[1].type).toBe('log')
     })
   })
 
@@ -192,9 +194,10 @@ describe('StdioSink', () => {
 
       const frames = collector.frames
       expect(frames).toHaveLength(3)
-      expect((frames[0] as EventFrame).type).toBe('event')
+      // Event envelopes have type like 'item', not 'event' (raw envelope per CONTRACT_IPC)
+      expect((frames[0] as EventEnvelope).type).toBe('item')
       expect((frames[1] as ArtifactChunkFrame).type).toBe('artifact_chunk')
-      expect((frames[2] as EventFrame).type).toBe('event')
+      expect((frames[2] as EventEnvelope).type).toBe('item')
     })
   })
 

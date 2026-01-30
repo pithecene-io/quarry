@@ -7,23 +7,23 @@
  */
 
 export {
+  // Types
   type ArtifactChunkFrame,
+  type ArtifactChunkType,
   type ChunkMeta,
+  // Errors
+  ChunkValidationError,
+  // Encoding
   calculateChunks,
-  type EventFrame,
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
   encodeEventFrame,
-  // Encoding
   encodeFrame,
   type Frame,
-  // Errors
   FrameSizeError,
-  // Types
-  type FrameType,
+  // Constants
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
-  // Constants
   MAX_FRAME_SIZE,
   MAX_PAYLOAD_SIZE
 } from './frame.js'

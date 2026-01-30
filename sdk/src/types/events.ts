@@ -26,6 +26,9 @@ export type CheckpointId = string & { readonly __brand: 'CheckpointId' }
 
 /**
  * All supported event types from CONTRACT_EMIT.md
+ *
+ * Note: 'artifact_chunk' is reserved for IPC framing (CONTRACT_IPC.md)
+ * and must never be added to this union.
  */
 export type EventType =
   | 'item'
