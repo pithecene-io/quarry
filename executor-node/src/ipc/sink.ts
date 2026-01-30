@@ -1,0 +1,123 @@
+/**
+ * StdioSink: EmitSink implementation that writes frames to a stream.
+ *
+ * Per CONTRACT_IPC.md:
+ * - Emit calls must block on backpressure
+ * - Executor must not buffer unboundedly
+ * - Executor must not drop frames
+ *
+ * @remarks
+ * **Single-writer assumption**: This sink is NOT thread-safe. Concurrent
+ * calls to writeEvent/writeArtifactData from multiple async contexts will
+ * interleave frames. The SDK's EmitAPI serializes calls via promise chain,
+ * so this is safe when used through createEmitAPI. Direct usage must
+ * serialize externally.
+ *
+ * @module
+ */
+import type { Writable } from 'node:stream'
+import type { EmitSink, ArtifactId, EventEnvelope } from '@justapithecus/quarry-sdk'
+import { encodeEventFrame, encodeArtifactChunks } from './frame.js'
+
+/**
+ * Error thrown when the output stream is closed or finished unexpectedly.
+ */
+export class StreamClosedError extends Error {
+  constructor(reason: 'destroyed' | 'ended' | 'close' | 'finish') {
+    super(`Output stream unavailable: ${reason}`)
+    this.name = 'StreamClosedError'
+  }
+}
+
+/**
+ * Write a buffer to a stream with backpressure handling.
+ * Resolves only from a single code path to avoid double-resolution.
+ *
+ * @param stream - The writable stream
+ * @param data - The data to write
+ * @returns Promise that resolves when data is accepted by the stream
+ * @throws StreamClosedError if the stream is closed/finished
+ * @throws Error if the stream emits an error
+ */
+function writeWithBackpressure(stream: Writable, data: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Pre-check stream state
+    if (stream.destroyed) {
+      reject(new StreamClosedError('destroyed'))
+      return
+    }
+    if (stream.writableEnded || stream.writableFinished) {
+      reject(new StreamClosedError('ended'))
+      return
+    }
+
+    let settled = false
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn()
+    }
+
+    const onError = (err: Error) => settle(() => reject(err))
+    const onClose = () => settle(() => reject(new StreamClosedError('close')))
+    const onFinish = () => settle(() => reject(new StreamClosedError('finish')))
+    const onDrain = () => settle(() => resolve())
+
+    const cleanup = () => {
+      stream.off('error', onError)
+      stream.off('close', onClose)
+      stream.off('finish', onFinish)
+      stream.off('drain', onDrain)
+    }
+
+    // Attach listeners before write to catch synchronous errors
+    stream.on('error', onError)
+    stream.on('close', onClose)
+    stream.on('finish', onFinish)
+
+    const canContinue = stream.write(data)
+
+    if (canContinue) {
+      // Buffer accepted, resolve on next tick to ensure
+      // any synchronous error from write() is caught first
+      setImmediate(() => settle(() => resolve()))
+    } else {
+      // Backpressure: wait for drain
+      stream.on('drain', onDrain)
+    }
+  })
+}
+
+/**
+ * EmitSink implementation that writes frames to a writable stream.
+ *
+ * Conforms to CONTRACT_IPC.md:
+ * - Frames are length-prefixed msgpack
+ * - Artifact data is chunked (max 8 MiB per chunk)
+ * - Writes block on backpressure
+ */
+export class StdioSink implements EmitSink {
+  constructor(private readonly output: Writable) {}
+
+  /**
+   * Write an event envelope as a framed message.
+   * Blocks on backpressure per CONTRACT_IPC.md.
+   */
+  async writeEvent(envelope: EventEnvelope): Promise<void> {
+    const frame = encodeEventFrame(envelope)
+    await writeWithBackpressure(this.output, frame)
+  }
+
+  /**
+   * Write artifact binary data as chunked frames.
+   * Per CONTRACT_IPC.md, bytes are written BEFORE the artifact event.
+   * Blocks on backpressure per CONTRACT_IPC.md.
+   */
+  async writeArtifactData(artifactId: ArtifactId, data: Buffer | Uint8Array): Promise<void> {
+    for (const frame of encodeArtifactChunks(artifactId, data)) {
+      await writeWithBackpressure(this.output, frame)
+    }
+  }
+}
