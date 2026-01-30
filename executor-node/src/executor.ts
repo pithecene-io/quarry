@@ -73,17 +73,16 @@ export interface ExecutorResult {
 /**
  * Parse and validate run metadata from raw input.
  *
- * Lineage rules per CONTRACT_RUN.md:
+ * Lineage rules per CONTRACT_RUN.md (strictly enforced):
  * - attempt must be >= 1
  * - If attempt === 1, parent_run_id must be absent (initial run)
- * - If attempt > 1, parent_run_id should be present (retry run)
+ * - If attempt > 1, parent_run_id must be present (retry run)
  *
  * @param input - Raw metadata object
- * @param diagnostics - Optional callback for lineage warnings (does not reject)
  * @returns Validated RunMeta
- * @throws Error if required fields are missing or invalid
+ * @throws Error if required fields are missing, invalid, or lineage rules are violated
  */
-export function parseRunMeta(input: unknown, diagnostics?: (message: string) => void): RunMeta {
+export function parseRunMeta(input: unknown): RunMeta {
   if (input === null || typeof input !== 'object') {
     throw new Error('run metadata must be an object')
   }
@@ -100,25 +99,20 @@ export function parseRunMeta(input: unknown, diagnostics?: (message: string) => 
 
   const hasParentRunId = typeof obj.parent_run_id === 'string' && obj.parent_run_id !== ''
 
-  // Lineage validation with diagnostics
+  // Strict lineage validation per CONTRACT_RUN.md
   if (obj.attempt === 1 && hasParentRunId) {
-    diagnostics?.(
-      'attempt is 1 but parent_run_id is present; ignoring parent_run_id for initial run'
-    )
+    throw new Error('initial run (attempt=1) must not have parent_run_id')
   }
   if (obj.attempt > 1 && !hasParentRunId) {
-    diagnostics?.(
-      `attempt is ${obj.attempt} but parent_run_id is missing; retry run should have parent_run_id`
-    )
+    throw new Error(`retry run (attempt=${obj.attempt}) must have parent_run_id`)
   }
 
-  // Build RunMeta: if attempt === 1, exclude parent_run_id per contract
+  // Build RunMeta
   const run: RunMeta = {
     run_id: obj.run_id as RunId,
     attempt: obj.attempt,
     ...(typeof obj.job_id === 'string' && obj.job_id !== '' && { job_id: obj.job_id as JobId }),
-    // Only include parent_run_id for retry runs (attempt > 1)
-    ...(obj.attempt > 1 && hasParentRunId && { parent_run_id: obj.parent_run_id as RunId })
+    ...(hasParentRunId && { parent_run_id: obj.parent_run_id as RunId })
   }
 
   return run
@@ -290,8 +284,11 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
         stack: err instanceof Error ? err.stack : undefined
       }
 
-      // onError hook
-      if (script.hooks.onError) {
+      // onError hook - only call if no terminal event was emitted.
+      // If a terminal event exists, the outcome is already determined by that event,
+      // and calling onError could cause confusing behavior (e.g., trying to emit
+      // another terminal event, or performing recovery that's no longer meaningful).
+      if (script.hooks.onError && sink.getTerminalState() === null) {
         try {
           await script.hooks.onError(err, ctx)
         } catch {

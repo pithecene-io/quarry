@@ -32,7 +32,8 @@ export type TerminalState =
  */
 export class SinkAlreadyFailedError extends Error {
   constructor(originalCause: unknown) {
-    super('Sink has already failed')
+    const causeMsg = originalCause instanceof Error ? originalCause.message : String(originalCause)
+    super(`Sink has already failed: ${causeMsg}`)
     this.name = 'SinkAlreadyFailedError'
     this.cause = originalCause
   }
