@@ -4,10 +4,10 @@
  * Goal: Prove that Emit is strictly serialized.
  * Invariant: Emit behaves as a single-threaded log, regardless of caller concurrency.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
 import type { CheckpointId } from '../../../src/types/events'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('concurrent emits ordering', () => {
   let sink: FakeSink

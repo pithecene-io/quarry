@@ -113,10 +113,7 @@ export class FakeSink implements EmitSink {
       await new Promise((resolve) => setTimeout(resolve, this.options.eventWriteDelayMs))
     }
 
-    if (
-      this.options.failOnEventWrite &&
-      this.eventWriteCount === this.options.failOnEventWrite
-    ) {
+    if (this.options.failOnEventWrite && this.eventWriteCount === this.options.failOnEventWrite) {
       throw this.options.failureError ?? new Error('Injected writeEvent failure')
     }
 

@@ -21,8 +21,12 @@ tasks:
     deps: [go:test, ts:test]
 
   typecheck:
-    desc: Typecheck all packages (TS)
+    desc: Typecheck implementation (TS)
     deps: [ts:typecheck]
+
+  types:
+    desc: Typecheck public API contracts (TS)
+    deps: [ts:types]
 
   format:
     desc: Format all packages (Go + TS)

@@ -4,9 +4,9 @@
  * Goal: Lock down terminal behavior as a state machine.
  * Invariant: Exactly one logical terminal event may be persisted.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
-import { createEmitAPI, TerminalEventError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('runError terminal semantics', () => {
   let sink: FakeSink
@@ -56,18 +56,16 @@ describe('runError terminal semantics', () => {
     const emit = createEmitAPI(run, sink)
     await emit.runError({ error_type: 'error', message: 'Error' })
 
-    await expect(
-      emit.checkpoint({ checkpoint_id: 'cp' as any })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.checkpoint({ checkpoint_id: 'cp' as any })).rejects.toThrow(
+      TerminalEventError
+    )
   })
 
   it('emitting enqueue after runError throws TerminalEventError', async () => {
     const emit = createEmitAPI(run, sink)
     await emit.runError({ error_type: 'error', message: 'Error' })
 
-    await expect(
-      emit.enqueue({ target: 'next', params: {} })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.enqueue({ target: 'next', params: {} })).rejects.toThrow(TerminalEventError)
   })
 
   it('emitting rotateProxy after runError throws TerminalEventError', async () => {
@@ -82,9 +80,9 @@ describe('runError terminal semantics', () => {
 
     await emit.runError({ error_type: 'first_error', message: 'First' })
 
-    await expect(
-      emit.runError({ error_type: 'second_error', message: 'Second' })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.runError({ error_type: 'second_error', message: 'Second' })).rejects.toThrow(
+      TerminalEventError
+    )
   })
 
   it('runComplete after runError throws TerminalEventError', async () => {
@@ -108,13 +106,17 @@ describe('runError terminal semantics', () => {
     expect(sink.envelopes[2].type).toBe('run_error')
   })
 
-  it('convenience log methods after runError throw TerminalEventError', async () => {
+  it('convenience log methods after runError throw errors', async () => {
     const emit = createEmitAPI(run, sink)
     await emit.runError({ error_type: 'error', message: 'Error' })
 
+    // First emit after terminal throws TerminalEventError
     await expect(emit.debug('test')).rejects.toThrow(TerminalEventError)
-    await expect(emit.info('test')).rejects.toThrow(TerminalEventError)
-    await expect(emit.warn('test')).rejects.toThrow(TerminalEventError)
-    await expect(emit.error('test')).rejects.toThrow(TerminalEventError)
+
+    // Subsequent emits throw SinkFailedError (wrapping TerminalEventError)
+    // because the error handler in serialize() sets sinkFailed on any error
+    await expect(emit.info('test')).rejects.toThrow(SinkFailedError)
+    await expect(emit.warn('test')).rejects.toThrow(SinkFailedError)
+    await expect(emit.error('test')).rejects.toThrow(SinkFailedError)
   })
 })

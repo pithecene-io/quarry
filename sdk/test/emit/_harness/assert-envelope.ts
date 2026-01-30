@@ -15,7 +15,9 @@ export function validateEnvelopeBase(envelope: EventEnvelope): string[] {
   const errors: string[] = []
 
   if (envelope.contract_version !== CONTRACT_VERSION) {
-    errors.push(`contract_version should be '${CONTRACT_VERSION}', got '${envelope.contract_version}'`)
+    errors.push(
+      `contract_version should be '${CONTRACT_VERSION}', got '${envelope.contract_version}'`
+    )
   }
 
   if (typeof envelope.event_id !== 'string' || envelope.event_id.length === 0) {
@@ -34,7 +36,11 @@ export function validateEnvelopeBase(envelope: EventEnvelope): string[] {
     errors.push(`ts should be an ISO date string, got '${envelope.ts}'`)
   }
 
-  if (typeof envelope.attempt !== 'number' || envelope.attempt < 1 || !Number.isInteger(envelope.attempt)) {
+  if (
+    typeof envelope.attempt !== 'number' ||
+    envelope.attempt < 1 ||
+    !Number.isInteger(envelope.attempt)
+  ) {
     errors.push(`attempt should be a positive integer, got '${envelope.attempt}'`)
   }
 
@@ -148,7 +154,10 @@ export function validateLogPayload(payload: PayloadMap['log']): string[] {
     errors.push(`message should be a string, got '${typeof payload.message}'`)
   }
 
-  if (payload.fields !== undefined && (typeof payload.fields !== 'object' || payload.fields === null)) {
+  if (
+    payload.fields !== undefined &&
+    (typeof payload.fields !== 'object' || payload.fields === null)
+  ) {
     errors.push('fields should be an object if present')
   }
 
@@ -182,7 +191,10 @@ export function validateRunErrorPayload(payload: PayloadMap['run_error']): strin
 export function validateRunCompletePayload(payload: PayloadMap['run_complete']): string[] {
   const errors: string[] = []
 
-  if (payload.summary !== undefined && (typeof payload.summary !== 'object' || payload.summary === null)) {
+  if (
+    payload.summary !== undefined &&
+    (typeof payload.summary !== 'object' || payload.summary === null)
+  ) {
     errors.push('summary should be an object if present')
   }
 

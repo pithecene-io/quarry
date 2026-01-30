@@ -8,9 +8,9 @@
  * - No failures
  * - Tests only envelope construction, not terminal semantics
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta, validateEnvelope } from '../_harness'
+import { createRunMeta, FakeSink, validateEnvelope } from '../_harness'
 
 describe('emit.runError() envelope correctness', () => {
   let sink: FakeSink
@@ -68,8 +68,14 @@ describe('emit.runError() envelope correctness', () => {
   })
 
   it('works with various error types', async () => {
-    const emit = createEmitAPI(run, sink)
-    const errorTypes = ['script_error', 'timeout', 'blocked', 'abort', 'network_error', 'custom_error']
+    const errorTypes = [
+      'script_error',
+      'timeout',
+      'blocked',
+      'abort',
+      'network_error',
+      'custom_error'
+    ]
 
     for (const error_type of errorTypes) {
       sink.reset()

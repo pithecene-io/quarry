@@ -1,14 +1,15 @@
 /**
  * Test harness exports.
  */
-export { FakeSink } from './fake-sink'
-export type { FakeSinkOptions, SinkCall, WriteEventCall, WriteArtifactDataCall } from './fake-sink'
-export { createRunMeta, createDeterministicRunMeta } from './run-meta'
-export type { CreateRunMetaOptions } from './run-meta'
-export { sleep } from './sleep'
+
 export {
+  isISODateString,
   validateEnvelope,
   validateEnvelopeBase,
-  validatePayloadForType,
-  isISODateString
+  validatePayloadForType
 } from './assert-envelope'
+export type { FakeSinkOptions, SinkCall, WriteArtifactDataCall, WriteEventCall } from './fake-sink'
+export { FakeSink } from './fake-sink'
+export type { CreateRunMetaOptions } from './run-meta'
+export { createDeterministicRunMeta, createRunMeta } from './run-meta'
+export { sleep } from './sleep'

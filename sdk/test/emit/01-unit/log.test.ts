@@ -8,10 +8,10 @@
  * - No failures
  * - No terminal events
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
 import { CONTRACT_VERSION } from '../../../src/types/events'
-import { FakeSink, createRunMeta, validateEnvelope } from '../_harness'
+import { createRunMeta, FakeSink, validateEnvelope } from '../_harness'
 
 describe('emit.log() envelope correctness', () => {
   let sink: FakeSink

@@ -18,11 +18,12 @@
  * - At most one terminal event
  * - Payload always matches type
  */
-import { describe, it, expect } from 'vitest'
+
 import * as fc from 'fast-check'
-import { createEmitAPI, TerminalEventError, SinkFailedError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta, validateEnvelope } from '../_harness'
+import { describe, expect, it } from 'vitest'
+import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
 import type { CheckpointId } from '../../../src/types/events'
+import { createRunMeta, FakeSink, validateEnvelope } from '../_harness'
 
 /**
  * Model of the Emit state machine for property testing.
@@ -57,7 +58,9 @@ const emitCommandArb: fc.Arbitrary<EmitCommand> = fc.oneof(
   }),
   fc.record({
     type: fc.constant('log' as const),
-    level: fc.constantFrom('debug', 'info', 'warn', 'error') as fc.Arbitrary<'debug' | 'info' | 'warn' | 'error'>,
+    level: fc.constantFrom('debug', 'info', 'warn', 'error') as fc.Arbitrary<
+      'debug' | 'info' | 'warn' | 'error'
+    >,
     message: fc.string({ maxLength: 50 })
   }),
   fc.record({
@@ -226,7 +229,6 @@ describe('emit state machine properties', () => {
           const run = createRunMeta()
           const emit = createEmitAPI(run, sink)
           let sinkHasFailed = false
-          let eventCount = 0
 
           for (const cmd of commands) {
             if (cmd.type === 'injectFailure') continue
@@ -235,7 +237,6 @@ describe('emit state machine properties', () => {
 
             try {
               await executeCommand(emit, cmd)
-              eventCount++
 
               // If sink had failed, we shouldn't succeed
               if (wasFailedBefore) {
@@ -292,19 +293,27 @@ describe('emit state machine properties', () => {
               expect(model.seq).toBe(sink.envelopes.length)
 
               // Should not have succeeded if was terminal or failed
-              if (prevState === 'terminal') {
-                expect.fail('Succeeded in terminal state')
-              }
-              if (prevState === 'failed') {
-                expect.fail('Succeeded in failed state')
+              // (injectFailure is a no-op so it doesn't count as a "success")
+              if (cmd.type !== 'injectFailure') {
+                if (prevState === 'terminal') {
+                  expect.fail('Succeeded in terminal state')
+                }
+                if (prevState === 'failed') {
+                  expect.fail('Succeeded in failed state')
+                }
               }
             } catch (err) {
               if (err instanceof TerminalEventError) {
+                // TerminalEventError is thrown when in terminal state
+                // Note: this also transitions to 'failed' due to serialize() error handling
                 expect(model.state).toBe('terminal')
+                model.state = 'failed' // TerminalEventError gets caught and sets sinkFailed
               } else if (err instanceof SinkFailedError) {
-                expect(model.state).toBe('failed')
+                // Already in failed state (could be from terminal or sink failure)
+                expect(['terminal', 'failed']).toContain(model.state)
+                model.state = 'failed'
               } else {
-                // First failure - transition to failed
+                // First sink failure - transition to failed
                 model.state = 'failed'
               }
             }

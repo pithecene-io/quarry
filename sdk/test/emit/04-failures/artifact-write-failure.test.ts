@@ -5,9 +5,9 @@
  * Invariant: Artifact bytes written before artifact event.
  *            If bytes fail, no event emitted.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, SinkFailedError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('artifact write failure semantics', () => {
   let run: ReturnType<typeof createRunMeta>
@@ -53,7 +53,9 @@ describe('artifact write failure semantics', () => {
     const emit = createEmitAPI(run, sink)
 
     // Artifact write fails
-    await emit.artifact({ name: 'test.txt', content_type: 'text/plain', data: Buffer.from('data') }).catch(() => {})
+    await emit
+      .artifact({ name: 'test.txt', content_type: 'text/plain', data: Buffer.from('data') })
+      .catch(() => {})
 
     // Subsequent emits fail with SinkFailedError
     await expect(emit.item({ item_type: 'test', data: {} })).rejects.toThrow(SinkFailedError)
@@ -80,7 +82,9 @@ describe('artifact write failure semantics', () => {
     const emit = createEmitAPI(run, sink)
 
     // Artifact fails
-    await emit.artifact({ name: 'fail.txt', content_type: 'text/plain', data: Buffer.from('fail') }).catch(() => {})
+    await emit
+      .artifact({ name: 'fail.txt', content_type: 'text/plain', data: Buffer.from('fail') })
+      .catch(() => {})
 
     // No envelopes, no seq used
     expect(sink.envelopes).toHaveLength(0)
@@ -96,7 +100,9 @@ describe('artifact write failure semantics', () => {
     expect(sink.envelopes[0].seq).toBe(1)
 
     // Artifact fails
-    await emit.artifact({ name: 'fail.txt', content_type: 'text/plain', data: Buffer.from('fail') }).catch(() => {})
+    await emit
+      .artifact({ name: 'fail.txt', content_type: 'text/plain', data: Buffer.from('fail') })
+      .catch(() => {})
 
     // No more events after failure
     await expect(emit.item({ item_type: 'after', data: {} })).rejects.toThrow(SinkFailedError)
@@ -110,7 +116,11 @@ describe('artifact write failure semantics', () => {
     const emit = createEmitAPI(run, sink)
 
     // First artifact succeeds
-    const id1 = await emit.artifact({ name: 'a.txt', content_type: 'text/plain', data: Buffer.from('a') })
+    const id1 = await emit.artifact({
+      name: 'a.txt',
+      content_type: 'text/plain',
+      data: Buffer.from('a')
+    })
     expect(id1).toBeDefined()
     expect(sink.envelopes).toHaveLength(1)
 
@@ -128,7 +138,9 @@ describe('artifact write failure semantics', () => {
     const emit = createEmitAPI(run, sink)
 
     // Artifact fails
-    await emit.artifact({ name: 'test.txt', content_type: 'text/plain', data: Buffer.from('data') }).catch(() => {})
+    await emit
+      .artifact({ name: 'test.txt', content_type: 'text/plain', data: Buffer.from('data') })
+      .catch(() => {})
 
     // runComplete also fails
     await expect(emit.runComplete()).rejects.toThrow(SinkFailedError)

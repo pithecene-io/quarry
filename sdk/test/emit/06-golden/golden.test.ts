@@ -9,13 +9,14 @@
  * - Serialize envelopes to JSON
  * - Compare to checked-in snapshots (ignoring dynamic fields)
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+
 import { readFile } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { FakeSink, createDeterministicRunMeta } from '../_harness'
 import type { CheckpointId, EventEnvelope } from '../../../src/types/events'
+import { createDeterministicRunMeta, FakeSink } from '../_harness'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -249,7 +250,12 @@ describe('golden schema invariants', () => {
     await emit.artifact({ name: 'test', content_type: 'text/plain', data: Buffer.from('') })
 
     const payload = sink.envelopes[0].payload
-    expect(Object.keys(payload).sort()).toEqual(['artifact_id', 'content_type', 'name', 'size_bytes'])
+    expect(Object.keys(payload).sort()).toEqual([
+      'artifact_id',
+      'content_type',
+      'name',
+      'size_bytes'
+    ])
   })
 
   it('log payload has level, message, and optionally fields', async () => {
@@ -288,6 +294,10 @@ describe('golden schema invariants', () => {
     const emit2 = createEmitAPI(createDeterministicRunMeta(), sink)
 
     await emit2.runError({ error_type: 'test', message: 'error', stack: 'trace' })
-    expect(Object.keys(sink.envelopes[0].payload).sort()).toEqual(['error_type', 'message', 'stack'])
+    expect(Object.keys(sink.envelopes[0].payload).sort()).toEqual([
+      'error_type',
+      'message',
+      'stack'
+    ])
   })
 })

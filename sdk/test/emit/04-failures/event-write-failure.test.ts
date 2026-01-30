@@ -4,9 +4,9 @@
  * Goal: Define behavior under sink failure (fail-fast).
  * Invariant: After first sink failure, Emit is permanently failed.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, SinkFailedError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('event write failure semantics', () => {
   let run: ReturnType<typeof createRunMeta>
@@ -81,7 +81,9 @@ describe('event write failure semantics', () => {
     await expect(emit.rotateProxy()).rejects.toThrow(SinkFailedError)
     await expect(emit.debug('test')).rejects.toThrow(SinkFailedError)
     await expect(emit.runComplete()).rejects.toThrow(SinkFailedError)
-    await expect(emit.runError({ error_type: 'error', message: 'Error' })).rejects.toThrow(SinkFailedError)
+    await expect(emit.runError({ error_type: 'error', message: 'Error' })).rejects.toThrow(
+      SinkFailedError
+    )
   })
 
   it('failure mid-sequence prevents further writes', async () => {

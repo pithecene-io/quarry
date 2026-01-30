@@ -8,11 +8,11 @@
  * - No failures
  * - No terminal events
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { CONTRACT_VERSION } from '../../../src/types/events'
-import { FakeSink, createRunMeta, validateEnvelope } from '../_harness'
 import type { ArtifactId } from '../../../src/types/events'
+import { CONTRACT_VERSION } from '../../../src/types/events'
+import { createRunMeta, FakeSink, validateEnvelope } from '../_harness'
 
 describe('emit.artifact() envelope correctness', () => {
   let sink: FakeSink
@@ -166,8 +166,16 @@ describe('emit.artifact() envelope correctness', () => {
   it('generates unique artifact_id for each artifact', async () => {
     const emit = createEmitAPI(run, sink)
 
-    const id1 = await emit.artifact({ name: 'a.txt', content_type: 'text/plain', data: Buffer.from('a') })
-    const id2 = await emit.artifact({ name: 'b.txt', content_type: 'text/plain', data: Buffer.from('b') })
+    const id1 = await emit.artifact({
+      name: 'a.txt',
+      content_type: 'text/plain',
+      data: Buffer.from('a')
+    })
+    const id2 = await emit.artifact({
+      name: 'b.txt',
+      content_type: 'text/plain',
+      data: Buffer.from('b')
+    })
 
     expect(id1).not.toBe(id2)
   })

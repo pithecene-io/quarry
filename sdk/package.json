@@ -32,5 +32,9 @@
     "puppeteer-extra": "^3.3.6",
     "tsd": "^0.32.0",
     "tsdown": "^0.20.1"
+  },
+  "tsd": {
+    "directory": "test/emit/00-types",
+    "typingsFile": "src/index.ts"
   }
 }

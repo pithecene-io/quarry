@@ -4,10 +4,10 @@
  * Goal: Prove that seq increments strictly by 1 for each persisted event.
  * Invariant: seq represents persisted order, starting at 1.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
 import type { CheckpointId } from '../../../src/types/events'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('sequence number monotonicity', () => {
   let sink: FakeSink

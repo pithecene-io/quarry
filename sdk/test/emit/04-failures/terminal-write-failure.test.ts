@@ -4,9 +4,9 @@
  * Goal: Ensure terminalEmitted is not latched if terminal write fails.
  * Invariant: Terminal state only latched after successful persistence.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('terminal write failure semantics', () => {
   let run: ReturnType<typeof createRunMeta>
@@ -59,9 +59,9 @@ describe('terminal write failure semantics', () => {
       const sink = new FakeSink({ failOnEventWrite: 1, failureError: injectedError })
       const emit = createEmitAPI(run, sink)
 
-      await expect(
-        emit.runError({ error_type: 'script_error', message: 'Error' })
-      ).rejects.toThrow(injectedError)
+      await expect(emit.runError({ error_type: 'script_error', message: 'Error' })).rejects.toThrow(
+        injectedError
+      )
     })
 
     it('terminalEmitted not latched if runError write fails', async () => {

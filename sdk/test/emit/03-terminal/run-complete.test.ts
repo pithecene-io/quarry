@@ -4,9 +4,9 @@
  * Goal: Lock down terminal behavior as a state machine.
  * Invariant: Exactly one logical terminal event may be persisted.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, TerminalEventError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('runComplete terminal semantics', () => {
   let sink: FakeSink
@@ -56,18 +56,16 @@ describe('runComplete terminal semantics', () => {
     const emit = createEmitAPI(run, sink)
     await emit.runComplete()
 
-    await expect(
-      emit.checkpoint({ checkpoint_id: 'cp' as any })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.checkpoint({ checkpoint_id: 'cp' as any })).rejects.toThrow(
+      TerminalEventError
+    )
   })
 
   it('emitting enqueue after runComplete throws TerminalEventError', async () => {
     const emit = createEmitAPI(run, sink)
     await emit.runComplete()
 
-    await expect(
-      emit.enqueue({ target: 'next', params: {} })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.enqueue({ target: 'next', params: {} })).rejects.toThrow(TerminalEventError)
   })
 
   it('emitting rotateProxy after runComplete throws TerminalEventError', async () => {
@@ -90,9 +88,9 @@ describe('runComplete terminal semantics', () => {
 
     await emit.runComplete()
 
-    await expect(
-      emit.runError({ error_type: 'script_error', message: 'error' })
-    ).rejects.toThrow(TerminalEventError)
+    await expect(emit.runError({ error_type: 'script_error', message: 'error' })).rejects.toThrow(
+      TerminalEventError
+    )
   })
 
   it('non-terminal emits before runComplete are allowed', async () => {

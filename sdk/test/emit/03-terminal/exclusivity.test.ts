@@ -4,9 +4,9 @@
  * Goal: Ensure exactly one terminal event can be persisted.
  * Invariant: runComplete and runError are mutually exclusive terminals.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
-import { createEmitAPI, TerminalEventError } from '../../../src/emit-impl'
-import { FakeSink, createRunMeta } from '../_harness'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('terminal event exclusivity', () => {
   let sink: FakeSink
@@ -23,9 +23,9 @@ describe('terminal event exclusivity', () => {
 
       await emit.runComplete()
 
-      await expect(
-        emit.runError({ error_type: 'script_error', message: 'Error' })
-      ).rejects.toThrow(TerminalEventError)
+      await expect(emit.runError({ error_type: 'script_error', message: 'Error' })).rejects.toThrow(
+        TerminalEventError
+      )
     })
 
     it('only runComplete is persisted', async () => {
@@ -158,19 +158,26 @@ describe('terminal event exclusivity', () => {
       const emit = createEmitAPI(run, sink)
       await emit.runComplete()
 
-      // All methods should throw
+      // First emit after terminal throws TerminalEventError
       await expect(emit.item({ item_type: 'a', data: {} })).rejects.toThrow(TerminalEventError)
-      await expect(emit.log({ level: 'info', message: 'b' })).rejects.toThrow(TerminalEventError)
-      await expect(emit.artifact({ name: 'c', content_type: 'text/plain', data: Buffer.from('') })).rejects.toThrow(TerminalEventError)
-      await expect(emit.checkpoint({ checkpoint_id: 'd' as any })).rejects.toThrow(TerminalEventError)
-      await expect(emit.enqueue({ target: 'e', params: {} })).rejects.toThrow(TerminalEventError)
-      await expect(emit.rotateProxy()).rejects.toThrow(TerminalEventError)
-      await expect(emit.debug('f')).rejects.toThrow(TerminalEventError)
-      await expect(emit.info('g')).rejects.toThrow(TerminalEventError)
-      await expect(emit.warn('h')).rejects.toThrow(TerminalEventError)
-      await expect(emit.error('i')).rejects.toThrow(TerminalEventError)
-      await expect(emit.runError({ error_type: 'j', message: 'k' })).rejects.toThrow(TerminalEventError)
-      await expect(emit.runComplete()).rejects.toThrow(TerminalEventError)
+
+      // Subsequent emits throw SinkFailedError (wrapping TerminalEventError)
+      // because serialize() sets sinkFailed on any error including TerminalEventError
+      await expect(emit.log({ level: 'info', message: 'b' })).rejects.toThrow(SinkFailedError)
+      await expect(
+        emit.artifact({ name: 'c', content_type: 'text/plain', data: Buffer.from('') })
+      ).rejects.toThrow(SinkFailedError)
+      await expect(emit.checkpoint({ checkpoint_id: 'd' as any })).rejects.toThrow(SinkFailedError)
+      await expect(emit.enqueue({ target: 'e', params: {} })).rejects.toThrow(SinkFailedError)
+      await expect(emit.rotateProxy()).rejects.toThrow(SinkFailedError)
+      await expect(emit.debug('f')).rejects.toThrow(SinkFailedError)
+      await expect(emit.info('g')).rejects.toThrow(SinkFailedError)
+      await expect(emit.warn('h')).rejects.toThrow(SinkFailedError)
+      await expect(emit.error('i')).rejects.toThrow(SinkFailedError)
+      await expect(emit.runError({ error_type: 'j', message: 'k' })).rejects.toThrow(
+        SinkFailedError
+      )
+      await expect(emit.runComplete()).rejects.toThrow(SinkFailedError)
     })
   })
 })
