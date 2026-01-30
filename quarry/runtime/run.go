@@ -3,12 +3,24 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/justapithecus/quarry/log"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/types"
 )
+
+// Executor abstracts executor process lifecycle for testing.
+type Executor interface {
+	Start(ctx context.Context) error
+	Stdout() io.Reader
+	Wait() (*ExecutorResult, error)
+	Kill() error
+}
+
+// ExecutorFactory creates an Executor. Used for test injection.
+type ExecutorFactory func(config *ExecutorConfig) Executor
 
 // RunConfig configures a single run.
 type RunConfig struct {
@@ -22,6 +34,9 @@ type RunConfig struct {
 	RunMeta *types.RunMeta
 	// Policy is the ingestion policy.
 	Policy policy.Policy
+	// ExecutorFactory overrides executor creation (for testing).
+	// If nil, uses NewExecutorManager.
+	ExecutorFactory ExecutorFactory
 }
 
 // RunResult represents the result of a run.
@@ -94,7 +109,12 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		RunMeta:      r.config.RunMeta,
 	}
 
-	executor := NewExecutorManager(execConfig)
+	var executor Executor
+	if r.config.ExecutorFactory != nil {
+		executor = r.config.ExecutorFactory(execConfig)
+	} else {
+		executor = NewExecutorManager(execConfig)
+	}
 
 	// Start executor
 	if err := executor.Start(ctx); err != nil {

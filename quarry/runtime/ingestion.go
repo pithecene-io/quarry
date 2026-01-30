@@ -58,6 +58,15 @@ func IsCanceledError(err error) bool {
 	return false
 }
 
+// IsStreamError returns true if the error is a stream/frame error.
+func IsStreamError(err error) bool {
+	var ingErr *IngestionError
+	if errors.As(err, &ingErr) {
+		return ingErr.Kind == IngestionErrorStream
+	}
+	return false
+}
+
 // IngestionEngine handles IPC frame ingestion.
 // Per CONTRACT_IPC.md and CONTRACT_EMIT.md:
 //   - Frames are read in order
