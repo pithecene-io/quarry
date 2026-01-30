@@ -16,8 +16,8 @@
  * @module
  */
 import type { Writable } from 'node:stream'
-import type { EmitSink, ArtifactId, EventEnvelope } from '@justapithecus/quarry-sdk'
-import { encodeEventFrame, encodeArtifactChunks } from './frame.js'
+import type { ArtifactId, EmitSink, EventEnvelope } from '@justapithecus/quarry-sdk'
+import { encodeArtifactChunks, encodeEventFrame } from './frame.js'
 
 /**
  * Error thrown when the output stream is closed or finished unexpectedly.

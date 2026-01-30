@@ -101,7 +101,8 @@ async function main(): Promise<never> {
       // Headless by default for executor mode
       headless: true,
       // Disable sandbox in containerized environments
-      args: process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+      args:
+        process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
     }
   })
 

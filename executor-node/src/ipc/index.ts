@@ -7,25 +7,31 @@
  */
 
 export {
-  // Constants
-  MAX_FRAME_SIZE,
-  MAX_PAYLOAD_SIZE,
-  MAX_CHUNK_SIZE,
-  LENGTH_PREFIX_SIZE,
-  // Types
-  type FrameType,
-  type EventFrame,
   type ArtifactChunkFrame,
-  type Frame,
   type ChunkMeta,
-  // Errors
-  FrameSizeError,
+  calculateChunks,
+  type EventFrame,
+  encodeArtifactChunkFrame,
+  encodeArtifactChunks,
+  encodeEventFrame,
   // Encoding
   encodeFrame,
-  encodeEventFrame,
-  encodeArtifactChunkFrame,
-  calculateChunks,
-  encodeArtifactChunks
+  type Frame,
+  // Errors
+  FrameSizeError,
+  // Types
+  type FrameType,
+  LENGTH_PREFIX_SIZE,
+  MAX_CHUNK_SIZE,
+  // Constants
+  MAX_FRAME_SIZE,
+  MAX_PAYLOAD_SIZE
 } from './frame.js'
-
+export {
+  ObservingSink,
+  SinkAlreadyFailedError,
+  type SinkState,
+  type TerminalState,
+  type TerminalType
+} from './observing-sink.js'
 export { StdioSink, StreamClosedError } from './sink.js'

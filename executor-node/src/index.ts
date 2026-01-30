@@ -8,27 +8,36 @@
  */
 
 // Executor
-export { execute, parseRunMeta, type ExecutorConfig, type ExecutorResult, type ExecutionOutcome } from './executor.js'
-
-// Loader
-export { loadScript, ScriptLoadError, type LoadedScript } from './loader.js'
-
+export {
+  type ExecutionOutcome,
+  type ExecutorConfig,
+  type ExecutorResult,
+  execute,
+  parseRunMeta
+} from './executor.js'
 // IPC (re-export for advanced usage)
 export {
+  type ArtifactChunkFrame,
+  type ChunkMeta,
+  type EventFrame,
+  type Frame,
+  // Errors
+  FrameSizeError,
+  // Types
+  type FrameType,
+  LENGTH_PREFIX_SIZE,
+  MAX_CHUNK_SIZE,
   // Constants
   MAX_FRAME_SIZE,
   MAX_PAYLOAD_SIZE,
-  MAX_CHUNK_SIZE,
-  LENGTH_PREFIX_SIZE,
-  // Types
-  type FrameType,
-  type EventFrame,
-  type ArtifactChunkFrame,
-  type Frame,
-  type ChunkMeta,
-  // Errors
-  FrameSizeError,
+  ObservingSink,
+  SinkAlreadyFailedError,
+  type SinkState,
   // Sink
   StdioSink,
-  StreamClosedError
+  StreamClosedError,
+  type TerminalState,
+  type TerminalType
 } from './ipc/index.js'
+// Loader
+export { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
