@@ -34,12 +34,16 @@ The stream is a sequence of frames. Each frame is either:
 
 ## Payload Encoding
 
-Single encoding choice for event envelopes:
+All frames use msgpack encoding:
 - `msgpack`
 
 Rationale: compact, stable, language-agnostic.
 
-Artifact chunk frames contain raw bytes (no msgpack layer).
+Event frames contain the msgpack-encoded EventEnvelope directly.
+Artifact chunk frames contain a msgpack-encoded chunk envelope (see Artifact Chunking).
+
+Decoding discrimination: artifact chunk frames have `type: 'artifact_chunk'`;
+event envelopes have event types like `'item'`, `'log'`, `'run_complete'`, etc.
 
 ---
 

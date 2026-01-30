@@ -17,23 +17,23 @@ export {
 } from './executor.js'
 // IPC (re-export for advanced usage)
 export {
-  type ArtifactChunkFrame,
-  type ChunkMeta,
-  type EventFrame,
-  type Frame,
-  // Errors
-  FrameSizeError,
   // Types
-  type FrameType,
+  type ArtifactChunkFrame,
+  type ArtifactChunkType,
+  type ChunkMeta,
+  // Errors
+  ChunkValidationError,
+  type Frame,
+  FrameSizeError,
+  // Constants
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
-  // Constants
   MAX_FRAME_SIZE,
   MAX_PAYLOAD_SIZE,
+  // Sink
   ObservingSink,
   SinkAlreadyFailedError,
   type SinkState,
-  // Sink
   StdioSink,
   StreamClosedError,
   type TerminalState,

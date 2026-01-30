@@ -10,10 +10,12 @@
  * - Maximum payload size: 16 MiB - 4 bytes
  * - Artifact chunk size: up to 8 MiB (raw bytes, before msgpack encoding)
  *
- * All frames are msgpack-encoded and include an explicit `type` discriminant
- * for deterministic decoding. Two frame types exist:
- * - `event`: wraps an EventEnvelope
- * - `artifact_chunk`: raw binary chunk for artifact streaming
+ * Two frame types exist, both msgpack-encoded:
+ * - Event frame: msgpack-encoded EventEnvelope (discriminated by envelope.type)
+ * - Artifact chunk frame: msgpack-encoded chunk envelope with type='artifact_chunk'
+ *
+ * Decoding discrimination: if decoded.type === 'artifact_chunk', it's a chunk
+ * frame; otherwise it's an event envelope (type will be 'item', 'log', etc.).
  *
  * @module
  * @remarks Node.js only. Uses Buffer for transport efficiency.
@@ -46,19 +48,10 @@ export const MAX_CHUNK_SIZE = 8 * 1024 * 1024
 export const LENGTH_PREFIX_SIZE = 4
 
 /**
- * Frame types for discriminating between event frames and artifact chunk frames.
- * All frames include this discriminant for deterministic decoding.
+ * Frame type discriminant for artifact chunk frames.
+ * Event frames use the EventEnvelope's own type field ('item', 'log', etc.).
  */
-export type FrameType = 'event' | 'artifact_chunk'
-
-/**
- * Event frame envelope wrapping an EventEnvelope.
- * Provides explicit type discriminant for decoding.
- */
-export interface EventFrame {
-  readonly type: 'event'
-  readonly envelope: EventEnvelope
-}
+export type ArtifactChunkType = 'artifact_chunk'
 
 /**
  * Artifact chunk frame per CONTRACT_IPC.md.
@@ -80,9 +73,10 @@ export interface ArtifactChunkFrame {
 }
 
 /**
- * Union of all frame types for decoding.
+ * Union of all frame payload types for decoding.
+ * Discriminate using: if (frame.type === 'artifact_chunk') → chunk, else → event envelope.
  */
-export type Frame = EventFrame | ArtifactChunkFrame
+export type Frame = EventEnvelope | ArtifactChunkFrame
 
 /**
  * Error thrown when a frame exceeds the maximum size.
@@ -121,31 +115,37 @@ export function encodeFrame(payload: Uint8Array): Buffer {
 
 /**
  * Encode an event envelope into a framed buffer.
- * Wraps the envelope in an EventFrame with explicit type discriminant.
+ * Per CONTRACT_IPC.md, the payload is the msgpack-encoded envelope directly.
  *
  * @param envelope - The event envelope to encode
- * @returns Buffer containing length prefix + msgpack-encoded frame
+ * @returns Buffer containing length prefix + msgpack-encoded envelope
  * @throws FrameSizeError if encoded payload exceeds MAX_PAYLOAD_SIZE
  */
 export function encodeEventFrame(envelope: EventEnvelope): Buffer {
-  const frame: EventFrame = { type: 'event', envelope }
-  const payload = msgpackEncode(frame)
+  const payload = msgpackEncode(envelope)
   return encodeFrame(payload)
+}
+
+/**
+ * Error thrown when chunk parameters violate CONTRACT_IPC constraints.
+ */
+export class ChunkValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ChunkValidationError'
+  }
 }
 
 /**
  * Encode an artifact chunk into a framed buffer.
  *
  * @param artifactId - The artifact ID
- * @param seq - Sequence number (starts at 1)
+ * @param seq - Sequence number (must be >= 1 per CONTRACT_IPC)
  * @param isLast - True if this is the final chunk
- * @param data - Raw binary data (msgpack bin type)
+ * @param data - Raw binary data (must be <= MAX_CHUNK_SIZE per CONTRACT_IPC)
  * @returns Buffer containing length prefix + msgpack-encoded frame
+ * @throws ChunkValidationError if seq < 1 or data exceeds MAX_CHUNK_SIZE
  * @throws FrameSizeError if encoded payload exceeds MAX_PAYLOAD_SIZE
- *
- * @remarks
- * The raw data size should not exceed MAX_CHUNK_SIZE. This function
- * validates the final encoded size against MAX_PAYLOAD_SIZE as a guard.
  */
 export function encodeArtifactChunkFrame(
   artifactId: ArtifactId,
@@ -153,6 +153,16 @@ export function encodeArtifactChunkFrame(
   isLast: boolean,
   data: Uint8Array
 ): Buffer {
+  // Validate per CONTRACT_IPC constraints
+  if (seq < 1) {
+    throw new ChunkValidationError(`seq must be >= 1, got ${seq}`)
+  }
+  if (data.length > MAX_CHUNK_SIZE) {
+    throw new ChunkValidationError(
+      `data size ${data.length} exceeds MAX_CHUNK_SIZE ${MAX_CHUNK_SIZE}`
+    )
+  }
+
   const frame: ArtifactChunkFrame = {
     type: 'artifact_chunk',
     artifact_id: artifactId,

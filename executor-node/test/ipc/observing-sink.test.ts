@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { EmitSink, ArtifactId, EventEnvelope, RunId, EventId } from '@justapithecus/quarry-sdk'
+import type { ArtifactId, EmitSink, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ObservingSink, SinkAlreadyFailedError } from '../../src/ipc/observing-sink.js'
 
 /**
@@ -118,7 +118,9 @@ describe('ObservingSink', () => {
 
     it('ignores subsequent terminal events after run_complete', async () => {
       await observingSink.writeEvent(makeEnvelope('run_complete', { summary: { first: true } }))
-      await observingSink.writeEvent(makeEnvelope('run_error', { error_type: 'err', message: 'msg' }))
+      await observingSink.writeEvent(
+        makeEnvelope('run_error', { error_type: 'err', message: 'msg' })
+      )
 
       const state = observingSink.getTerminalState()
       expect(state!.type).toBe('run_complete')
