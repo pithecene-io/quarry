@@ -3,10 +3,26 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "quarry-executor": "./dist/bin/executor.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "biome check . && tsc --noEmit",
+    "lint": "biome check .",
     "format": "biome check --write .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@justapithecus/quarry-sdk": "workspace:*",
+    "@msgpack/msgpack": "^3.0.0"
+  },
+  "peerDependencies": {
+    "puppeteer": "^24"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.36.1"
   }
 }

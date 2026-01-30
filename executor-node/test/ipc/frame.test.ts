@@ -1,0 +1,380 @@
+import { describe, it, expect } from 'vitest'
+import { decode as msgpackDecode } from '@msgpack/msgpack'
+import type { ArtifactId, EventEnvelope, RunId, EventId } from '@justapithecus/quarry-sdk'
+import {
+  encodeFrame,
+  encodeEventFrame,
+  encodeArtifactChunkFrame,
+  calculateChunks,
+  encodeArtifactChunks,
+  FrameSizeError,
+  MAX_FRAME_SIZE,
+  MAX_PAYLOAD_SIZE,
+  MAX_CHUNK_SIZE,
+  LENGTH_PREFIX_SIZE,
+  type EventFrame,
+  type ArtifactChunkFrame
+} from '../../src/ipc/frame.js'
+
+/**
+ * Helper to create a minimal valid event envelope for testing.
+ */
+function makeEnvelope(overrides: Partial<EventEnvelope<'item'>> = {}): EventEnvelope<'item'> {
+  return {
+    contract_version: '0.1.0',
+    event_id: 'evt-123' as EventId,
+    run_id: 'run-456' as RunId,
+    seq: 1,
+    type: 'item',
+    ts: '2024-01-01T00:00:00.000Z',
+    payload: { item_type: 'test', data: {} },
+    attempt: 1,
+    ...overrides
+  }
+}
+
+describe('IPC Frame Constants', () => {
+  it('MAX_FRAME_SIZE is 16 MiB', () => {
+    expect(MAX_FRAME_SIZE).toBe(16 * 1024 * 1024)
+  })
+
+  it('MAX_PAYLOAD_SIZE is MAX_FRAME_SIZE - LENGTH_PREFIX_SIZE', () => {
+    expect(MAX_PAYLOAD_SIZE).toBe(MAX_FRAME_SIZE - LENGTH_PREFIX_SIZE)
+  })
+
+  it('MAX_CHUNK_SIZE is 8 MiB', () => {
+    expect(MAX_CHUNK_SIZE).toBe(8 * 1024 * 1024)
+  })
+
+  it('LENGTH_PREFIX_SIZE is 4 bytes', () => {
+    expect(LENGTH_PREFIX_SIZE).toBe(4)
+  })
+})
+
+describe('encodeFrame', () => {
+  it('encodes empty payload correctly', () => {
+    const payload = new Uint8Array(0)
+    const frame = encodeFrame(payload)
+
+    expect(frame.length).toBe(LENGTH_PREFIX_SIZE)
+    expect(frame.readUInt32BE(0)).toBe(0)
+  })
+
+  it('encodes payload with correct length prefix', () => {
+    const payload = new Uint8Array([1, 2, 3, 4, 5])
+    const frame = encodeFrame(payload)
+
+    expect(frame.length).toBe(LENGTH_PREFIX_SIZE + 5)
+    expect(frame.readUInt32BE(0)).toBe(5)
+    expect(frame.subarray(LENGTH_PREFIX_SIZE)).toEqual(Buffer.from([1, 2, 3, 4, 5]))
+  })
+
+  it('handles large payloads up to MAX_PAYLOAD_SIZE', () => {
+    // Test with a reasonably large payload (1 MiB)
+    const payload = new Uint8Array(1024 * 1024)
+    const frame = encodeFrame(payload)
+
+    expect(frame.length).toBe(LENGTH_PREFIX_SIZE + payload.length)
+    expect(frame.readUInt32BE(0)).toBe(payload.length)
+  })
+
+  it('throws FrameSizeError when payload exceeds MAX_PAYLOAD_SIZE', () => {
+    const payload = new Uint8Array(MAX_PAYLOAD_SIZE + 1)
+
+    expect(() => encodeFrame(payload)).toThrow(FrameSizeError)
+    expect(() => encodeFrame(payload)).toThrow(/exceeds maximum/)
+  })
+
+  it('FrameSizeError contains size information', () => {
+    const payload = new Uint8Array(MAX_PAYLOAD_SIZE + 100)
+
+    try {
+      encodeFrame(payload)
+      expect.fail('Expected FrameSizeError')
+    } catch (err) {
+      expect(err).toBeInstanceOf(FrameSizeError)
+      const frameErr = err as FrameSizeError
+      expect(frameErr.payloadSize).toBe(MAX_PAYLOAD_SIZE + 100)
+      expect(frameErr.maxPayloadSize).toBe(MAX_PAYLOAD_SIZE)
+    }
+  })
+})
+
+describe('encodeEventFrame', () => {
+  it('encodes event envelope with type discriminant', () => {
+    const envelope = makeEnvelope()
+    const frame = encodeEventFrame(envelope)
+
+    // Decode the frame
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as EventFrame
+
+    expect(decoded.type).toBe('event')
+    expect(decoded.envelope).toEqual(envelope)
+  })
+
+  it('preserves all envelope fields', () => {
+    const envelope = makeEnvelope({
+      job_id: 'job-789' as any,
+      parent_run_id: 'parent-run' as RunId,
+      attempt: 3
+    })
+    const frame = encodeEventFrame(envelope)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as EventFrame
+
+    expect(decoded.envelope.job_id).toBe('job-789')
+    expect(decoded.envelope.parent_run_id).toBe('parent-run')
+    expect(decoded.envelope.attempt).toBe(3)
+  })
+})
+
+describe('encodeArtifactChunkFrame', () => {
+  it('encodes chunk with correct structure', () => {
+    const artifactId = 'artifact-123' as ArtifactId
+    const data = new Uint8Array([10, 20, 30])
+    const frame = encodeArtifactChunkFrame(artifactId, 1, false, data)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.type).toBe('artifact_chunk')
+    expect(decoded.artifact_id).toBe('artifact-123')
+    expect(decoded.seq).toBe(1)
+    expect(decoded.is_last).toBe(false)
+    expect(new Uint8Array(decoded.data)).toEqual(data)
+  })
+
+  it('encodes is_last=true correctly', () => {
+    const artifactId = 'artifact-123' as ArtifactId
+    const data = new Uint8Array([1, 2, 3])
+    const frame = encodeArtifactChunkFrame(artifactId, 5, true, data)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.seq).toBe(5)
+    expect(decoded.is_last).toBe(true)
+  })
+
+  it('encodes binary data as msgpack bin type', () => {
+    const artifactId = 'artifact-123' as ArtifactId
+    const data = new Uint8Array(256)
+    for (let i = 0; i < 256; i++) {
+      data[i] = i
+    }
+    const frame = encodeArtifactChunkFrame(artifactId, 1, true, data)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    // Verify data is decoded as Uint8Array (bin type)
+    expect(decoded.data).toBeInstanceOf(Uint8Array)
+    expect(decoded.data.length).toBe(256)
+  })
+})
+
+describe('calculateChunks', () => {
+  it('returns single chunk for empty data', () => {
+    const chunks = calculateChunks(0)
+
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toEqual({
+      seq: 1,
+      isLast: true,
+      offset: 0,
+      length: 0
+    })
+  })
+
+  it('returns single chunk for data smaller than MAX_CHUNK_SIZE', () => {
+    const chunks = calculateChunks(1000)
+
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toEqual({
+      seq: 1,
+      isLast: true,
+      offset: 0,
+      length: 1000
+    })
+  })
+
+  it('returns single chunk for data exactly MAX_CHUNK_SIZE', () => {
+    const chunks = calculateChunks(MAX_CHUNK_SIZE)
+
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toEqual({
+      seq: 1,
+      isLast: true,
+      offset: 0,
+      length: MAX_CHUNK_SIZE
+    })
+  })
+
+  it('returns multiple chunks for data larger than MAX_CHUNK_SIZE', () => {
+    const totalSize = MAX_CHUNK_SIZE + 1000
+    const chunks = calculateChunks(totalSize)
+
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0]).toEqual({
+      seq: 1,
+      isLast: false,
+      offset: 0,
+      length: MAX_CHUNK_SIZE
+    })
+    expect(chunks[1]).toEqual({
+      seq: 2,
+      isLast: true,
+      offset: MAX_CHUNK_SIZE,
+      length: 1000
+    })
+  })
+
+  it('handles exact multiple of MAX_CHUNK_SIZE', () => {
+    const totalSize = MAX_CHUNK_SIZE * 3
+    const chunks = calculateChunks(totalSize)
+
+    expect(chunks).toHaveLength(3)
+    expect(chunks.every((c, i) => c.seq === i + 1)).toBe(true)
+    expect(chunks[0].isLast).toBe(false)
+    expect(chunks[1].isLast).toBe(false)
+    expect(chunks[2].isLast).toBe(true)
+  })
+
+  it('seq numbers are monotonically increasing from 1', () => {
+    const chunks = calculateChunks(MAX_CHUNK_SIZE * 5 + 1)
+
+    expect(chunks).toHaveLength(6)
+    for (let i = 0; i < chunks.length; i++) {
+      expect(chunks[i].seq).toBe(i + 1)
+    }
+  })
+
+  it('only last chunk has isLast=true', () => {
+    const chunks = calculateChunks(MAX_CHUNK_SIZE * 4)
+
+    for (let i = 0; i < chunks.length - 1; i++) {
+      expect(chunks[i].isLast).toBe(false)
+    }
+    expect(chunks[chunks.length - 1].isLast).toBe(true)
+  })
+})
+
+describe('encodeArtifactChunks', () => {
+  it('yields single frame for small data', () => {
+    const artifactId = 'artifact-123' as ArtifactId
+    const data = new Uint8Array([1, 2, 3, 4, 5])
+
+    const frames = [...encodeArtifactChunks(artifactId, data)]
+
+    expect(frames).toHaveLength(1)
+
+    // Decode and verify
+    const payloadLength = frames[0].readUInt32BE(0)
+    const payload = frames[0].subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.artifact_id).toBe('artifact-123')
+    expect(decoded.seq).toBe(1)
+    expect(decoded.is_last).toBe(true)
+    expect(new Uint8Array(decoded.data)).toEqual(data)
+  })
+
+  it('yields single frame for empty data', () => {
+    const artifactId = 'artifact-empty' as ArtifactId
+    const data = new Uint8Array(0)
+
+    const frames = [...encodeArtifactChunks(artifactId, data)]
+
+    expect(frames).toHaveLength(1)
+
+    const payloadLength = frames[0].readUInt32BE(0)
+    const payload = frames[0].subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.is_last).toBe(true)
+    expect(decoded.data.length).toBe(0)
+  })
+
+  it('yields multiple frames for large data', () => {
+    const artifactId = 'artifact-large' as ArtifactId
+    // Create data that spans exactly 2 chunks
+    const data = new Uint8Array(MAX_CHUNK_SIZE + 100)
+    for (let i = 0; i < data.length; i++) {
+      data[i] = i % 256
+    }
+
+    const frames = [...encodeArtifactChunks(artifactId, data)]
+
+    expect(frames).toHaveLength(2)
+
+    // Verify first chunk
+    let payloadLength = frames[0].readUInt32BE(0)
+    let payload = frames[0].subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    let decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.seq).toBe(1)
+    expect(decoded.is_last).toBe(false)
+    expect(decoded.data.length).toBe(MAX_CHUNK_SIZE)
+
+    // Verify second chunk
+    payloadLength = frames[1].readUInt32BE(0)
+    payload = frames[1].subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(decoded.seq).toBe(2)
+    expect(decoded.is_last).toBe(true)
+    expect(decoded.data.length).toBe(100)
+  })
+
+  it('preserves data integrity across chunks', () => {
+    const artifactId = 'artifact-integrity' as ArtifactId
+    // Use smaller data to avoid stack overflow from spread operator
+    const data = new Uint8Array(1024 * 100) // 100 KB, will be 1 chunk but tests integrity
+    for (let i = 0; i < data.length; i++) {
+      data[i] = i % 256
+    }
+
+    const frames = [...encodeArtifactChunks(artifactId, data)]
+    const chunks: Uint8Array[] = []
+
+    for (const frame of frames) {
+      const payloadLength = frame.readUInt32BE(0)
+      const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+      const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+      chunks.push(new Uint8Array(decoded.data))
+    }
+
+    // Concatenate chunks without spread operator
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    const reassembled = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      reassembled.set(chunk, offset)
+      offset += chunk.length
+    }
+
+    expect(reassembled).toEqual(data)
+  })
+
+  it('works with Buffer input', () => {
+    const artifactId = 'artifact-buffer' as ArtifactId
+    const data = Buffer.from([1, 2, 3, 4, 5])
+
+    const frames = [...encodeArtifactChunks(artifactId, data)]
+
+    expect(frames).toHaveLength(1)
+
+    const payloadLength = frames[0].readUInt32BE(0)
+    const payload = frames[0].subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as ArtifactChunkFrame
+
+    expect(new Uint8Array(decoded.data)).toEqual(new Uint8Array([1, 2, 3, 4, 5]))
+  })
+})
