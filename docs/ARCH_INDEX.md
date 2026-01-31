@@ -22,8 +22,6 @@ Do not update for internal refactors.
 
 ## docs/
 
-Normative contracts and plans. These documents define **system behavior**.
-
 ### docs/guides/
 
 User-facing guides (informational).
@@ -39,7 +37,7 @@ User-facing guides (informational).
 
 ### docs/contracts/
 
-Normative contracts (authoritative).
+Normative contracts (authoritative). These documents define **system behavior**.
 
 - `contracts/CONTRACT_IPC.md` — IPC framing, ordering, and transport semantics
 - `contracts/CONTRACT_EMIT.md` — event and artifact emission rules
