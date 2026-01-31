@@ -16,7 +16,7 @@ executor application. Pools are declared once and referenced by jobs.
 
 ### Repository-level pools
 
-Example (align the filename with your canonical repo config):
+Example (`quarry.yaml`):
 
 ```yaml
 proxies:
