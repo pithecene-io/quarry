@@ -12,10 +12,13 @@ var (
 		Usage:   "Output format: json, table, yaml",
 	}
 
-	// NoColorFlag disables colored output.
+	// NoColorFlag disables colored output in table format.
+	// Note: Currently a placeholder - table output doesn't emit ANSI colors yet.
+	// The flag is defined for forward compatibility when table coloring is added.
+	// TUI mode is unaffected by this flag (uses its own styling).
 	NoColorFlag = &cli.BoolFlag{
 		Name:  "no-color",
-		Usage: "Disable colored output",
+		Usage: "Disable colored output (table format only)",
 	}
 
 	// TUIFlag enables Bubble Tea interactive mode.

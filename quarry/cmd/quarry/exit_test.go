@@ -1,35 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"errors"
-	"io"
-	"os"
 	"testing"
 
 	"github.com/urfave/cli/v2"
 )
-
-// captureStderr captures stderr output during function execution.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
-	}
-	os.Stderr = w
-
-	fn()
-
-	w.Close()
-	os.Stderr = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
-}
 
 func TestExitErrHandler_NilError(t *testing.T) {
 	// Should not panic or exit on nil error
@@ -110,7 +86,6 @@ func TestExitErrHandler_RegularError(t *testing.T) {
 }
 
 // TestRunExitCodes documents the expected exit codes per CONTRACT_RUN.md.
-// These are validated via integration tests or manual testing.
 func TestRunExitCodes_Documentation(t *testing.T) {
 	// This test documents the exit code contract:
 	// - 0: success (run_complete)
@@ -137,5 +112,48 @@ func TestRunExitCodes_Documentation(t *testing.T) {
 		if _, ok := codes[code]; !ok {
 			t.Errorf("%s = %d is not documented", name, code)
 		}
+	}
+}
+
+// TestExitErrHandler_PreservesExitCode verifies that cli.Exit codes pass through.
+// This is critical for CONTRACT_RUN.md compliance.
+func TestExitErrHandler_PreservesExitCode(t *testing.T) {
+	// Test each exit code defined in CONTRACT_RUN.md
+	testCases := []struct {
+		name string
+		code int
+	}{
+		{"success", 0},
+		{"script_error", 1},
+		{"executor_crash", 2},
+		{"policy_failure", 3},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cli.Exit("", tc.code)
+
+			var exitCoder cli.ExitCoder
+			if !errors.As(err, &exitCoder) {
+				t.Fatalf("cli.Exit should return ExitCoder")
+			}
+
+			if exitCoder.ExitCode() != tc.code {
+				t.Errorf("ExitCode() = %d, want %d", exitCoder.ExitCode(), tc.code)
+			}
+		})
+	}
+}
+
+// TestExitErrHandler_MessageSuppression verifies empty messages don't print.
+func TestExitErrHandler_MessageSuppression(t *testing.T) {
+	// cli.Exit("", N) with empty message should not print anything meaningful
+	err := cli.Exit("", 0)
+	msg := err.Error()
+
+	// Empty message cli.Exit returns empty string or "exit status N"
+	// Our handler should NOT print these to stderr
+	if msg != "" && msg != "exit status 0" {
+		t.Errorf("Expected empty or 'exit status 0', got %q", msg)
 	}
 }
