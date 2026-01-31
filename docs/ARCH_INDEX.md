@@ -3,7 +3,7 @@
 This file is a **navigation map** of Quarry’s subsystems.
 It summarizes *what exists and where*, not how things are implemented.
 
-Normative behavior is defined in `docs/CONTRACT_*.md`.
+Normative behavior is defined in `docs/contracts/CONTRACT_*.md`.
 
 Maintenance rule:
 Update this file only when a new subsystem boundary becomes real.
@@ -24,11 +24,11 @@ Do not update for internal refactors.
 
 Normative contracts and plans. These documents define **system behavior**.
 
-- `CONTRACT_IPC.md` — IPC framing, ordering, and transport semantics
-- `CONTRACT_EMIT.md` — event and artifact emission rules
-- `CONTRACT_RUN.md` — run lifecycle and terminal states
-- `CONTRACT_POLICY.md` — policy-level constraints
-- `CONTRACT_LODE.md` — persistence and storage interaction
+- `contracts/CONTRACT_IPC.md` — IPC framing, ordering, and transport semantics
+- `contracts/CONTRACT_EMIT.md` — event and artifact emission rules
+- `contracts/CONTRACT_RUN.md` — run lifecycle and terminal states
+- `contracts/CONTRACT_POLICY.md` — policy-level constraints
+- `contracts/CONTRACT_LODE.md` — persistence and storage interaction
 - `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
 Contracts are authoritative over code.
