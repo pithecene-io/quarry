@@ -200,4 +200,4 @@ Breaking changes are gated by contract versioning.
 
 ## License
 
-MIT
+Apache 2.0
