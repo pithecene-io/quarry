@@ -130,6 +130,14 @@ Defines Quarry’s **minimal expectations** of Lode:
 - Concrete meaning of “consistency across policies”
 - Lineage/metadata surfaced; dedup elimination is downstream and out of scope
 
+#### 0.5.6 Proxy Contract (`docs/contracts/CONTRACT_PROXY.md`)
+Defines:
+- Shared proxy data model (endpoint, pool, strategy, sticky scope)
+- Runtime selection and rotation rules
+- Executor application requirements (launch + auth)
+- IPC payload fields and redaction rules
+- Validation rules and observability expectations
+
 ### Exit criteria
 - All five contract documents exist
 - SDK, executor, runtime, and policy work can proceed independently
@@ -146,6 +154,7 @@ Define the stable authoring surface for extraction scripts.
 - `QuarryContext<Job>`
 - `EmitAPI`
 - Optional hooks
+- Proxy config types + validation helpers
 - Minimal SDK README with example
 
 ### Mini-milestones
@@ -165,6 +174,7 @@ Execute scripts without distortion and stream events immediately.
 - Script loader
 - IPC implementation conforming to contracts
 - Emit forwarding implementation
+- Proxy application utilities (launch args + auth)
 
 ### Mini-milestones
 - [ ] Events streamed incrementally and in order
@@ -183,6 +193,7 @@ Supervise execution and route events to an ingestion policy.
 - Event ingestion loop
 - Retry boundaries (retry = new run)
 - Run metadata and logging
+- Proxy selection + rotation state in runtime
 
 ### Mini-milestones
 - [ ] One job runs end-to-end

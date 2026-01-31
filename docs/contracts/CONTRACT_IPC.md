@@ -47,6 +47,24 @@ event envelopes have event types like `'item'`, `'log'`, `'run_complete'`, etc.
 
 ---
 
+## Run Control Payloads (Out of Band)
+
+The runtime and executor may exchange **run control payloads** outside the
+event stream (e.g., initial run request and final run result).
+These payloads must:
+- Use the ProxyEndpoint schema defined in `CONTRACT_PROXY.md` when a proxy is supplied.
+- Never include proxy passwords in any result/summary payload.
+
+### Run Request (Runtime → Executor)
+If present, the run request includes an optional `proxy` field:
+- `proxy` (optional): `ProxyEndpoint`
+
+### Run Result (Executor → Runtime)
+If present, the run result may include `proxy_used` metadata:
+- `proxy_used` (optional): `ProxyEndpoint` **without** `password`
+
+---
+
 ## Maximum Frame Size
 
 - Maximum frame size: **16 MiB**
