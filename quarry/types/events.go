@@ -1,7 +1,8 @@
 package types
 
 // ContractVersion is the emit contract version per CONTRACT_EMIT.md.
-const ContractVersion = "0.1.0"
+// This is an alias for the canonical Version to maintain backward compatibility.
+const ContractVersion = Version
 
 // EventType represents the type of event per CONTRACT_EMIT.md.
 type EventType string

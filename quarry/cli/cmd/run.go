@@ -1,20 +1,8 @@
-// Package main provides the quarry-runtime CLI entrypoint.
-//
-// Usage:
-//
-//	quarry-runtime run -script <path> -run-id <id> [options]
-//
-// Exit codes:
-//   - 0: success (run_complete)
-//   - 1: script error (run_error)
-//   - 2: executor crash
-//   - 3: policy failure
-package main
+package cmd
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -27,7 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Exit codes per CONTRACT_RUN.md
+// Exit codes per CONTRACT_RUN.md.
 const (
 	exitSuccess       = 0
 	exitScriptError   = 1
@@ -35,61 +23,12 @@ const (
 	exitPolicyFailure = 3
 )
 
-// policyChoice holds parsed policy configuration from CLI flags.
-type policyChoice struct {
-	name      string
-	flushMode string
-	maxEvents int
-	maxBytes  int64
-}
-
-func main() {
-	app := &cli.App{
-		Name:    "quarry-runtime",
-		Usage:   "Quarry runtime orchestrator - supervises executor and ingests events",
-		Version: "0.1.0",
-		Commands: []*cli.Command{
-			runCommand(),
-		},
-		ExitErrHandler: exitErrHandler,
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		// ExitErrHandler already handled the exit
-		// This branch is only reached if ExitErrHandler didn't exit
-		os.Exit(exitExecutorCrash)
-	}
-}
-
-// exitErrHandler handles errors from the CLI, respecting cli.ExitCoder.
-func exitErrHandler(c *cli.Context, err error) {
-	if err == nil {
-		return
-	}
-
-	// Check for ExitCoder (from cli.Exit), handles wrapped errors
-	var exitCoder cli.ExitCoder
-	if errors.As(err, &exitCoder) {
-		code := exitCoder.ExitCode()
-		msg := exitCoder.Error()
-
-		// Only print if there's a real message (not just "exit status N")
-		// cli.Exit("", N).Error() returns "exit status N", so skip those
-		if msg != "" && msg != fmt.Sprintf("exit status %d", code) {
-			fmt.Fprintln(os.Stderr, msg)
-		}
-		os.Exit(code)
-	}
-
-	// Unexpected error - print and exit with crash code
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(exitExecutorCrash)
-}
-
-func runCommand() *cli.Command {
+// RunCommand returns the run command.
+// This is the only command that executes work per CONTRACT_CLI.md.
+func RunCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "run",
-		Usage: "Execute a script run",
+		Usage: "Execute a script run (the only execution entrypoint)",
 		Flags: []cli.Flag{
 			// Execution flags
 			&cli.StringFlag{
@@ -153,6 +92,14 @@ func runCommand() *cli.Command {
 		},
 		Action: runAction,
 	}
+}
+
+// policyChoice holds parsed policy configuration.
+type policyChoice struct {
+	name      string
+	flushMode string
+	maxEvents int
+	maxBytes  int64
 }
 
 func runAction(c *cli.Context) error {
@@ -230,33 +177,29 @@ func runAction(c *cli.Context) error {
 
 	// Print result
 	if !c.Bool("quiet") {
-		printResult(result, choice, duration)
+		printRunResult(result, choice, duration)
 	}
 
 	return cli.Exit("", outcomeToExitCode(result.Outcome.Status))
 }
 
-// validatePolicyConfig validates the policy configuration.
 func validatePolicyConfig(choice policyChoice) error {
 	switch choice.name {
 	case "strict":
-		// Warn if buffer/flush flags are set (ignored)
 		if choice.maxEvents > 0 || choice.maxBytes > 0 || choice.flushMode != "at_least_once" {
 			fmt.Fprintf(os.Stderr, "Warning: buffer/flush flags ignored for strict policy\n")
 		}
 		return nil
 
 	case "buffered":
-		// Require at least one buffer limit
 		if choice.maxEvents <= 0 && choice.maxBytes <= 0 {
 			return fmt.Errorf("buffered policy requires --buffer-events > 0 or --buffer-bytes > 0")
 		}
-		// Validate flush mode
 		switch policy.FlushMode(choice.flushMode) {
 		case policy.FlushAtLeastOnce, policy.FlushChunksFirst, policy.FlushTwoPhase:
 			return nil
 		default:
-			return fmt.Errorf("invalid flush-mode: %s (must be at_least_once, chunks_first, or two_phase)", choice.flushMode)
+			return fmt.Errorf("invalid flush-mode: %s", choice.flushMode)
 		}
 
 	default:
@@ -264,9 +207,7 @@ func validatePolicyConfig(choice policyChoice) error {
 	}
 }
 
-// buildPolicy creates a Policy from the CLI configuration.
 func buildPolicy(choice policyChoice) (policy.Policy, error) {
-	// Use stub sink until Lode integration is ready
 	sink := policy.NewStubSink()
 
 	switch choice.name {
@@ -286,7 +227,6 @@ func buildPolicy(choice policyChoice) (policy.Policy, error) {
 	}
 }
 
-// outcomeToExitCode maps outcome status to exit code.
 func outcomeToExitCode(status types.OutcomeStatus) int {
 	switch status {
 	case types.OutcomeSuccess:
@@ -302,9 +242,7 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 	}
 }
 
-// printResult prints the run result and summary.
-func printResult(result *runtime.RunResult, choice policyChoice, duration time.Duration) {
-	// Summary line
+func printRunResult(result *runtime.RunResult, choice policyChoice, duration time.Duration) {
 	fmt.Printf("\nrun_id=%s, attempt=%d, outcome=%s, duration=%s\n",
 		result.RunMeta.RunID,
 		result.RunMeta.Attempt,
@@ -312,7 +250,6 @@ func printResult(result *runtime.RunResult, choice policyChoice, duration time.D
 		duration.Round(time.Millisecond),
 	)
 
-	// Policy summary
 	if choice.name == "buffered" {
 		fmt.Printf("policy=%s, flush_mode=%s, drops=%d, buffer_bytes=%d\n",
 			choice.name,
@@ -324,7 +261,6 @@ func printResult(result *runtime.RunResult, choice policyChoice, duration time.D
 		fmt.Printf("policy=%s\n", choice.name)
 	}
 
-	// Detailed stats
 	fmt.Printf("\n=== Run Result ===\n")
 	fmt.Printf("Run ID:       %s\n", result.RunMeta.RunID)
 	if result.RunMeta.JobID != nil {
@@ -356,7 +292,7 @@ func printResult(result *runtime.RunResult, choice policyChoice, duration time.D
 	}
 
 	if len(result.OrphanIDs) > 0 {
-		fmt.Printf("\n=== Orphan Artifacts (eligible for GC) ===\n")
+		fmt.Printf("\n=== Orphan Artifacts ===\n")
 		for _, id := range result.OrphanIDs {
 			fmt.Printf("  - %s\n", id)
 		}
