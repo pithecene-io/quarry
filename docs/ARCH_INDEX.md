@@ -28,6 +28,7 @@ Normative contracts and plans. These documents define **system behavior**.
 - `contracts/CONTRACT_EMIT.md` — event and artifact emission rules
 - `contracts/CONTRACT_RUN.md` — run lifecycle and terminal states
 - `contracts/CONTRACT_POLICY.md` — policy-level constraints
+- `contracts/CONTRACT_PROXY.md` — proxy configuration, selection, and executor application
 - `contracts/CONTRACT_LODE.md` — persistence and storage interaction
 - `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
@@ -107,4 +108,3 @@ Go module root.
 - IPC is treated as a hard boundary
 
 This index is intentionally stable and low-detail.
-

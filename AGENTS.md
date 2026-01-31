@@ -44,6 +44,11 @@ If scope feels ambiguous or expanding, **pause and ask**.
   - ingestion vs persistence
   - policy vs mechanism
 
+## Proxy Discipline
+
+- Proxy selection is runtime-owned; executor only applies resolved endpoints.
+- No provider-specific proxy code in executor or SDK.
+
 ---
 
 ## TypeScript Rules (Strict)
@@ -142,5 +147,4 @@ When given a task:
 10. If a change feels like scope expansion, stop and surface the concern.
 11. Do not refactor unrelated code “for cleanliness.”
 12. Output only the requested artifacts (code, diffs, or explanations).
-
 
