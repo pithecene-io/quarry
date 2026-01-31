@@ -1,0 +1,78 @@
+package tui
+
+import (
+	"testing"
+)
+
+func TestIsTUISupported(t *testing.T) {
+	tests := []struct {
+		viewType string
+		want     bool
+	}{
+		// Supported: inspect commands
+		{"inspect_run", true},
+		{"inspect_job", true},
+		{"inspect_task", true},
+		{"inspect_proxy", true},
+		{"inspect_executor", true},
+
+		// Supported: stats commands
+		{"stats_runs", true},
+		{"stats_jobs", true},
+		{"stats_tasks", true},
+		{"stats_proxies", true},
+		{"stats_executors", true},
+
+		// Not supported: list commands
+		{"list_runs", false},
+		{"list_jobs", false},
+		{"list_pools", false},
+		{"list_executors", false},
+
+		// Not supported: debug commands
+		{"debug_ipc", false},
+		{"debug_resolve_proxy", false},
+
+		// Not supported: version
+		{"version", false},
+
+		// Not supported: run
+		{"run", false},
+
+		// Not supported: unknown
+		{"unknown", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.viewType, func(t *testing.T) {
+			got := IsTUISupported(tt.viewType)
+			if got != tt.want {
+				t.Errorf("IsTUISupported(%q) = %v, want %v", tt.viewType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSupportedTUIViews(t *testing.T) {
+	views := SupportedTUIViews()
+
+	// Should have exactly 10 supported views (5 inspect + 5 stats)
+	if len(views) != 10 {
+		t.Errorf("SupportedTUIViews() returned %d views, expected 10", len(views))
+	}
+
+	// All returned views should be supported
+	for _, v := range views {
+		if !IsTUISupported(v) {
+			t.Errorf("SupportedTUIViews() returned %q but IsTUISupported returns false", v)
+		}
+	}
+}
+
+func TestRun_UnsupportedViewType(t *testing.T) {
+	err := Run("list_runs", nil)
+	if err == nil {
+		t.Error("Expected error for unsupported view type")
+	}
+}

@@ -92,10 +92,37 @@ All `inspect`, `stats`, and `list` commands share the same output contract.
 ### Shared Flags
 
 - `--format=json|table|yaml`
-- `--no-color`
+- `--no-color` (affects table output only, not TUI)
+- `--tui` (inspect and stats commands only)
 
 Rendering is centralized. Command handlers must not implement custom
 formatting logic.
+
+### TUI Mode
+
+TUI mode (`--tui`) provides interactive views for select read-only commands.
+
+**TUI Policy:**
+
+- **Opt-in only**: TUI is never the default. Users must explicitly request it.
+- **Read-only only**: TUI is only available for `inspect` and `stats` commands.
+- **Same data payloads**: TUI renders the same data structures as non-TUI output.
+  There is no TUI-exclusive data.
+- **Presentation only**: Bubble Tea is a presentation layer. It does not fetch
+  additional data or perform mutations.
+- **Clean exit**: TUI must exit cleanly on `q` or `Ctrl+C`.
+
+Commands that do not support TUI must error if `--tui` is provided.
+
+Supported TUI commands:
+- `inspect run|job|task|proxy|executor`
+- `stats runs|jobs|tasks|proxies|executors`
+
+Unsupported (must error with `--tui`):
+- `list` commands
+- `debug` commands
+- `version`
+- `run`
 
 ---
 
@@ -285,7 +312,12 @@ Response:
 ```
 ResolveProxyResponse:
   endpoint: ProxyEndpoint
+  committed: boolean
 ```
+
+The `committed` field indicates whether the resolution was committed (rotation
+counters advanced). It is `false` by default and `true` only when `--commit`
+is provided.
 
 By default this command is read-only and **must not** mutate runtime state.
 
@@ -321,5 +353,23 @@ No payload dumping unless `--verbose` is provided.
 
 ## `version`
 
-`version` reports the CLI version and the contract versions it implements.
+`version` reports the canonical project version.
 It must not contact the executor.
+
+Response:
+```
+VersionResponse:
+  version: string
+  commit: string
+```
+
+### Lockstep Versioning
+
+All Quarry components share a single canonical version defined in `types.Version`.
+This includes:
+- CLI version
+- Emit contract version (CONTRACT_EMIT.md)
+- IPC contract version (CONTRACT_IPC.md)
+
+Version changes require updating the single source constant. There is no separate
+"contract version" — the project version is the contract version.
