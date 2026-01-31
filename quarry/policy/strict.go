@@ -2,7 +2,6 @@ package policy
 
 import (
 	"context"
-	"sync"
 
 	"github.com/justapithecus/quarry/types"
 )
@@ -17,38 +16,29 @@ import (
 type StrictPolicy struct {
 	sink Sink
 
-	mu    sync.Mutex
-	stats Stats
+	stats *statsRecorder
 }
 
 // NewStrictPolicy creates a new strict policy writing to the given sink.
 func NewStrictPolicy(sink Sink) *StrictPolicy {
 	return &StrictPolicy{
-		sink: sink,
-		stats: Stats{
-			DroppedByType: make(map[types.EventType]int64),
-		},
+		sink:  sink,
+		stats: newStatsRecorder(),
 	}
 }
 
 // IngestEvent writes the event immediately to the sink.
 // Returns error on sink failure (terminates run).
 func (p *StrictPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
-	p.mu.Lock()
-	p.stats.TotalEvents++
-	p.mu.Unlock()
+	p.stats.incTotalEvents()
 
 	// Write immediately (batch of 1)
 	if err := p.sink.WriteEvents(ctx, []*types.EventEnvelope{envelope}); err != nil {
-		p.mu.Lock()
-		p.stats.Errors++
-		p.mu.Unlock()
+		p.stats.incErrors()
 		return err
 	}
 
-	p.mu.Lock()
-	p.stats.EventsPersisted++
-	p.mu.Unlock()
+	p.stats.incEventsPersisted(1)
 
 	return nil
 }
@@ -56,31 +46,22 @@ func (p *StrictPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnv
 // IngestArtifactChunk writes the chunk immediately to the sink.
 // Returns error on sink failure (terminates run).
 func (p *StrictPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
-	p.mu.Lock()
-	p.stats.TotalChunks++
-	p.mu.Unlock()
+	p.stats.incTotalChunks()
 
 	// Write immediately (batch of 1)
 	if err := p.sink.WriteChunks(ctx, []*types.ArtifactChunk{chunk}); err != nil {
-		p.mu.Lock()
-		p.stats.Errors++
-		p.mu.Unlock()
+		p.stats.incErrors()
 		return err
 	}
 
-	p.mu.Lock()
-	p.stats.ChunksPersisted++
-	p.mu.Unlock()
+	p.stats.incChunksPersisted(1)
 
 	return nil
 }
 
 // Flush is a no-op for strict policy (nothing is buffered).
 func (p *StrictPolicy) Flush(_ context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.stats.FlushCount++
+	p.stats.incFlush()
 	return nil
 }
 
@@ -91,15 +72,5 @@ func (p *StrictPolicy) Close() error {
 
 // Stats returns policy statistics.
 func (p *StrictPolicy) Stats() Stats {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Return a copy with a copied map
-	stats := p.stats
-	stats.DroppedByType = make(map[types.EventType]int64, len(p.stats.DroppedByType))
-	for k, v := range p.stats.DroppedByType {
-		stats.DroppedByType[k] = v
-	}
-
-	return stats
+	return p.stats.snapshot()
 }

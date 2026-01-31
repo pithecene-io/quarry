@@ -75,13 +75,13 @@ type BufferedPolicy struct {
 	sink   Sink
 	config BufferedConfig
 
-	mu              sync.Mutex
+	mu              sync.Mutex // guards buffer state only
 	eventBuffer     []*types.EventEnvelope
 	eventBufferNext []*types.EventEnvelope // TwoPhase: events added after eventsFlushed=true
 	chunkBuffer     []*types.ArtifactChunk
 	bufferBytes     int64
 	eventsFlushed   bool // TwoPhase: eventBuffer written, awaiting chunk success
-	stats           Stats
+	stats           *statsRecorder
 }
 
 // NewBufferedPolicy creates a new buffered policy.
@@ -110,9 +110,7 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 		eventBuffer:     make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
 		eventBufferNext: make([]*types.EventEnvelope, 0),
 		chunkBuffer:     make([]*types.ArtifactChunk, 0),
-		stats: Stats{
-			DroppedByType: make(map[types.EventType]int64),
-		},
+		stats:           newStatsRecorder(),
 	}, nil
 }
 
@@ -128,7 +126,7 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.stats.TotalEvents++
+	p.stats.incTotalEventsLocked()
 
 	eventSize := p.estimateEventSize(envelope)
 
@@ -141,8 +139,7 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 	// Buffer is full - apply drop rules
 	if IsDroppable(envelope.Type) {
 		// Drop the incoming event
-		p.stats.EventsDropped++
-		p.stats.DroppedByType[envelope.Type]++
+		p.stats.incEventsDroppedLocked(envelope.Type)
 		return nil
 	}
 
@@ -153,7 +150,7 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 	}
 
 	// No room even after eviction, or no droppable events to evict
-	p.stats.Errors++
+	p.stats.incErrorsLocked()
 	return ErrBufferFull
 }
 
@@ -167,7 +164,7 @@ func (p *BufferedPolicy) appendEvent(envelope *types.EventEnvelope, eventSize in
 		p.eventBuffer = append(p.eventBuffer, envelope)
 	}
 	p.bufferBytes += eventSize
-	p.stats.BufferSize = p.bufferBytes
+	p.stats.setBufferSizeLocked(p.bufferBytes)
 }
 
 // IngestArtifactChunk buffers the chunk.
@@ -178,11 +175,11 @@ func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.A
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.stats.TotalChunks++
+	p.stats.incTotalChunksLocked()
 
 	// Chunks require byte limit for bounded buffering
 	if p.config.MaxBufferBytes <= 0 {
-		p.stats.Errors++
+		p.stats.incErrorsLocked()
 		return fmt.Errorf("%w: chunk buffering requires MaxBufferBytes to be set", ErrBufferFull)
 	}
 
@@ -190,13 +187,13 @@ func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.A
 
 	// Chunks are non-droppable; if buffer is full, fail the run
 	if p.bufferBytes+chunkSize > p.config.MaxBufferBytes {
-		p.stats.Errors++
+		p.stats.incErrorsLocked()
 		return fmt.Errorf("%w: chunk size %d would exceed buffer limit", ErrBufferFull, chunkSize)
 	}
 
 	p.chunkBuffer = append(p.chunkBuffer, chunk)
 	p.bufferBytes += chunkSize
-	p.stats.BufferSize = p.bufferBytes
+	p.stats.setBufferSizeLocked(p.bufferBytes)
 
 	return nil
 }
@@ -217,21 +214,21 @@ func (p *BufferedPolicy) Flush(ctx context.Context) error {
 // flushAtLeastOnce writes events then chunks; preserves all buffers on any failure.
 func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	p.mu.Lock()
+	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	chunks := p.chunkBuffer
-	p.stats.FlushCount++
 	p.mu.Unlock()
 
 	// Write events
 	if len(events) > 0 {
 		if err := p.sink.WriteEvents(ctx, events); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			p.mu.Unlock()
 			return err
 		}
 		p.mu.Lock()
-		p.stats.EventsPersisted += int64(len(events))
+		p.stats.incEventsPersistedLocked(int64(len(events)))
 		p.mu.Unlock()
 	}
 
@@ -239,13 +236,13 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	if len(chunks) > 0 {
 		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			p.mu.Unlock()
 			// Keep all buffers intact - prefer duplicates over loss
 			return err
 		}
 		p.mu.Lock()
-		p.stats.ChunksPersisted += int64(len(chunks))
+		p.stats.incChunksPersistedLocked(int64(len(chunks)))
 		p.mu.Unlock()
 	}
 
@@ -261,22 +258,22 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 // flushChunksFirst writes chunks before events; if chunks fail, events not written.
 func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 	p.mu.Lock()
+	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	chunks := p.chunkBuffer
-	p.stats.FlushCount++
 	p.mu.Unlock()
 
 	// Write chunks first
 	if len(chunks) > 0 {
 		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			p.mu.Unlock()
 			// Keep all buffers - events not attempted
 			return err
 		}
 		p.mu.Lock()
-		p.stats.ChunksPersisted += int64(len(chunks))
+		p.stats.incChunksPersistedLocked(int64(len(chunks)))
 		p.mu.Unlock()
 	}
 
@@ -284,16 +281,14 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 	if len(events) > 0 {
 		if err := p.sink.WriteEvents(ctx, events); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
-			p.mu.Unlock()
+			p.stats.incErrorsLocked()
 			// Chunks succeeded, events failed - clear chunks only
-			p.mu.Lock()
 			p.clearChunkBuffer()
 			p.mu.Unlock()
 			return err
 		}
 		p.mu.Lock()
-		p.stats.EventsPersisted += int64(len(events))
+		p.stats.incEventsPersistedLocked(int64(len(events)))
 		p.mu.Unlock()
 	}
 
@@ -310,23 +305,23 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 // Handles events added after a partial flush via eventBufferNext.
 func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	p.mu.Lock()
+	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	eventsNext := p.eventBufferNext
 	chunks := p.chunkBuffer
 	eventsFlushed := p.eventsFlushed
-	p.stats.FlushCount++
 	p.mu.Unlock()
 
 	// Write original events if not already flushed
 	if len(events) > 0 && !eventsFlushed {
 		if err := p.sink.WriteEvents(ctx, events); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			p.mu.Unlock()
 			return err
 		}
 		p.mu.Lock()
-		p.stats.EventsPersisted += int64(len(events))
+		p.stats.incEventsPersistedLocked(int64(len(events)))
 		p.eventsFlushed = true // Mark original events as written
 		p.mu.Unlock()
 	}
@@ -335,12 +330,12 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	if len(eventsNext) > 0 {
 		if err := p.sink.WriteEvents(ctx, eventsNext); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			p.mu.Unlock()
 			return err
 		}
 		p.mu.Lock()
-		p.stats.EventsPersisted += int64(len(eventsNext))
+		p.stats.incEventsPersistedLocked(int64(len(eventsNext)))
 		p.mu.Unlock()
 	}
 
@@ -348,7 +343,7 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	if len(chunks) > 0 {
 		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
 			p.mu.Lock()
-			p.stats.Errors++
+			p.stats.incErrorsLocked()
 			// Events written; eventsFlushed remains true
 			// Clear eventBufferNext and update buffer accounting
 			p.clearEventBufferNext()
@@ -356,7 +351,7 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 			return err
 		}
 		p.mu.Lock()
-		p.stats.ChunksPersisted += int64(len(chunks))
+		p.stats.incChunksPersistedLocked(int64(len(chunks)))
 		p.mu.Unlock()
 	}
 
@@ -402,7 +397,7 @@ func (p *BufferedPolicy) recalculateBufferBytes() {
 		total += int64(len(chunk.Data))
 	}
 	p.bufferBytes = total
-	p.stats.BufferSize = p.bufferBytes
+	p.stats.setBufferSizeLocked(p.bufferBytes)
 }
 
 // Close flushes remaining data and closes the sink.
@@ -413,19 +408,14 @@ func (p *BufferedPolicy) Close() error {
 }
 
 // Stats returns policy statistics.
+// Returns an atomic snapshot: the buffer mutex is held while taking the
+// snapshot, ensuring all counters and buffer size are captured from the
+// same point in time.
 func (p *BufferedPolicy) Stats() Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Return a copy with a copied map
-	stats := p.stats
-	stats.BufferSize = p.bufferBytes
-	stats.DroppedByType = make(map[types.EventType]int64, len(p.stats.DroppedByType))
-	for k, v := range p.stats.DroppedByType {
-		stats.DroppedByType[k] = v
-	}
-
-	return stats
+	return p.stats.snapshotLocked(p.bufferBytes)
 }
 
 // hasRoomForEvent checks if the buffer can accept an event of the given size.
@@ -459,9 +449,8 @@ func (p *BufferedPolicy) dropOldestDroppable() bool {
 			eventSize := p.estimateEventSize(event)
 			p.eventBuffer = append(p.eventBuffer[:i], p.eventBuffer[i+1:]...)
 			p.bufferBytes -= eventSize
-			p.stats.BufferSize = p.bufferBytes
-			p.stats.EventsDropped++
-			p.stats.DroppedByType[event.Type]++
+			p.stats.setBufferSizeLocked(p.bufferBytes)
+			p.stats.incEventsDroppedLocked(event.Type)
 			return true
 		}
 	}
@@ -472,9 +461,8 @@ func (p *BufferedPolicy) dropOldestDroppable() bool {
 			eventSize := p.estimateEventSize(event)
 			p.eventBufferNext = append(p.eventBufferNext[:i], p.eventBufferNext[i+1:]...)
 			p.bufferBytes -= eventSize
-			p.stats.BufferSize = p.bufferBytes
-			p.stats.EventsDropped++
-			p.stats.DroppedByType[event.Type]++
+			p.stats.setBufferSizeLocked(p.bufferBytes)
+			p.stats.incEventsDroppedLocked(event.Type)
 			return true
 		}
 	}
