@@ -121,6 +121,14 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		r.logger.Error("failed to start executor", map[string]any{
 			"error": err.Error(),
 		})
+		// Best-effort flush even on start failure for strict termination semantics
+		flushCtx, flushCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if flushErr := r.config.Policy.Flush(flushCtx); flushErr != nil {
+			r.logger.Warn("policy flush failed (best effort)", map[string]any{
+				"error": flushErr.Error(),
+			})
+		}
+		flushCancel()
 		return r.buildResult(&types.RunOutcome{
 			Status:  types.OutcomeExecutorCrash,
 			Message: fmt.Sprintf("failed to start executor: %v", err),
@@ -187,7 +195,10 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 
 	// Always attempt policy flush (best effort) on all termination paths
 	// Per CONTRACT_POLICY.md: "Buffered events must be flushed on run_complete, run_error, runtime termination (best effort)"
-	flushErr := r.config.Policy.Flush(ctx)
+	// Use WithoutCancel to preserve context values (tracing) while ignoring parent cancellation
+	flushCtx, flushCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	flushErr := r.config.Policy.Flush(flushCtx)
+	flushCancel()
 	if flushErr != nil {
 		r.logger.Warn("policy flush failed (best effort)", map[string]any{
 			"error": flushErr.Error(),

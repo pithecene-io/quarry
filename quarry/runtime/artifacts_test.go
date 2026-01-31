@@ -210,3 +210,86 @@ func TestArtifactManager_CommitBeforeChunks_NotOrphan(t *testing.T) {
 		t.Errorf("expected 0 orphaned artifacts, got %d", stats.OrphanedArtifacts)
 	}
 }
+
+func TestArtifactManager_CommitAfterChunks_SizeMismatch_SetsErrorState(t *testing.T) {
+	m := NewArtifactManager()
+
+	// Add chunks first (complete)
+	err := m.AddChunk(&types.ArtifactChunk{
+		ArtifactID: "test",
+		Seq:        1,
+		IsLast:     true,
+		Data:       make([]byte, 50),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on AddChunk: %v", err)
+	}
+
+	// Commit with wrong size
+	err = m.CommitArtifact("test", 100) // Mismatch: chunks=50, declared=100
+	if err == nil {
+		t.Fatal("expected error for size mismatch")
+	}
+
+	// Verify accumulator is in error state
+	acc, _ := m.GetArtifact("test")
+	if !acc.ErrorState {
+		t.Error("accumulator should be in error state after commit size mismatch")
+	}
+
+	// Subsequent commit should be rejected
+	err = m.CommitArtifact("test", 50) // Even with "correct" size
+	if err == nil {
+		t.Error("expected CommitArtifact to be rejected on artifact in error state")
+	}
+}
+
+func TestArtifactManager_ErrorState_RejectsOperations(t *testing.T) {
+	m := NewArtifactManager()
+
+	// Commit arrives before chunks with declared size
+	err := m.CommitArtifact("test", 100)
+	if err != nil {
+		t.Fatalf("unexpected error on commit: %v", err)
+	}
+
+	// Add chunk with wrong size to trigger error state
+	err = m.AddChunk(&types.ArtifactChunk{
+		ArtifactID: "test",
+		Seq:        1,
+		IsLast:     true,
+		Data:       make([]byte, 50), // Mismatch triggers error state
+	})
+	if err == nil {
+		t.Fatal("expected error for size mismatch")
+	}
+
+	// Verify accumulator is in error state
+	acc, _ := m.GetArtifact("test")
+	if !acc.ErrorState {
+		t.Fatal("accumulator should be in error state")
+	}
+
+	// Further AddChunk should be rejected
+	err = m.AddChunk(&types.ArtifactChunk{
+		ArtifactID: "test",
+		Seq:        2,
+		IsLast:     false,
+		Data:       []byte("more data"),
+	})
+	if err == nil {
+		t.Error("expected AddChunk to be rejected on artifact in error state")
+	}
+
+	// Further CommitArtifact should be rejected
+	err = m.CommitArtifact("test", 50)
+	if err == nil {
+		t.Error("expected CommitArtifact to be rejected on artifact in error state")
+	}
+
+	// Verify state hasn't changed
+	accAfter, _ := m.GetArtifact("test")
+	if len(accAfter.Chunks) != 1 {
+		t.Errorf("expected 1 chunk (no mutation), got %d", len(accAfter.Chunks))
+	}
+}

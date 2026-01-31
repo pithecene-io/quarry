@@ -63,6 +63,11 @@ func (m *ArtifactManager) AddChunk(chunk *types.ArtifactChunk) error {
 		m.accumulators[chunk.ArtifactID] = acc
 	}
 
+	// Reject operations on artifacts in error state
+	if acc.ErrorState {
+		return fmt.Errorf("artifact %s: in error state, rejecting further operations", chunk.ArtifactID)
+	}
+
 	// Validate sequence ordering per CONTRACT_IPC.md
 	if chunk.Seq != acc.NextSeq {
 		return fmt.Errorf("artifact %s: expected seq %d, got %d",
@@ -140,9 +145,16 @@ func (m *ArtifactManager) CommitArtifact(artifactID string, sizeBytes int64) err
 		return nil
 	}
 
+	// Reject operations on artifacts in error state
+	if acc.ErrorState {
+		return fmt.Errorf("artifact %s: in error state, rejecting further operations", artifactID)
+	}
+
 	// If chunks are complete, verify size matches
 	if acc.Complete {
 		if acc.TotalBytes != sizeBytes {
+			// Mark as error state - size mismatch is a terminal contract violation
+			acc.ErrorState = true
 			return fmt.Errorf("artifact %s: size mismatch (chunks=%d, declared=%d)",
 				artifactID, acc.TotalBytes, sizeBytes)
 		}

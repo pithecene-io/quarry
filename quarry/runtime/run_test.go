@@ -23,6 +23,7 @@ type mockExecutor struct {
 	killed       bool
 	exitCode     int
 	startErr     error
+	waitErr      error         // error to return from Wait
 	killChan     chan struct{} // signals Wait to return when Kill is called
 	releaseChan  chan struct{} // signals Wait to return for normal completion
 	blockOnWait  bool          // if true, Wait blocks until kill or release
@@ -73,6 +74,9 @@ func (m *mockExecutor) Wait() (*ExecutorResult, error) {
 		case <-m.releaseChan:
 			// Released for normal completion
 		}
+	}
+	if m.waitErr != nil {
+		return nil, m.waitErr
 	}
 	return &ExecutorResult{
 		ExitCode:    m.exitCode,
@@ -407,6 +411,52 @@ func TestRunOrchestrator_SuccessfulRun(t *testing.T) {
 	// Verify executor was NOT killed on success
 	if mockExec.WasKilled() {
 		t.Error("executor should not be killed on successful run")
+	}
+}
+
+func TestRunOrchestrator_FlushCalledOnExecutorWaitError(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-flush-wait-err",
+		Attempt: 1,
+	}
+
+	// Create executor that produces valid stream but fails on Wait
+	eventData := makeValidEventStream(runMeta)
+	mockExec := newMockExecutor(eventData, 0)
+	mockExec.waitErr = io.ErrUnexpectedEOF // Simulate wait failure
+
+	// Create tracking policy
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(context.Background())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify outcome is executor crash (wait error)
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash, got %s", result.Outcome.Status)
+	}
+
+	// Verify flush was called despite the wait error
+	if !trackingPol.WasFlushed() {
+		t.Error("expected policy Flush to be called on executor wait error path")
 	}
 }
 
