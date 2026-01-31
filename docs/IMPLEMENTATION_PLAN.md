@@ -61,7 +61,7 @@ This phase produces **authoritative documents**, not code.
 
 ### Deliverables
 
-#### 0.5.1 Emit Contract (`docs/CONTRACT_EMIT.md`)
+#### 0.5.1 Emit Contract (`docs/contracts/CONTRACT_EMIT.md`)
 Defines:
 - Event envelope fields (e.g. `event_id`, `run_id`, `seq`, `type`, `payload`, `ts`)
 - Initial event types:
@@ -82,7 +82,7 @@ Defines:
 - Error semantics:
   - Script abort vs executor crash vs policy failure
 
-#### 0.5.2 IPC & Streaming Contract (`docs/CONTRACT_IPC.md`)
+#### 0.5.2 IPC & Streaming Contract (`docs/contracts/CONTRACT_IPC.md`)
 Defines:
 - Framing format (length prefix + payload)
 - Payload encoding (single choice, e.g. msgpack)
@@ -97,7 +97,7 @@ Defines:
   - dropping is policy-layer only
 - Failure behavior on partial frames or pipe closure
 
-#### 0.5.3 Run Identity & Lineage (`docs/CONTRACT_RUN.md`)
+#### 0.5.3 Run Identity & Lineage (`docs/contracts/CONTRACT_RUN.md`)
 Defines:
 - Canonical `run_id`
 - Relationship: job → run → retry run
@@ -109,7 +109,7 @@ Defines:
   - runs are append-only
   - deduplication is downstream responsibility
 
-#### 0.5.4 Ingestion Policy Semantics (`docs/CONTRACT_POLICY.md`)
+#### 0.5.4 Ingestion Policy Semantics (`docs/contracts/CONTRACT_POLICY.md`)
 Defines:
 - What constitutes a “drop”
 - Which event types may be dropped
@@ -122,7 +122,7 @@ Defines:
   - no silent loss
   - policy does not alter event shapes
 
-#### 0.5.5 Lode Expectations (`docs/CONTRACT_LODE.md`)
+#### 0.5.5 Lode Expectations (`docs/contracts/CONTRACT_LODE.md`)
 Defines Quarry’s **minimal expectations** of Lode:
 - Required partition keys (e.g. dataset / run_id / event_type)
 - Append-only semantics
@@ -266,16 +266,16 @@ must follow this protocol.
 ### Pre-merge checklist
 
 **For SDK envelope/event type changes:**
-- [ ] Update `docs/CONTRACT_EMIT.md`
+- [ ] Update `docs/contracts/CONTRACT_EMIT.md`
 - [ ] Update impacted contract docs (if any)
 - [ ] Verify SDK types match contract definitions
 
 **For IPC/streaming changes:**
-- [ ] Update `docs/CONTRACT_IPC.md`
+- [ ] Update `docs/contracts/CONTRACT_IPC.md`
 - [ ] Verify executor and runtime implementations align
 
 **For run identity/lineage changes:**
-- [ ] Update `docs/CONTRACT_RUN.md`
+- [ ] Update `docs/contracts/CONTRACT_RUN.md`
 
 ### PR requirements
 
