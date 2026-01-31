@@ -1,0 +1,497 @@
+package policy
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+
+	"github.com/justapithecus/quarry/types"
+)
+
+// FlushMode controls flush semantics for BufferedPolicy.
+type FlushMode string
+
+const (
+	// FlushAtLeastOnce preserves all buffers on any failure.
+	// May cause duplicate event writes on retry, but guarantees no data loss.
+	// This is the default and safest mode.
+	FlushAtLeastOnce FlushMode = "at_least_once"
+
+	// FlushChunksFirst writes chunks before events.
+	// If chunks fail, events are not written (no duplicates).
+	// If chunks succeed but events fail, chunks may be duplicated on retry.
+	FlushChunksFirst FlushMode = "chunks_first"
+
+	// FlushTwoPhase tracks per-buffer success to avoid duplicates.
+	// Events written successfully are not re-written on retry even if chunks fail.
+	// Requires internal state tracking; most complex mode.
+	FlushTwoPhase FlushMode = "two_phase"
+)
+
+// BufferedConfig configures a BufferedPolicy.
+type BufferedConfig struct {
+	// MaxBufferEvents is the maximum number of events to buffer.
+	// Zero means no limit (use MaxBufferBytes instead).
+	MaxBufferEvents int
+
+	// MaxBufferBytes is the maximum buffer size in bytes (estimated).
+	// Zero means no limit (use MaxBufferEvents instead).
+	// At least one limit must be set.
+	MaxBufferBytes int64
+
+	// FlushMode controls flush failure semantics.
+	// Default is FlushAtLeastOnce (safest, may duplicate on retry).
+	FlushMode FlushMode
+}
+
+// DefaultBufferedConfig returns sensible defaults for buffered policy.
+func DefaultBufferedConfig() BufferedConfig {
+	return BufferedConfig{
+		MaxBufferEvents: 1000,
+		MaxBufferBytes:  10 * 1024 * 1024, // 10 MB
+		FlushMode:       FlushAtLeastOnce,
+	}
+}
+
+// ErrBufferFull is returned when buffer is full and event is non-droppable.
+var ErrBufferFull = errors.New("buffer full: cannot accept non-droppable event")
+
+// ErrInvalidConfig is returned when BufferedConfig is invalid.
+var ErrInvalidConfig = errors.New("invalid config: at least one of MaxBufferEvents or MaxBufferBytes must be set")
+
+// ErrInvalidFlushMode is returned when FlushMode is unknown.
+var ErrInvalidFlushMode = errors.New("invalid flush mode")
+
+// BufferedPolicy implements buffered persistence with drop rules.
+//
+// Per CONTRACT_POLICY.md:
+//   - Bounded buffer with explicit limits
+//   - May drop: log, enqueue, rotate_proxy
+//   - Must NOT drop: item, artifact, checkpoint, run_error, run_complete
+//   - Batch writes on flush
+//   - Flush on run_complete, run_error, runtime termination
+type BufferedPolicy struct {
+	sink   Sink
+	config BufferedConfig
+
+	mu              sync.Mutex
+	eventBuffer     []*types.EventEnvelope
+	eventBufferNext []*types.EventEnvelope // TwoPhase: events added after eventsFlushed=true
+	chunkBuffer     []*types.ArtifactChunk
+	bufferBytes     int64
+	eventsFlushed   bool // TwoPhase: eventBuffer written, awaiting chunk success
+	stats           Stats
+}
+
+// NewBufferedPolicy creates a new buffered policy.
+// Returns error if config is invalid.
+func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error) {
+	if config.MaxBufferEvents <= 0 && config.MaxBufferBytes <= 0 {
+		return nil, ErrInvalidConfig
+	}
+
+	// Default flush mode
+	if config.FlushMode == "" {
+		config.FlushMode = FlushAtLeastOnce
+	}
+
+	// Validate flush mode
+	switch config.FlushMode {
+	case FlushAtLeastOnce, FlushChunksFirst, FlushTwoPhase:
+		// valid
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrInvalidFlushMode, config.FlushMode)
+	}
+
+	return &BufferedPolicy{
+		sink:            sink,
+		config:          config,
+		eventBuffer:     make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
+		eventBufferNext: make([]*types.EventEnvelope, 0),
+		chunkBuffer:     make([]*types.ArtifactChunk, 0),
+		stats: Stats{
+			DroppedByType: make(map[types.EventType]int64),
+		},
+	}, nil
+}
+
+// IngestEvent buffers the event, applying drop rules if buffer is full.
+//
+// Drop strategy when full:
+//   - If incoming event is droppable: drop it, record in stats
+//   - If incoming event is non-droppable and buffer has droppable events: drop oldest droppable
+//   - If incoming event is non-droppable and no droppable events: return error (fail run)
+//
+// In TwoPhase mode, events added after a partial flush go to eventBufferNext.
+func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.stats.TotalEvents++
+
+	eventSize := p.estimateEventSize(envelope)
+
+	// Check if buffer has room
+	if p.hasRoomForEvent(eventSize) {
+		p.appendEvent(envelope, eventSize)
+		return nil
+	}
+
+	// Buffer is full - apply drop rules
+	if IsDroppable(envelope.Type) {
+		// Drop the incoming event
+		p.stats.EventsDropped++
+		p.stats.DroppedByType[envelope.Type]++
+		return nil
+	}
+
+	// Non-droppable event - try to make room by dropping oldest droppable
+	if p.dropOldestDroppable() && p.hasRoomForBytes(eventSize) {
+		p.appendEvent(envelope, eventSize)
+		return nil
+	}
+
+	// No room even after eviction, or no droppable events to evict
+	p.stats.Errors++
+	return ErrBufferFull
+}
+
+// appendEvent adds an event to the appropriate buffer. Caller must hold mu.
+// In TwoPhase mode with eventsFlushed=true, appends to eventBufferNext.
+func (p *BufferedPolicy) appendEvent(envelope *types.EventEnvelope, eventSize int64) {
+	if p.config.FlushMode == FlushTwoPhase && p.eventsFlushed {
+		// Events added after partial flush go to next buffer
+		p.eventBufferNext = append(p.eventBufferNext, envelope)
+	} else {
+		p.eventBuffer = append(p.eventBuffer, envelope)
+	}
+	p.bufferBytes += eventSize
+	p.stats.BufferSize = p.bufferBytes
+}
+
+// IngestArtifactChunk buffers the chunk.
+// Artifact chunks are never dropped per CONTRACT_POLICY.md.
+// Returns error if chunk would exceed buffer limits (policy failure).
+// Requires MaxBufferBytes to be set; chunks cannot be bounded by event count alone.
+func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.stats.TotalChunks++
+
+	// Chunks require byte limit for bounded buffering
+	if p.config.MaxBufferBytes <= 0 {
+		p.stats.Errors++
+		return fmt.Errorf("%w: chunk buffering requires MaxBufferBytes to be set", ErrBufferFull)
+	}
+
+	chunkSize := int64(len(chunk.Data))
+
+	// Chunks are non-droppable; if buffer is full, fail the run
+	if p.bufferBytes+chunkSize > p.config.MaxBufferBytes {
+		p.stats.Errors++
+		return fmt.Errorf("%w: chunk size %d would exceed buffer limit", ErrBufferFull, chunkSize)
+	}
+
+	p.chunkBuffer = append(p.chunkBuffer, chunk)
+	p.bufferBytes += chunkSize
+	p.stats.BufferSize = p.bufferBytes
+
+	return nil
+}
+
+// Flush writes all buffered events and chunks to the sink.
+// Behavior depends on FlushMode configuration.
+func (p *BufferedPolicy) Flush(ctx context.Context) error {
+	switch p.config.FlushMode {
+	case FlushChunksFirst:
+		return p.flushChunksFirst(ctx)
+	case FlushTwoPhase:
+		return p.flushTwoPhase(ctx)
+	default:
+		return p.flushAtLeastOnce(ctx)
+	}
+}
+
+// flushAtLeastOnce writes events then chunks; preserves all buffers on any failure.
+func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
+	p.mu.Lock()
+	events := p.eventBuffer
+	chunks := p.chunkBuffer
+	p.stats.FlushCount++
+	p.mu.Unlock()
+
+	// Write events
+	if len(events) > 0 {
+		if err := p.sink.WriteEvents(ctx, events); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.EventsPersisted += int64(len(events))
+		p.mu.Unlock()
+	}
+
+	// Write chunks
+	if len(chunks) > 0 {
+		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			// Keep all buffers intact - prefer duplicates over loss
+			return err
+		}
+		p.mu.Lock()
+		p.stats.ChunksPersisted += int64(len(chunks))
+		p.mu.Unlock()
+	}
+
+	// Clear buffers only after full success
+	p.mu.Lock()
+	p.clearEventBuffer()
+	p.clearChunkBuffer()
+	p.mu.Unlock()
+
+	return nil
+}
+
+// flushChunksFirst writes chunks before events; if chunks fail, events not written.
+func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
+	p.mu.Lock()
+	events := p.eventBuffer
+	chunks := p.chunkBuffer
+	p.stats.FlushCount++
+	p.mu.Unlock()
+
+	// Write chunks first
+	if len(chunks) > 0 {
+		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			// Keep all buffers - events not attempted
+			return err
+		}
+		p.mu.Lock()
+		p.stats.ChunksPersisted += int64(len(chunks))
+		p.mu.Unlock()
+	}
+
+	// Write events after chunks succeed
+	if len(events) > 0 {
+		if err := p.sink.WriteEvents(ctx, events); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			// Chunks succeeded, events failed - clear chunks only
+			p.mu.Lock()
+			p.clearChunkBuffer()
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.EventsPersisted += int64(len(events))
+		p.mu.Unlock()
+	}
+
+	// Clear all buffers after full success
+	p.mu.Lock()
+	p.clearEventBuffer()
+	p.clearChunkBuffer()
+	p.mu.Unlock()
+
+	return nil
+}
+
+// flushTwoPhase tracks per-buffer success to avoid duplicates on retry.
+// Handles events added after a partial flush via eventBufferNext.
+func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
+	p.mu.Lock()
+	events := p.eventBuffer
+	eventsNext := p.eventBufferNext
+	chunks := p.chunkBuffer
+	eventsFlushed := p.eventsFlushed
+	p.stats.FlushCount++
+	p.mu.Unlock()
+
+	// Write original events if not already flushed
+	if len(events) > 0 && !eventsFlushed {
+		if err := p.sink.WriteEvents(ctx, events); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.EventsPersisted += int64(len(events))
+		p.eventsFlushed = true // Mark original events as written
+		p.mu.Unlock()
+	}
+
+	// Write new events added after partial flush
+	if len(eventsNext) > 0 {
+		if err := p.sink.WriteEvents(ctx, eventsNext); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.EventsPersisted += int64(len(eventsNext))
+		p.mu.Unlock()
+	}
+
+	// Write chunks
+	if len(chunks) > 0 {
+		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
+			p.mu.Lock()
+			p.stats.Errors++
+			// Events written; eventsFlushed remains true
+			// Clear eventBufferNext and update buffer accounting
+			p.clearEventBufferNext()
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.ChunksPersisted += int64(len(chunks))
+		p.mu.Unlock()
+	}
+
+	// Clear all buffers and reset state after full success
+	p.mu.Lock()
+	p.clearEventBuffer()
+	p.clearEventBufferNext()
+	p.clearChunkBuffer()
+	p.eventsFlushed = false
+	p.mu.Unlock()
+
+	return nil
+}
+
+// clearEventBuffer resets the event buffer. Caller must hold mu.
+func (p *BufferedPolicy) clearEventBuffer() {
+	p.eventBuffer = make([]*types.EventEnvelope, 0, max(p.config.MaxBufferEvents, 100))
+	p.recalculateBufferBytes()
+}
+
+// clearEventBufferNext resets the next event buffer (TwoPhase). Caller must hold mu.
+func (p *BufferedPolicy) clearEventBufferNext() {
+	p.eventBufferNext = make([]*types.EventEnvelope, 0)
+	p.recalculateBufferBytes()
+}
+
+// clearChunkBuffer resets the chunk buffer. Caller must hold mu.
+func (p *BufferedPolicy) clearChunkBuffer() {
+	p.chunkBuffer = make([]*types.ArtifactChunk, 0)
+	p.recalculateBufferBytes()
+}
+
+// recalculateBufferBytes recalculates bufferBytes from all buffers. Caller must hold mu.
+func (p *BufferedPolicy) recalculateBufferBytes() {
+	var total int64
+	for _, event := range p.eventBuffer {
+		total += p.estimateEventSize(event)
+	}
+	for _, event := range p.eventBufferNext {
+		total += p.estimateEventSize(event)
+	}
+	for _, chunk := range p.chunkBuffer {
+		total += int64(len(chunk.Data))
+	}
+	p.bufferBytes = total
+	p.stats.BufferSize = p.bufferBytes
+}
+
+// Close flushes remaining data and closes the sink.
+func (p *BufferedPolicy) Close() error {
+	// Best-effort flush on close
+	_ = p.Flush(context.Background())
+	return p.sink.Close()
+}
+
+// Stats returns policy statistics.
+func (p *BufferedPolicy) Stats() Stats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Return a copy with a copied map
+	stats := p.stats
+	stats.BufferSize = p.bufferBytes
+	stats.DroppedByType = make(map[types.EventType]int64, len(p.stats.DroppedByType))
+	for k, v := range p.stats.DroppedByType {
+		stats.DroppedByType[k] = v
+	}
+
+	return stats
+}
+
+// hasRoomForEvent checks if the buffer can accept an event of the given size.
+func (p *BufferedPolicy) hasRoomForEvent(eventSize int64) bool {
+	// Check event count limit (both buffers combined for TwoPhase)
+	totalEvents := len(p.eventBuffer) + len(p.eventBufferNext)
+	if p.config.MaxBufferEvents > 0 && totalEvents >= p.config.MaxBufferEvents {
+		return false
+	}
+
+	return p.hasRoomForBytes(eventSize)
+}
+
+// hasRoomForBytes checks if adding bytes would exceed the byte limit.
+func (p *BufferedPolicy) hasRoomForBytes(size int64) bool {
+	if p.config.MaxBufferBytes > 0 && p.bufferBytes+size > p.config.MaxBufferBytes {
+		return false
+	}
+	return true
+}
+
+
+// dropOldestDroppable removes the oldest droppable event from the buffer.
+// Scans eventBuffer first, then eventBufferNext (TwoPhase mode).
+// Returns true if an event was dropped, false if no droppable events exist.
+// Caller must hold mu.
+func (p *BufferedPolicy) dropOldestDroppable() bool {
+	// First scan eventBuffer
+	for i, event := range p.eventBuffer {
+		if IsDroppable(event.Type) {
+			eventSize := p.estimateEventSize(event)
+			p.eventBuffer = append(p.eventBuffer[:i], p.eventBuffer[i+1:]...)
+			p.bufferBytes -= eventSize
+			p.stats.BufferSize = p.bufferBytes
+			p.stats.EventsDropped++
+			p.stats.DroppedByType[event.Type]++
+			return true
+		}
+	}
+
+	// Then scan eventBufferNext (TwoPhase mode)
+	for i, event := range p.eventBufferNext {
+		if IsDroppable(event.Type) {
+			eventSize := p.estimateEventSize(event)
+			p.eventBufferNext = append(p.eventBufferNext[:i], p.eventBufferNext[i+1:]...)
+			p.bufferBytes -= eventSize
+			p.stats.BufferSize = p.bufferBytes
+			p.stats.EventsDropped++
+			p.stats.DroppedByType[event.Type]++
+			return true
+		}
+	}
+
+	return false
+}
+
+// estimateEventSize returns an estimated size in bytes for an event.
+// This is a rough estimate for buffer management.
+func (p *BufferedPolicy) estimateEventSize(envelope *types.EventEnvelope) int64 {
+	// Base size for envelope structure
+	size := int64(200)
+
+	// Add payload estimate (rough)
+	if envelope.Payload != nil {
+		size += int64(len(envelope.Payload) * 50) // rough estimate per field
+	}
+
+	return size
+}

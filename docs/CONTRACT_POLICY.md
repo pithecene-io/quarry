@@ -59,6 +59,35 @@ If a policy cannot accept non-droppable events, it must fail the run.
 
 ---
 
+## Flush Modes
+
+Buffered policies support configurable flush semantics via `FlushMode`:
+
+### `at_least_once` (default)
+
+- Writes events, then chunks.
+- On any failure, **preserves all buffers**.
+- Retry may cause duplicate writes.
+- Guarantees no data loss.
+
+### `chunks_first`
+
+- Writes chunks before events.
+- If chunks fail, events are not attempted (no duplicates for events).
+- If chunks succeed but events fail, chunks may duplicate on retry.
+- Clears only successfully written buffers.
+
+### `two_phase`
+
+- Tracks per-buffer success to minimize duplicates.
+- Events written successfully are marked; not re-written on retry.
+- Events added after partial flush go to a secondary buffer.
+- Most complex; requires internal state tracking.
+
+All modes must satisfy the no-silent-loss invariant.
+
+---
+
 ## Required Observability
 
 Policies must surface:
