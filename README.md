@@ -188,7 +188,7 @@ If a behavior matters, it is documented and observable.
 
 ## Documentation
 
-User-facing guides live in `docs/guides/` for a deeper dive into concepts,
+User-facing guides live in [docs/guides/](docs/guides/) for a deeper dive into concepts,
 configuration, and usage.
 
 ---
