@@ -138,6 +138,13 @@ Defines:
 - IPC payload fields and redaction rules
 - Validation rules and observability expectations
 
+#### 0.5.7 CLI Contract (`docs/contracts/CONTRACT_CLI.md`)
+Defines:
+- CLI invariants and command topology
+- Read-only guarantees and non-goals
+- Output format selection rules
+- Request/response shapes for inspect/stats/list/debug
+
 ### Exit criteria
 - All five contract documents exist
 - SDK, executor, runtime, and policy work can proceed independently
@@ -233,6 +240,8 @@ Expose policy selection without leaking complexity.
 
 ### Deliverables
 - `quarry run`
+- Read-only CLI surface (`inspect`, `stats`, `list`, `debug`, `version`)
+- Output formatting layer (`json|table|yaml` with TTY defaults)
 - Policy selection flags or config
 - Clear run summaries
 
