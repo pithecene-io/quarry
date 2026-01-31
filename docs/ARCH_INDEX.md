@@ -24,6 +24,15 @@ Do not update for internal refactors.
 
 Normative contracts and plans. These documents define **system behavior**.
 
+- `overview.md` — user-facing system overview
+- `roadmap.md` — user-facing implementation phases
+- `emit.md` — user-facing emit guide
+- `streaming.md` — user-facing streaming and artifact behavior
+- `run.md` — user-facing run lifecycle guide
+- `policy.md` — user-facing ingestion policy guide
+- `lode.md` — user-facing storage expectations
+- `cli.md` — user-facing CLI overview
+- `proxy.md` — user-facing proxy guide
 - `contracts/CONTRACT_IPC.md` — IPC framing, ordering, and transport semantics
 - `contracts/CONTRACT_EMIT.md` — event and artifact emission rules
 - `contracts/CONTRACT_RUN.md` — run lifecycle and terminal states
