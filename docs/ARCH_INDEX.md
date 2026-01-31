@@ -29,6 +29,7 @@ Normative contracts and plans. These documents define **system behavior**.
 - `contracts/CONTRACT_RUN.md` — run lifecycle and terminal states
 - `contracts/CONTRACT_POLICY.md` — policy-level constraints
 - `contracts/CONTRACT_PROXY.md` — proxy configuration, selection, and executor application
+- `contracts/CONTRACT_CLI.md` — CLI command topology and read-only guarantees
 - `contracts/CONTRACT_LODE.md` — persistence and storage interaction
 - `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
