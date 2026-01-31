@@ -24,6 +24,10 @@ Do not update for internal refactors.
 
 Normative contracts and plans. These documents define **system behavior**.
 
+### docs/guides/
+
+User-facing guides (informational).
+
 - `guides/overview.md` — user-facing system overview
 - `guides/emit.md` — user-facing emit guide
 - `guides/streaming.md` — user-facing streaming and artifact behavior
@@ -32,6 +36,11 @@ Normative contracts and plans. These documents define **system behavior**.
 - `guides/lode.md` — user-facing storage expectations
 - `guides/cli.md` — user-facing CLI overview
 - `guides/proxy.md` — user-facing proxy guide
+
+### docs/contracts/
+
+Normative contracts (authoritative).
+
 - `contracts/CONTRACT_IPC.md` — IPC framing, ordering, and transport semantics
 - `contracts/CONTRACT_EMIT.md` — event and artifact emission rules
 - `contracts/CONTRACT_RUN.md` — run lifecycle and terminal states
