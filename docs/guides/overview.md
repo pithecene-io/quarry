@@ -29,10 +29,10 @@ At a high level:
 
 ## Where To Start
 
-- Authoring scripts: `docs/emit.md`
-- Running jobs: `docs/cli.md`
-- Proxies: `docs/proxy.md`
-- Run lifecycle: `docs/run.md`
+- Authoring scripts: `docs/guides/emit.md`
+- Running jobs: `docs/guides/cli.md`
+- Proxies: `docs/guides/proxy.md`
+- Run lifecycle: `docs/guides/run.md`
 
 ---
 
