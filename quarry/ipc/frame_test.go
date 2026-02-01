@@ -422,6 +422,9 @@ func TestFrameDecoder_MixedEventsAndChunks(t *testing.T) {
 	}
 }
 
+// TestFrameDecoder_PartialFrame validates fatal error for truncated frames.
+// Per CONTRACT_IPC.md: "If a frame is truncated or malformed, the runtime must
+// treat it as a fatal stream error and terminate the run."
 func TestFrameDecoder_PartialFrame(t *testing.T) {
 	// Create a valid frame but truncate it
 	envelope := &types.EventEnvelope{
@@ -459,10 +462,18 @@ func TestFrameDecoder_PartialFrame(t *testing.T) {
 	if frameErr.Kind != FrameErrorPartial {
 		t.Errorf("Kind = %v, want FrameErrorPartial", frameErr.Kind)
 	}
+
+	// Verify IsFatal() directly
+	if !frameErr.IsFatal() {
+		t.Error("FrameErrorPartial.IsFatal() should return true")
+	}
 }
 
+// TestFrameDecoder_OversizedFrame validates fatal error for frames exceeding max size.
+// Per CONTRACT_IPC.md: "Maximum frame size: 16 MiB. Frames exceeding this limit
+// are invalid and must be rejected."
 func TestFrameDecoder_OversizedFrame(t *testing.T) {
-	// Create a length prefix claiming a huge payload
+	// Create a length prefix claiming a payload larger than MaxPayloadSize
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.BigEndian, uint32(MaxPayloadSize+1))
 
@@ -485,6 +496,11 @@ func TestFrameDecoder_OversizedFrame(t *testing.T) {
 	if frameErr.Kind != FrameErrorTooLarge {
 		t.Errorf("Kind = %v, want FrameErrorTooLarge", frameErr.Kind)
 	}
+
+	// Verify IsFatal() directly
+	if !frameErr.IsFatal() {
+		t.Error("FrameErrorTooLarge.IsFatal() should return true")
+	}
 }
 
 func TestFrameDecoder_EmptyStream(t *testing.T) {
@@ -493,5 +509,134 @@ func TestFrameDecoder_EmptyStream(t *testing.T) {
 
 	if err != io.EOF {
 		t.Errorf("expected io.EOF, got: %v", err)
+	}
+}
+
+// TestFrameDecoder_TruncatedLengthPrefix validates fatal error when length prefix is incomplete.
+// Per CONTRACT_IPC.md: partial frames are fatal.
+func TestFrameDecoder_TruncatedLengthPrefix(t *testing.T) {
+	// Only 2 bytes instead of 4
+	partial := []byte{0x00, 0x00}
+
+	decoder := NewFrameDecoder(bytes.NewReader(partial))
+	_, err := decoder.ReadFrame()
+
+	if err == nil {
+		t.Fatal("expected error for truncated length prefix")
+	}
+
+	if !IsFatalFrameError(err) {
+		t.Errorf("expected fatal frame error, got: %v", err)
+	}
+
+	var frameErr *FrameError
+	if !errors.As(err, &frameErr) {
+		t.Fatalf("expected *FrameError, got %T", err)
+	}
+
+	if frameErr.Kind != FrameErrorPartial {
+		t.Errorf("Kind = %v, want FrameErrorPartial", frameErr.Kind)
+	}
+}
+
+// TestFrameDecoder_MalformedMsgpack validates decode error for invalid msgpack.
+// Decode errors are non-fatal (the frame was read correctly, just couldn't decode).
+func TestFrameDecoder_MalformedMsgpack(t *testing.T) {
+	// Valid frame length prefix but garbage msgpack payload
+	garbage := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
+	frame := encodeFrame(garbage)
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	// Decoding should fail
+	_, err = DecodeFrame(payload)
+	if err == nil {
+		t.Fatal("expected decode error for malformed msgpack")
+	}
+
+	var frameErr *FrameError
+	if !errors.As(err, &frameErr) {
+		t.Fatalf("expected *FrameError, got %T", err)
+	}
+
+	if frameErr.Kind != FrameErrorDecode {
+		t.Errorf("Kind = %v, want FrameErrorDecode", frameErr.Kind)
+	}
+
+	// Decode errors are NOT fatal (frame was valid, content wasn't)
+	if IsFatalFrameError(err) {
+		t.Error("decode errors should not be fatal")
+	}
+}
+
+// TestFrameError_ErrorMessage validates error message formatting.
+func TestFrameError_ErrorMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *FrameError
+		contains string
+	}{
+		{
+			name:     "partial without underlying error",
+			err:      &FrameError{Kind: FrameErrorPartial, Msg: "truncated"},
+			contains: "truncated",
+		},
+		{
+			name: "partial with underlying error",
+			err: &FrameError{
+				Kind: FrameErrorPartial,
+				Msg:  "read failed",
+				Err:  io.ErrUnexpectedEOF,
+			},
+			contains: "unexpected EOF",
+		},
+		{
+			name:     "oversized",
+			err:      &FrameError{Kind: FrameErrorTooLarge, Msg: "payload too big"},
+			contains: "too big",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := tt.err.Error()
+			if !bytes.Contains([]byte(msg), []byte(tt.contains)) {
+				t.Errorf("error message %q does not contain %q", msg, tt.contains)
+			}
+		})
+	}
+}
+
+// TestFrameError_Unwrap validates error unwrapping.
+func TestFrameError_Unwrap(t *testing.T) {
+	underlying := io.ErrUnexpectedEOF
+	err := &FrameError{
+		Kind: FrameErrorPartial,
+		Msg:  "test",
+		Err:  underlying,
+	}
+
+	if !errors.Is(err, underlying) {
+		t.Error("Unwrap should allow errors.Is to find underlying error")
+	}
+}
+
+// TestIsFatalFrameError_NonFrameError validates IsFatalFrameError with non-FrameError.
+func TestIsFatalFrameError_NonFrameError(t *testing.T) {
+	regularErr := errors.New("regular error")
+	if IsFatalFrameError(regularErr) {
+		t.Error("regular errors should not be fatal frame errors")
+	}
+
+	if IsFatalFrameError(nil) {
+		t.Error("nil should not be a fatal frame error")
+	}
+
+	if IsFatalFrameError(io.EOF) {
+		t.Error("io.EOF should not be a fatal frame error")
 	}
 }

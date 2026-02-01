@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-02-01T04:02:40.827Z",
+  "run_id": "run-e2e-fixture-001",
+  "fixture_script": "e2e-fixture-script.ts",
+  "size_bytes": 1692,
+  "frame_count": 6,
+  "expected_events": [
+    {
+      "seq": 1,
+      "type": "item",
+      "item_type": "fixture_product"
+    },
+    {
+      "seq": 2,
+      "type": "log",
+      "level": "info"
+    },
+    {
+      "seq": 3,
+      "type": "artifact",
+      "name": "fixture-screenshot.bin"
+    },
+    {
+      "seq": 4,
+      "type": "item",
+      "item_type": "fixture_summary"
+    },
+    {
+      "seq": 5,
+      "type": "run_complete"
+    }
+  ],
+  "expected_artifact_chunks": 1,
+  "exit_code": 0
+}
