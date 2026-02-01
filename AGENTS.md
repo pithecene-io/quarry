@@ -59,8 +59,9 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 - `.ts` only
 - ESM only (`import` / `export`)
 - No `require`, `module`, `exports`
-- Do **not** import `.js` files
-- Extensionless imports where supported
+- Import specifier rules (by package type):
+  - **Bundled packages** (e.g. `sdk/`): extensionless imports, no `.js` specifiers
+  - **Node ESM packages** (e.g. `executor-node/`): `.js` specifiers required for relative imports after TS compilation
 - ES2022+ semantics
 
 ### Types
@@ -118,7 +119,8 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 ## Barrel File Policy
 
 - **Allowed**: One public entrypoint per package (e.g. `src/index.ts`)
-- **Forbidden**: Internal barrel files
+- **Forbidden in SDK**: Internal barrel files (all exports in public entrypoint)
+- **Allowed in internal packages** (e.g. `executor-node/`): Internal entrypoints for subsystems (e.g. `src/ipc/index.ts`)
 - Public entrypoints must import directly from source files
 
 ---

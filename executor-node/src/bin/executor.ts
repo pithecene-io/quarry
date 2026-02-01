@@ -23,7 +23,52 @@
  *
  * @module
  */
+import type { ProxyEndpoint } from '@justapithecus/quarry-sdk'
 import { execute, parseRunMeta } from '../executor.js'
+
+/**
+ * Parse optional proxy endpoint from input.
+ * Returns undefined if no proxy is configured.
+ */
+function parseProxy(input: Record<string, unknown>): ProxyEndpoint | undefined {
+  if (!('proxy' in input) || input.proxy === null || input.proxy === undefined) {
+    return undefined
+  }
+
+  const proxy = input.proxy as Record<string, unknown>
+
+  // Validate required fields
+  if (typeof proxy.protocol !== 'string') {
+    throw new Error('proxy.protocol must be a string')
+  }
+  if (typeof proxy.host !== 'string' || proxy.host === '') {
+    throw new Error('proxy.host must be a non-empty string')
+  }
+  if (typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) {
+    throw new Error('proxy.port must be an integer between 1 and 65535')
+  }
+
+  // Validate protocol
+  const validProtocols = ['http', 'https', 'socks5']
+  if (!validProtocols.includes(proxy.protocol)) {
+    throw new Error(`proxy.protocol must be one of: ${validProtocols.join(', ')}`)
+  }
+
+  // Validate auth pair
+  const hasUsername = typeof proxy.username === 'string' && proxy.username !== ''
+  const hasPassword = typeof proxy.password === 'string' && proxy.password !== ''
+  if (hasUsername !== hasPassword) {
+    throw new Error('proxy.username and proxy.password must be provided together')
+  }
+
+  return {
+    protocol: proxy.protocol as 'http' | 'https' | 'socks5',
+    host: proxy.host,
+    port: proxy.port,
+    ...(hasUsername && { username: proxy.username as string }),
+    ...(hasPassword && { password: proxy.password as string })
+  }
+}
 
 /**
  * Read all data from stdin.
@@ -91,11 +136,22 @@ async function main(): Promise<never> {
   }
   const job = inputObj.job
 
+  // Parse optional proxy
+  let proxy: ProxyEndpoint | undefined
+  try {
+    proxy = parseProxy(inputObj)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`Error parsing proxy: ${message}\n`)
+    process.exit(3)
+  }
+
   // Execute
   const result = await execute({
     scriptPath,
     job,
     run,
+    proxy,
     output: process.stdout,
     puppeteerOptions: {
       // Headless by default for executor mode

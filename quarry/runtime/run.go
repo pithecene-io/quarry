@@ -32,6 +32,9 @@ type RunConfig struct {
 	Job any
 	// RunMeta is the run identity and lineage metadata.
 	RunMeta *types.RunMeta
+	// Proxy is the optional resolved proxy endpoint per CONTRACT_PROXY.md.
+	// If nil, executor launches without a proxy.
+	Proxy *types.ProxyEndpoint
 	// Policy is the ingestion policy.
 	Policy policy.Policy
 	// ExecutorFactory overrides executor creation (for testing).
@@ -57,6 +60,9 @@ type RunResult struct {
 	StderrOutput string
 	// EventCount is the total number of events processed.
 	EventCount int64
+	// ProxyUsed is the proxy endpoint used (redacted, no password).
+	// Nil if no proxy was configured.
+	ProxyUsed *types.ProxyEndpointRedacted
 }
 
 // RunOrchestrator orchestrates a single run.
@@ -107,6 +113,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		ScriptPath:   r.config.ScriptPath,
 		Job:          r.config.Job,
 		RunMeta:      r.config.RunMeta,
+		Proxy:        r.config.Proxy,
 	}
 
 	var executor Executor
@@ -282,6 +289,12 @@ func (r *RunOrchestrator) buildResult(
 		Duration:     time.Since(r.startTime),
 		PolicyStats:  r.config.Policy.Stats(),
 		StderrOutput: stderrOutput,
+	}
+
+	// Set redacted proxy (per CONTRACT_PROXY.md: exclude password)
+	if r.config.Proxy != nil {
+		redacted := r.config.Proxy.Redact()
+		result.ProxyUsed = &redacted
 	}
 
 	if artifacts != nil {
