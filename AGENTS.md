@@ -125,6 +125,23 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 
 ---
 
+## Version Policy
+
+Quarry uses **lockstep versioning**:
+
+- All components share a single canonical version: `quarry/types/version.go`
+- SDK package version (`sdk/package.json`) must match `types.Version`
+- Contract versions (`CONTRACT_VERSION` in SDK) are derived from this
+- CLI `--version` output must match `types.Version`
+
+When releasing:
+1. Update `quarry/types/version.go`
+2. Update `sdk/package.json` version field to match
+3. Rebuild SDK (`pnpm exec tsdown` in sdk/)
+4. Commit as a single version bump
+
+---
+
 ## Litmus Test
 
 Before adding code, ask:
