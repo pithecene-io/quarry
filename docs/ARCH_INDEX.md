@@ -110,8 +110,16 @@ Non-normative.
 
 ## quarry/
 
-Go module root.
-(Currently a placeholder or future expansion point.)
+Go module root. Contains runtime, CLI, and core types.
+
+### Key files
+
+- `types/version.go` — canonical version (all packages must match)
+- `types/proxy.go` — proxy domain types
+- `types/events.go` — event envelope and payload types
+- `proxy/selector.go` — proxy pool selection/rotation
+- `lode/sink.go` — Lode storage sink interface
+- `cli/reader/` — CLI read-side data access layer
 
 ---
 
