@@ -22,6 +22,7 @@ import {
   type CreateContextOptions,
   createContext,
   type JobId,
+  type ProxyEndpoint,
   type RunId,
   type RunMeta,
   TerminalEventError
@@ -46,6 +47,8 @@ export interface ExecutorConfig<Job = unknown> {
   readonly output?: Writable
   /** Puppeteer launch options */
   readonly puppeteerOptions?: LaunchOptions
+  /** Optional resolved proxy endpoint per CONTRACT_PROXY.md */
+  readonly proxy?: ProxyEndpoint
 }
 
 /**
@@ -116,6 +119,35 @@ export function parseRunMeta(input: unknown): RunMeta {
   }
 
   return run
+}
+
+/**
+ * Build Puppeteer launch options with proxy configuration.
+ * Per CONTRACT_PROXY.md: Apply proxy host/port/protocol at browser launch.
+ *
+ * @param baseOptions - Base Puppeteer launch options
+ * @param proxy - Optional proxy endpoint
+ * @returns Merged launch options with proxy args
+ */
+function buildPuppeteerLaunchOptions(
+  baseOptions: LaunchOptions | undefined,
+  proxy: ProxyEndpoint | undefined
+): LaunchOptions {
+  if (!proxy) {
+    return baseOptions ?? {}
+  }
+
+  // Build proxy URL (without credentials - those are applied via page.authenticate)
+  const proxyUrl = `${proxy.protocol}://${proxy.host}:${proxy.port}`
+
+  // Merge args, preserving existing args from baseOptions
+  const existingArgs = baseOptions?.args ?? []
+  const proxyArgs = [`--proxy-server=${proxyUrl}`]
+
+  return {
+    ...baseOptions,
+    args: [...existingArgs, ...proxyArgs]
+  }
 }
 
 /**
@@ -247,10 +279,19 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       throw err
     }
 
-    // 2. Launch Puppeteer
-    browser = await puppeteer.launch(config.puppeteerOptions)
+    // 2. Launch Puppeteer (with proxy if configured)
+    const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy)
+    browser = await puppeteer.launch(launchOptions)
     browserContext = await browser.createBrowserContext()
     page = await browserContext.newPage()
+
+    // Apply proxy authentication if needed (per CONTRACT_PROXY.md)
+    if (config.proxy?.username && config.proxy?.password) {
+      await page.authenticate({
+        username: config.proxy.username,
+        password: config.proxy.password
+      })
+    }
 
     // 3. Create context (single instance, reused throughout lifecycle)
     ctx = createContext<Job>({

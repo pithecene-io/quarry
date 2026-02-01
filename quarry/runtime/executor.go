@@ -22,6 +22,9 @@ type ExecutorConfig struct {
 	Job any
 	// RunMeta is the run metadata.
 	RunMeta *types.RunMeta
+	// Proxy is the optional resolved proxy endpoint per CONTRACT_PROXY.md.
+	// If nil, executor launches without a proxy.
+	Proxy *types.ProxyEndpoint
 }
 
 // ExecutorResult represents the result of executor execution.
@@ -50,11 +53,12 @@ func NewExecutorManager(config *ExecutorConfig) *ExecutorManager {
 
 // executorInput is the JSON structure written to executor stdin.
 type executorInput struct {
-	RunID       string  `json:"run_id"`
-	Attempt     int     `json:"attempt"`
-	JobID       *string `json:"job_id,omitempty"`
-	ParentRunID *string `json:"parent_run_id,omitempty"`
-	Job         any     `json:"job"`
+	RunID       string              `json:"run_id"`
+	Attempt     int                 `json:"attempt"`
+	JobID       *string             `json:"job_id,omitempty"`
+	ParentRunID *string             `json:"parent_run_id,omitempty"`
+	Job         any                 `json:"job"`
+	Proxy       *types.ProxyEndpoint `json:"proxy,omitempty"`
 }
 
 // Start starts the executor process.
@@ -96,6 +100,7 @@ func (m *ExecutorManager) Start(ctx context.Context) error {
 		JobID:       m.config.RunMeta.JobID,
 		ParentRunID: m.config.RunMeta.ParentRunID,
 		Job:         m.config.Job,
+		Proxy:       m.config.Proxy,
 	}
 
 	if err := json.NewEncoder(stdin).Encode(input); err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/justapithecus/quarry/log"
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -43,6 +44,10 @@ type BufferedConfig struct {
 	// FlushMode controls flush failure semantics.
 	// Default is FlushAtLeastOnce (safest, may duplicate on retry).
 	FlushMode FlushMode
+
+	// Logger is an optional logger for policy observability.
+	// If nil, no logging is emitted.
+	Logger *log.Logger
 }
 
 // DefaultBufferedConfig returns sensible defaults for buffered policy.
@@ -74,6 +79,7 @@ var ErrInvalidFlushMode = errors.New("invalid flush mode")
 type BufferedPolicy struct {
 	sink   Sink
 	config BufferedConfig
+	logger *log.Logger
 
 	mu              sync.Mutex // guards buffer state only
 	eventBuffer     []*types.EventEnvelope
@@ -107,6 +113,7 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 	return &BufferedPolicy{
 		sink:            sink,
 		config:          config,
+		logger:          config.Logger,
 		eventBuffer:     make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
 		eventBufferNext: make([]*types.EventEnvelope, 0),
 		chunkBuffer:     make([]*types.ArtifactChunk, 0),
@@ -140,6 +147,7 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 	if IsDroppable(envelope.Type) {
 		// Drop the incoming event
 		p.stats.incEventsDroppedLocked(envelope.Type)
+		p.logDrop(envelope.Type, "buffer_full")
 		return nil
 	}
 
@@ -151,6 +159,7 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 
 	// No room even after eviction, or no droppable events to evict
 	p.stats.incErrorsLocked()
+	p.logBufferOverflow(envelope.Type)
 	return ErrBufferFull
 }
 
@@ -225,6 +234,7 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 			p.mu.Lock()
 			p.stats.incErrorsLocked()
 			p.mu.Unlock()
+			p.logFlushFailure("events", err)
 			return err
 		}
 		p.mu.Lock()
@@ -238,6 +248,7 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 			p.mu.Lock()
 			p.stats.incErrorsLocked()
 			p.mu.Unlock()
+			p.logFlushFailure("chunks", err)
 			// Keep all buffers intact - prefer duplicates over loss
 			return err
 		}
@@ -446,11 +457,13 @@ func (p *BufferedPolicy) dropOldestDroppable() bool {
 	// First scan eventBuffer
 	for i, event := range p.eventBuffer {
 		if IsDroppable(event.Type) {
+			eventType := event.Type
 			eventSize := p.estimateEventSize(event)
 			p.eventBuffer = append(p.eventBuffer[:i], p.eventBuffer[i+1:]...)
 			p.bufferBytes -= eventSize
 			p.stats.setBufferSizeLocked(p.bufferBytes)
-			p.stats.incEventsDroppedLocked(event.Type)
+			p.stats.incEventsDroppedLocked(eventType)
+			p.logDrop(eventType, "evicted_for_non_droppable")
 			return true
 		}
 	}
@@ -458,11 +471,13 @@ func (p *BufferedPolicy) dropOldestDroppable() bool {
 	// Then scan eventBufferNext (TwoPhase mode)
 	for i, event := range p.eventBufferNext {
 		if IsDroppable(event.Type) {
+			eventType := event.Type
 			eventSize := p.estimateEventSize(event)
 			p.eventBufferNext = append(p.eventBufferNext[:i], p.eventBufferNext[i+1:]...)
 			p.bufferBytes -= eventSize
 			p.stats.setBufferSizeLocked(p.bufferBytes)
-			p.stats.incEventsDroppedLocked(event.Type)
+			p.stats.incEventsDroppedLocked(eventType)
+			p.logDrop(eventType, "evicted_for_non_droppable")
 			return true
 		}
 	}
@@ -482,4 +497,41 @@ func (p *BufferedPolicy) estimateEventSize(envelope *types.EventEnvelope) int64 
 	}
 
 	return size
+}
+
+// --- Logging helpers (per CONTRACT_POLICY.md observability requirements) ---
+
+// logDrop logs an event drop per CONTRACT_POLICY.md observability.
+func (p *BufferedPolicy) logDrop(eventType types.EventType, reason string) {
+	if p.logger == nil {
+		return
+	}
+	p.logger.Warn("event dropped", map[string]any{
+		"event_type": string(eventType),
+		"reason":     reason,
+		"policy":     "buffered",
+	})
+}
+
+// logBufferOverflow logs a buffer overflow error per CONTRACT_POLICY.md.
+func (p *BufferedPolicy) logBufferOverflow(eventType types.EventType) {
+	if p.logger == nil {
+		return
+	}
+	p.logger.Error("buffer overflow", map[string]any{
+		"event_type": string(eventType),
+		"policy":     "buffered",
+	})
+}
+
+// logFlushFailure logs a flush failure per CONTRACT_POLICY.md.
+func (p *BufferedPolicy) logFlushFailure(bufferType string, err error) {
+	if p.logger == nil {
+		return
+	}
+	p.logger.Error("flush failed", map[string]any{
+		"buffer_type": bufferType,
+		"error":       err.Error(),
+		"policy":      "buffered",
+	})
 }
