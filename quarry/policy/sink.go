@@ -27,6 +27,13 @@ type Sink interface {
 	Close() error
 }
 
+// WriteOp represents a write operation for ordering verification.
+type WriteOp struct {
+	Type   string // "events" or "chunks"
+	Events []*types.EventEnvelope
+	Chunks []*types.ArtifactChunk
+}
+
 // StubSink is a test sink that accepts writes without persisting.
 // Tracks write statistics for test assertions.
 type StubSink struct {
@@ -48,6 +55,9 @@ type StubSink struct {
 	// WrittenChunks stores all written chunks for inspection.
 	WrittenChunks []*types.ArtifactChunk
 
+	// WriteOrder tracks the order of write operations for ordering tests.
+	WriteOrder []WriteOp
+
 	// ErrorOnWrite, if non-nil, is returned by WriteEvents/WriteChunks.
 	ErrorOnWrite error
 }
@@ -57,6 +67,7 @@ func NewStubSink() *StubSink {
 	return &StubSink{
 		WrittenEvents: make([]*types.EventEnvelope, 0),
 		WrittenChunks: make([]*types.ArtifactChunk, 0),
+		WriteOrder:    make([]WriteOp, 0),
 	}
 }
 
@@ -72,6 +83,7 @@ func (s *StubSink) WriteEvents(ctx context.Context, events []*types.EventEnvelop
 	s.EventBatches++
 	s.EventsWritten += int64(len(events))
 	s.WrittenEvents = append(s.WrittenEvents, events...)
+	s.WriteOrder = append(s.WriteOrder, WriteOp{Type: "events", Events: events})
 
 	return nil
 }
@@ -88,6 +100,7 @@ func (s *StubSink) WriteChunks(ctx context.Context, chunks []*types.ArtifactChun
 	s.ChunkBatches++
 	s.ChunksWritten += int64(len(chunks))
 	s.WrittenChunks = append(s.WrittenChunks, chunks...)
+	s.WriteOrder = append(s.WriteOrder, WriteOp{Type: "chunks", Chunks: chunks})
 
 	return nil
 }

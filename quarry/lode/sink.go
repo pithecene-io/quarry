@@ -6,16 +6,30 @@ package lode
 
 import (
 	"context"
+	"time"
 
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/types"
 )
 
+// DeriveDay computes the partition day from run start time.
+// Format: YYYY-MM-DD in UTC per CONTRACT_LODE.md.
+func DeriveDay(startTime time.Time) string {
+	return startTime.UTC().Format("2006-01-02")
+}
+
 // Config holds Lode sink configuration.
+// All partition keys are required per CONTRACT_LODE.md.
 type Config struct {
-	// Dataset is the logical collection/dataset for partitioning.
+	// Dataset is the Lode dataset ID (fixed to "quarry").
 	Dataset string
-	// RunID is the run identifier for partitioning.
+	// Source is the partition key for origin system/provider.
+	Source string
+	// Category is the partition key for logical data type.
+	Category string
+	// Day is the partition key derived from run start time (YYYY-MM-DD UTC).
+	Day string
+	// RunID is the partition key for run identifier.
 	RunID string
 }
 
@@ -70,20 +84,20 @@ var _ policy.Sink = (*Sink)(nil)
 // StubClient is a test client that accepts writes without persisting.
 // Use for integration testing before real Lode is available.
 type StubClient struct {
-	Events []EventRecord
-	Chunks []ChunkRecord
+	Events []StubEventRecord
+	Chunks []StubChunkRecord
 	Closed bool
 }
 
-// EventRecord is a recorded event write.
-type EventRecord struct {
+// StubEventRecord is a recorded event write for testing.
+type StubEventRecord struct {
 	Dataset string
 	RunID   string
 	Events  []*types.EventEnvelope
 }
 
-// ChunkRecord is a recorded chunk write.
-type ChunkRecord struct {
+// StubChunkRecord is a recorded chunk write for testing.
+type StubChunkRecord struct {
 	Dataset string
 	RunID   string
 	Chunks  []*types.ArtifactChunk
@@ -96,7 +110,7 @@ func NewStubClient() *StubClient {
 
 // WriteEvents implements Client.
 func (c *StubClient) WriteEvents(ctx context.Context, dataset, runID string, events []*types.EventEnvelope) error {
-	c.Events = append(c.Events, EventRecord{
+	c.Events = append(c.Events, StubEventRecord{
 		Dataset: dataset,
 		RunID:   runID,
 		Events:  events,
@@ -106,7 +120,7 @@ func (c *StubClient) WriteEvents(ctx context.Context, dataset, runID string, eve
 
 // WriteChunks implements Client.
 func (c *StubClient) WriteChunks(ctx context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error {
-	c.Chunks = append(c.Chunks, ChunkRecord{
+	c.Chunks = append(c.Chunks, StubChunkRecord{
 		Dataset: dataset,
 		RunID:   runID,
 		Chunks:  chunks,

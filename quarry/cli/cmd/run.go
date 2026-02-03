@@ -69,6 +69,17 @@ func RunCommand() *cli.Command {
 				Name:  "quiet",
 				Usage: "Suppress result output",
 			},
+			// Partition key flags
+			&cli.StringFlag{
+				Name:     "source",
+				Usage:    "Source identifier for partitioning (required)",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "category",
+				Usage: "Category identifier for partitioning",
+				Value: "default",
+			},
 			// Policy flags
 			&cli.StringFlag{
 				Name:  "policy",
@@ -114,6 +125,20 @@ func RunCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "proxy-origin",
 				Usage: "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)",
+			},
+			// Lode storage flags
+			&cli.StringFlag{
+				Name:  "lode-backend",
+				Usage: "Lode storage backend: fs or s3 (experimental)",
+				Value: "fs",
+			},
+			&cli.StringFlag{
+				Name:  "lode-path",
+				Usage: "Lode storage path (fs: directory, s3: bucket/prefix)",
+			},
+			&cli.StringFlag{
+				Name:  "lode-s3-region",
+				Usage: "AWS region for S3 backend (optional, uses default chain)",
 			},
 		},
 		Action: runAction,
@@ -205,6 +230,8 @@ func runAction(c *cli.Context) error {
 		RunMeta:      runMeta,
 		Policy:       pol,
 		Proxy:        resolvedProxy,
+		Source:       c.String("source"),
+		Category:     c.String("category"),
 	}
 
 	// Create orchestrator

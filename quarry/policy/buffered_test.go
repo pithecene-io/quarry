@@ -1236,3 +1236,167 @@ func TestBufferedPolicy_Eviction_ConsidersEventBufferNext(t *testing.T) {
 		t.Errorf("log1 should NOT be written (was evicted), got %d", eventIDs["log1"])
 	}
 }
+
+// TestBufferedPolicy_ArtifactCommitWrittenLast tests that artifact commit events
+// are always written after chunks, regardless of flush mode.
+// This enforces the CONTRACT_LODE.md invariant: "chunks before commit".
+func TestBufferedPolicy_ArtifactCommitWrittenLast(t *testing.T) {
+	flushModes := []policy.FlushMode{
+		policy.FlushAtLeastOnce,
+		policy.FlushChunksFirst,
+		policy.FlushTwoPhase,
+	}
+
+	for _, flushMode := range flushModes {
+		t.Run(string(flushMode), func(t *testing.T) {
+			sink := policy.NewStubSink()
+			config := policy.BufferedConfig{
+				MaxBufferEvents: 100,
+				MaxBufferBytes:  1024 * 1024,
+				FlushMode:       flushMode,
+			}
+			pol := mustNewBufferedPolicy(t, sink, config)
+
+			ctx := context.Background()
+
+			// Ingest a regular event
+			err := pol.IngestEvent(ctx, &types.EventEnvelope{
+				EventID: "e1", Type: types.EventTypeItem, Seq: 1,
+			})
+			if err != nil {
+				t.Fatalf("IngestEvent (item) failed: %v", err)
+			}
+
+			// Ingest artifact chunks
+			err = pol.IngestArtifactChunk(ctx, &types.ArtifactChunk{
+				ArtifactID: "art-1", Seq: 1, Data: []byte("hello"),
+			})
+			if err != nil {
+				t.Fatalf("IngestArtifactChunk 1 failed: %v", err)
+			}
+			err = pol.IngestArtifactChunk(ctx, &types.ArtifactChunk{
+				ArtifactID: "art-1", Seq: 2, IsLast: true, Data: []byte("world"),
+			})
+			if err != nil {
+				t.Fatalf("IngestArtifactChunk 2 failed: %v", err)
+			}
+
+			// Ingest artifact commit event (should be buffered separately)
+			err = pol.IngestEvent(ctx, &types.EventEnvelope{
+				EventID: "art-commit",
+				Type:    types.EventTypeArtifact,
+				Seq:     2,
+				Payload: map[string]any{
+					"artifact_id":  "art-1",
+					"name":         "test.txt",
+					"content_type": "text/plain",
+					"size_bytes":   float64(10),
+				},
+			})
+			if err != nil {
+				t.Fatalf("IngestEvent (artifact) failed: %v", err)
+			}
+
+			// Ingest another regular event after the artifact commit
+			err = pol.IngestEvent(ctx, &types.EventEnvelope{
+				EventID: "e2", Type: types.EventTypeLog, Seq: 3,
+			})
+			if err != nil {
+				t.Fatalf("IngestEvent (log) failed: %v", err)
+			}
+
+			// Flush
+			if err := pol.Flush(ctx); err != nil {
+				t.Fatalf("Flush failed: %v", err)
+			}
+
+			// Verify write order using WriteOrder tracking
+			writeOrder := sink.WriteOrder
+			if len(writeOrder) < 2 {
+				t.Fatalf("expected at least 2 write operations, got %d", len(writeOrder))
+			}
+
+			// Find the chunk write and artifact commit write
+			var chunkWriteIdx, artifactCommitIdx int = -1, -1
+			for i, op := range writeOrder {
+				if op.Type == "chunks" && len(op.Chunks) > 0 {
+					chunkWriteIdx = i
+				}
+				if op.Type == "events" {
+					for _, ev := range op.Events {
+						if ev.Type == types.EventTypeArtifact {
+							artifactCommitIdx = i
+							break
+						}
+					}
+				}
+			}
+
+			if chunkWriteIdx == -1 {
+				t.Fatal("chunk write not found in write order")
+			}
+			if artifactCommitIdx == -1 {
+				t.Fatal("artifact commit write not found in write order")
+			}
+
+			// The invariant: chunks must be written before artifact commits
+			if chunkWriteIdx >= artifactCommitIdx {
+				t.Errorf("INVARIANT VIOLATION: chunks written at index %d, artifact commit at index %d; chunks must come first",
+					chunkWriteIdx, artifactCommitIdx)
+			}
+		})
+	}
+}
+
+// TestBufferedPolicy_ArtifactCommitBufferSeparate verifies that artifact commits
+// are stored in a separate buffer from regular events.
+func TestBufferedPolicy_ArtifactCommitBufferSeparate(t *testing.T) {
+	sink := policy.NewStubSink()
+	config := policy.BufferedConfig{MaxBufferEvents: 100}
+	pol := mustNewBufferedPolicy(t, sink, config)
+
+	ctx := context.Background()
+
+	// Mix regular events and artifact commits
+	_ = pol.IngestEvent(ctx, &types.EventEnvelope{EventID: "e1", Type: types.EventTypeItem, Seq: 1})
+	_ = pol.IngestEvent(ctx, &types.EventEnvelope{EventID: "art1", Type: types.EventTypeArtifact, Seq: 2})
+	_ = pol.IngestEvent(ctx, &types.EventEnvelope{EventID: "e2", Type: types.EventTypeLog, Seq: 3})
+	_ = pol.IngestEvent(ctx, &types.EventEnvelope{EventID: "art2", Type: types.EventTypeArtifact, Seq: 4})
+
+	// Flush
+	if err := pol.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+
+	// Verify that artifact commits were written as a separate batch
+	// (they should be in the last events write operation)
+	writeOrder := sink.WriteOrder
+	if len(writeOrder) == 0 {
+		t.Fatal("no writes recorded")
+	}
+
+	// Count artifact commits in the last events write
+	lastEventsWriteIdx := -1
+	for i := len(writeOrder) - 1; i >= 0; i-- {
+		if writeOrder[i].Type == "events" {
+			lastEventsWriteIdx = i
+			break
+		}
+	}
+
+	if lastEventsWriteIdx == -1 {
+		t.Fatal("no events write found")
+	}
+
+	artifactCount := 0
+	for _, ev := range writeOrder[lastEventsWriteIdx].Events {
+		if ev.Type == types.EventTypeArtifact {
+			artifactCount++
+		}
+	}
+
+	// All artifact commits should be in the last batch
+	if artifactCount != 2 {
+		t.Errorf("expected 2 artifact commits in last write, got %d", artifactCount)
+	}
+}

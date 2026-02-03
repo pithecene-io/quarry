@@ -61,6 +61,72 @@ For Hive-style layouts, the preferred order is:
 
 ---
 
+## Record Types
+
+All stored records MUST include a `record_kind` discriminator field.
+
+| `record_kind`    | Description                          |
+|------------------|--------------------------------------|
+| `event`          | Standard event envelope              |
+| `artifact_event` | Artifact commit (manifest) event     |
+| `artifact_chunk` | Artifact binary chunk                |
+
+The `record_kind` field enables downstream consumers to distinguish record
+types without inspecting `event_type` or payload structure.
+
+---
+
+## Artifact Chunk Storage
+
+Artifact binary data is stored as chunk records under `event_type=artifact`.
+
+### Chunk Record Schema
+
+| Field          | Type     | Required | Description                              |
+|----------------|----------|----------|------------------------------------------|
+| `record_kind`  | string   | yes      | `"artifact_chunk"`                       |
+| `artifact_id`  | string   | yes      | Artifact identifier                      |
+| `seq`          | int64    | yes      | Sequence number (starts at 1)            |
+| `is_last`      | bool     | yes      | True if final chunk                      |
+| `offset`       | int64    | yes      | Byte offset within artifact              |
+| `length`       | int64    | yes      | Chunk data length in bytes               |
+| `data`         | bytes    | yes      | Raw chunk data (base64 in JSON)          |
+| `checksum`     | string   | no       | Chunk checksum (see Checksum section)    |
+| `checksum_algo`| string   | no       | Checksum algorithm (must be `md5`)       |
+
+### Commit Record Schema
+
+The artifact commit event marks the artifact as complete.
+
+| Field          | Type     | Required | Description                              |
+|----------------|----------|----------|------------------------------------------|
+| `record_kind`  | string   | yes      | `"artifact_event"`                       |
+| `artifact_id`  | string   | yes      | Artifact identifier                      |
+| `name`         | string   | yes      | Human-readable artifact name             |
+| `content_type` | string   | yes      | MIME content type                        |
+| `size_bytes`   | int64    | yes      | Total artifact size in bytes             |
+
+### Ordering Invariant
+
+> Chunk records MUST be written before the corresponding commit record.
+
+The commit record is the commit boundary. Chunks written without a subsequent
+commit are orphans and may be garbage collected.
+
+---
+
+## Checksum
+
+The `checksum` field on chunk records is **optional**.
+
+If present:
+- `checksum_algo` MUST be set to `"md5"`.
+- `checksum` contains the hex-encoded MD5 digest of the chunk data.
+
+Checksum validation is a downstream consumer responsibility.
+
+---
+
 ## Policy-Independent Layout Invariants
 
 Storage layout must remain consistent across policies so that:
