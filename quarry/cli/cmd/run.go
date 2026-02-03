@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/justapithecus/quarry/policy"
+	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/runtime"
 	"github.com/justapithecus/quarry/types"
 	"github.com/urfave/cli/v2"
@@ -89,6 +90,23 @@ func RunCommand() *cli.Command {
 				Usage: "Max buffer size in bytes (buffered policy)",
 				Value: 0,
 			},
+			// Proxy flags
+			&cli.StringFlag{
+				Name:  "proxy-config",
+				Usage: "Path to proxy pools config file (JSON)",
+			},
+			&cli.StringFlag{
+				Name:  "proxy-pool",
+				Usage: "Pool name to select proxy from",
+			},
+			&cli.StringFlag{
+				Name:  "proxy-strategy",
+				Usage: "Strategy override: round_robin, random, or sticky",
+			},
+			&cli.StringFlag{
+				Name:  "proxy-sticky-key",
+				Usage: "Sticky key override for proxy selection",
+			},
 		},
 		Action: runAction,
 	}
@@ -100,6 +118,14 @@ type policyChoice struct {
 	flushMode string
 	maxEvents int
 	maxBytes  int64
+}
+
+// proxyChoice holds parsed proxy configuration.
+type proxyChoice struct {
+	configPath string
+	poolName   string
+	strategy   string
+	stickyKey  string
 }
 
 func runAction(c *cli.Context) error {
@@ -141,6 +167,24 @@ func runAction(c *cli.Context) error {
 	}
 	defer func() { _ = pol.Close() }()
 
+	// Parse proxy config
+	proxyConfig := proxyChoice{
+		configPath: c.String("proxy-config"),
+		poolName:   c.String("proxy-pool"),
+		strategy:   c.String("proxy-strategy"),
+		stickyKey:  c.String("proxy-sticky-key"),
+	}
+
+	// Select proxy if configured
+	var resolvedProxy *types.ProxyEndpoint
+	if proxyConfig.poolName != "" {
+		endpoint, err := selectProxy(proxyConfig, runMeta)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("proxy selection failed: %v", err), exitExecutorCrash)
+		}
+		resolvedProxy = endpoint
+	}
+
 	// Create run config
 	config := &runtime.RunConfig{
 		ExecutorPath: c.String("executor"),
@@ -148,6 +192,7 @@ func runAction(c *cli.Context) error {
 		Job:          job,
 		RunMeta:      runMeta,
 		Policy:       pol,
+		Proxy:        resolvedProxy,
 	}
 
 	// Create orchestrator
@@ -242,6 +287,68 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 	}
 }
 
+// selectProxy loads proxy pools and selects an endpoint.
+func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoint, error) {
+	// Load proxy pools from config file
+	if config.configPath == "" {
+		return nil, fmt.Errorf("--proxy-config required when --proxy-pool is specified")
+	}
+
+	pools, err := loadProxyPools(config.configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load proxy pools: %w", err)
+	}
+
+	// Create selector and register pools
+	selector := proxy.NewSelector()
+	for _, pool := range pools {
+		if err := selector.RegisterPool(&pool); err != nil {
+			return nil, fmt.Errorf("failed to register pool %q: %w", pool.Name, err)
+		}
+	}
+
+	// Build selection request (commit for actual runs)
+	req := proxy.SelectRequest{
+		Pool:      config.poolName,
+		StickyKey: config.stickyKey,
+		Commit:    true,
+	}
+
+	// Set job ID for sticky scope derivation
+	if runMeta.JobID != nil {
+		req.JobID = *runMeta.JobID
+	}
+
+	// Set strategy override if specified
+	if config.strategy != "" {
+		strategy := types.ProxyStrategy(config.strategy)
+		req.StrategyOverride = &strategy
+	}
+
+	// Select endpoint
+	endpoint, err := selector.Select(req)
+	if err != nil {
+		return nil, fmt.Errorf("selection failed: %w", err)
+	}
+
+	return endpoint, nil
+}
+
+// loadProxyPools loads proxy pools from a JSON config file.
+func loadProxyPools(path string) ([]types.ProxyPool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var pools []types.ProxyPool
+	if err := json.Unmarshal(data, &pools); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	return pools, nil
+}
+
 func printRunResult(result *runtime.RunResult, choice policyChoice, duration time.Duration) {
 	fmt.Printf("\nrun_id=%s, attempt=%d, outcome=%s, duration=%s\n",
 		result.RunMeta.RunID,
@@ -274,6 +381,16 @@ func printRunResult(result *runtime.RunResult, choice policyChoice, duration tim
 	fmt.Printf("Message:      %s\n", result.Outcome.Message)
 	fmt.Printf("Duration:     %s\n", result.Duration)
 	fmt.Printf("Events:       %d\n", result.EventCount)
+
+	if result.ProxyUsed != nil {
+		fmt.Printf("\n=== Proxy ===\n")
+		fmt.Printf("Protocol:     %s\n", result.ProxyUsed.Protocol)
+		fmt.Printf("Host:         %s\n", result.ProxyUsed.Host)
+		fmt.Printf("Port:         %d\n", result.ProxyUsed.Port)
+		if result.ProxyUsed.Username != nil {
+			fmt.Printf("Username:     %s\n", *result.ProxyUsed.Username)
+		}
+	}
 
 	fmt.Printf("\n=== Policy Stats ===\n")
 	fmt.Printf("Events Total:     %d\n", result.PolicyStats.TotalEvents)

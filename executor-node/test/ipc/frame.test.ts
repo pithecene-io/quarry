@@ -4,11 +4,14 @@ import { describe, expect, it } from 'vitest'
 import {
   type ArtifactChunkFrame,
   ChunkValidationError,
+  type RunResultFrame,
+  type RunResultOutcome,
   calculateChunks,
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
   encodeEventFrame,
   encodeFrame,
+  encodeRunResultFrame,
   FrameSizeError,
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
@@ -423,5 +426,119 @@ describe('encodeArtifactChunks', () => {
     const decoded = msgpackDecode(payload) as ArtifactChunkFrame
 
     expect(new Uint8Array(decoded.data)).toEqual(new Uint8Array([1, 2, 3, 4, 5]))
+  })
+})
+
+describe('encodeRunResultFrame', () => {
+  it('encodes completed outcome correctly', () => {
+    const outcome: RunResultOutcome = {
+      status: 'completed',
+      message: 'run completed successfully'
+    }
+    const frame = encodeRunResultFrame(outcome)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as RunResultFrame
+
+    expect(decoded.type).toBe('run_result')
+    expect(decoded.outcome.status).toBe('completed')
+    expect(decoded.outcome.message).toBe('run completed successfully')
+    expect(decoded.proxy_used).toBeUndefined()
+  })
+
+  it('encodes error outcome with all fields', () => {
+    const outcome: RunResultOutcome = {
+      status: 'error',
+      message: 'Script failed',
+      error_type: 'script_error',
+      stack: 'Error: Script failed\n  at main.ts:42'
+    }
+    const frame = encodeRunResultFrame(outcome)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as RunResultFrame
+
+    expect(decoded.type).toBe('run_result')
+    expect(decoded.outcome.status).toBe('error')
+    expect(decoded.outcome.message).toBe('Script failed')
+    expect(decoded.outcome.error_type).toBe('script_error')
+    expect(decoded.outcome.stack).toBe('Error: Script failed\n  at main.ts:42')
+  })
+
+  it('encodes crash outcome correctly', () => {
+    const outcome: RunResultOutcome = {
+      status: 'crash',
+      message: 'executor crashed'
+    }
+    const frame = encodeRunResultFrame(outcome)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as RunResultFrame
+
+    expect(decoded.type).toBe('run_result')
+    expect(decoded.outcome.status).toBe('crash')
+    expect(decoded.outcome.message).toBe('executor crashed')
+  })
+
+  it('includes proxy_used when provided', () => {
+    const outcome: RunResultOutcome = {
+      status: 'completed'
+    }
+    const proxyUsed = {
+      protocol: 'http' as const,
+      host: 'proxy.example.com',
+      port: 8080,
+      username: 'user'
+    }
+    const frame = encodeRunResultFrame(outcome, proxyUsed)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as RunResultFrame
+
+    expect(decoded.type).toBe('run_result')
+    expect(decoded.proxy_used).toBeDefined()
+    expect(decoded.proxy_used!.protocol).toBe('http')
+    expect(decoded.proxy_used!.host).toBe('proxy.example.com')
+    expect(decoded.proxy_used!.port).toBe(8080)
+    expect(decoded.proxy_used!.username).toBe('user')
+  })
+
+  it('omits proxy_used when not provided', () => {
+    const outcome: RunResultOutcome = {
+      status: 'completed'
+    }
+    const frame = encodeRunResultFrame(outcome)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as RunResultFrame
+
+    expect(decoded.proxy_used).toBeUndefined()
+  })
+
+  it('does not include password in proxy_used (type safety)', () => {
+    const outcome: RunResultOutcome = {
+      status: 'completed'
+    }
+    // TypeScript ensures password is not in the type
+    const proxyUsed = {
+      protocol: 'https' as const,
+      host: 'proxy.example.com',
+      port: 443
+      // No password field - this is enforced by the type
+    }
+    const frame = encodeRunResultFrame(outcome, proxyUsed)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as Record<string, unknown>
+
+    // Verify no password field exists
+    const proxyUsedData = decoded.proxy_used as Record<string, unknown>
+    expect(proxyUsedData.password).toBeUndefined()
   })
 })

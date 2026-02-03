@@ -159,3 +159,45 @@ type JobProxyRequest struct {
 	// StickyKey is the optional sticky key override.
 	StickyKey *string `json:"sticky_key,omitempty" msgpack:"sticky_key,omitempty"`
 }
+
+// LargePoolThreshold is the number of endpoints above which round_robin
+// is discouraged in favor of random.
+const LargePoolThreshold = 50
+
+// Warnings returns soft warnings per CONTRACT_PROXY.md.
+// These are non-fatal issues that should be surfaced to users.
+func (p *ProxyEndpoint) Warnings() []string {
+	var warnings []string
+
+	// socks5 is best-effort with Puppeteer
+	if p.Protocol == ProxyProtocolSOCKS5 {
+		warnings = append(warnings, "socks5 protocol is best-effort with Puppeteer; consider http or https for reliable proxy support")
+	}
+
+	return warnings
+}
+
+// Warnings returns soft warnings per CONTRACT_PROXY.md.
+// These are non-fatal issues that should be surfaced to users.
+func (p *ProxyPool) Warnings() []string {
+	var warnings []string
+
+	// Very large endpoint lists with round_robin
+	if p.Strategy == ProxyStrategyRoundRobin && len(p.Endpoints) > LargePoolThreshold {
+		warnings = append(warnings, fmt.Sprintf("pool %q has %d endpoints with round_robin strategy; consider random for large pools", p.Name, len(p.Endpoints)))
+	}
+
+	// Check endpoint warnings
+	hasSocks5 := false
+	for _, ep := range p.Endpoints {
+		if ep.Protocol == ProxyProtocolSOCKS5 {
+			hasSocks5 = true
+			break
+		}
+	}
+	if hasSocks5 {
+		warnings = append(warnings, fmt.Sprintf("pool %q contains socks5 endpoints; socks5 is best-effort with Puppeteer", p.Name))
+	}
+
+	return warnings
+}

@@ -54,6 +54,11 @@ export const LENGTH_PREFIX_SIZE = 4
 export type ArtifactChunkType = 'artifact_chunk'
 
 /**
+ * Frame type discriminant for run result control frames.
+ */
+export type RunResultType = 'run_result'
+
+/**
  * Artifact chunk frame per CONTRACT_IPC.md.
  * This is a stream-level construct, not a normal emit event.
  *
@@ -73,10 +78,57 @@ export interface ArtifactChunkFrame {
 }
 
 /**
- * Union of all frame payload types for decoding.
- * Discriminate using: if (frame.type === 'artifact_chunk') → chunk, else → event envelope.
+ * Run result outcome status.
  */
-export type Frame = EventEnvelope | ArtifactChunkFrame
+export type RunResultStatus = 'completed' | 'error' | 'crash'
+
+/**
+ * Run result outcome per CONTRACT_IPC.md.
+ * Describes the final outcome of a run.
+ */
+export interface RunResultOutcome {
+  /** Outcome status */
+  readonly status: RunResultStatus
+  /** Human-readable message */
+  readonly message?: string
+  /** Error type (for error status) */
+  readonly error_type?: string
+  /** Stack trace (for error status) */
+  readonly stack?: string
+}
+
+/**
+ * Redacted proxy endpoint for run results (no password).
+ * Per CONTRACT_PROXY.md: proxy_used must exclude password fields.
+ */
+export interface ProxyEndpointRedactedFrame {
+  readonly protocol: 'http' | 'https' | 'socks5'
+  readonly host: string
+  readonly port: number
+  readonly username?: string
+}
+
+/**
+ * Run result control frame per CONTRACT_IPC.md.
+ * This is a control frame emitted once after terminal event emission.
+ * It does NOT affect seq ordering (not an event).
+ */
+export interface RunResultFrame {
+  readonly type: 'run_result'
+  /** Final run outcome */
+  readonly outcome: RunResultOutcome
+  /** Proxy endpoint used (redacted, no password) */
+  readonly proxy_used?: ProxyEndpointRedactedFrame
+}
+
+/**
+ * Union of all frame payload types for decoding.
+ * Discriminate using type field:
+ * - 'artifact_chunk' → ArtifactChunkFrame
+ * - 'run_result' → RunResultFrame (control, not counted in seq)
+ * - other (item, log, etc.) → EventEnvelope
+ */
+export type Frame = EventEnvelope | ArtifactChunkFrame | RunResultFrame
 
 /**
  * Error thrown when a frame exceeds the maximum size.
@@ -236,4 +288,30 @@ export function* encodeArtifactChunks(
     const chunkData = data.subarray(chunk.offset, chunk.offset + chunk.length)
     yield encodeArtifactChunkFrame(artifactId, chunk.seq, chunk.isLast, chunkData)
   }
+}
+
+/**
+ * Encode a run result control frame.
+ *
+ * Per CONTRACT_IPC.md, this is a control frame that:
+ * - Is emitted once after terminal event emission attempt
+ * - Does NOT affect seq ordering (not counted as an event)
+ * - Contains outcome and optional proxy_used (redacted)
+ *
+ * @param outcome - The run outcome
+ * @param proxyUsed - Optional redacted proxy endpoint (no password)
+ * @returns Buffer containing length prefix + msgpack-encoded frame
+ * @throws FrameSizeError if encoded payload exceeds MAX_PAYLOAD_SIZE
+ */
+export function encodeRunResultFrame(
+  outcome: RunResultOutcome,
+  proxyUsed?: ProxyEndpointRedactedFrame
+): Buffer {
+  const frame: RunResultFrame = {
+    type: 'run_result',
+    outcome,
+    ...(proxyUsed && { proxy_used: proxyUsed })
+  }
+  const payload = msgpackEncode(frame)
+  return encodeFrame(payload)
 }

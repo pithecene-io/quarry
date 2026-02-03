@@ -263,17 +263,63 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	}
 
 	// Determine outcome based on exit code and terminal event
-	terminalEvent, hasTerminal := ingestion.GetTerminalEvent()
-	outcome := DetermineOutcome(execResult.ExitCode, hasTerminal, terminalEvent)
+	// If we have a run_result frame from the executor, use it as the primary source
+	// Otherwise fall back to exit code + terminal event analysis
+	var outcome *types.RunOutcome
+	runResultFrame := ingestion.GetRunResult()
 
-	r.logger.Info("run completed", map[string]any{
-		"outcome":      outcome.Status,
-		"exit_code":    execResult.ExitCode,
-		"duration":     time.Since(r.startTime).String(),
-		"has_terminal": hasTerminal,
-	})
+	if runResultFrame != nil {
+		// Use run_result frame from executor
+		outcome = runResultOutcomeToRunOutcome(runResultFrame)
+		r.logger.Info("run completed (from run_result)", map[string]any{
+			"outcome":   outcome.Status,
+			"exit_code": execResult.ExitCode,
+			"duration":  time.Since(r.startTime).String(),
+		})
+	} else {
+		// Fall back to exit code + terminal event analysis
+		terminalEvent, hasTerminal := ingestion.GetTerminalEvent()
+		outcome = DetermineOutcome(execResult.ExitCode, hasTerminal, terminalEvent)
+		r.logger.Info("run completed", map[string]any{
+			"outcome":      outcome.Status,
+			"exit_code":    execResult.ExitCode,
+			"duration":     time.Since(r.startTime).String(),
+			"has_terminal": hasTerminal,
+		})
+	}
 
 	return r.buildResult(outcome, string(execResult.StderrBytes), artifacts, ingestion), nil
+}
+
+// runResultOutcomeToRunOutcome converts a RunResultFrame to a RunOutcome.
+func runResultOutcomeToRunOutcome(frame *types.RunResultFrame) *types.RunOutcome {
+	var status types.OutcomeStatus
+	switch frame.Outcome.Status {
+	case types.RunResultStatusCompleted:
+		status = types.OutcomeSuccess
+	case types.RunResultStatusError:
+		status = types.OutcomeScriptError
+	case types.RunResultStatusCrash:
+		status = types.OutcomeExecutorCrash
+	default:
+		status = types.OutcomeExecutorCrash
+	}
+
+	var message string
+	if frame.Outcome.Message != nil {
+		message = *frame.Outcome.Message
+	} else {
+		message = string(frame.Outcome.Status)
+	}
+
+	outcome := &types.RunOutcome{
+		Status:    status,
+		Message:   message,
+		ErrorType: frame.Outcome.ErrorType,
+		Stack:     frame.Outcome.Stack,
+	}
+
+	return outcome
 }
 
 // buildResult constructs the final run result.
@@ -292,7 +338,13 @@ func (r *RunOrchestrator) buildResult(
 	}
 
 	// Set redacted proxy (per CONTRACT_PROXY.md: exclude password)
-	if r.config.Proxy != nil {
+	// Prefer run_result.proxy_used if available, otherwise use config.Proxy
+	if ingestion != nil {
+		if runResult := ingestion.GetRunResult(); runResult != nil && runResult.ProxyUsed != nil {
+			result.ProxyUsed = runResult.ProxyUsed
+		}
+	}
+	if result.ProxyUsed == nil && r.config.Proxy != nil {
 		redacted := r.config.Proxy.Redact()
 		result.ProxyUsed = &redacted
 	}

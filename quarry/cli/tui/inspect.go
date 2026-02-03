@@ -202,9 +202,11 @@ func (m InspectModel) renderInspectProxy() string {
 		b.WriteString(fmt.Sprintf("%s %s\n",
 			LabelStyle.Render("  Scope:"),
 			ValueStyle.Render(data.Sticky.Scope)))
-		b.WriteString(fmt.Sprintf("%s %s\n",
-			LabelStyle.Render("  TTL:"),
-			ValueStyle.Render(data.Sticky.TTL)))
+		if data.Sticky.TTLMs != nil {
+			b.WriteString(fmt.Sprintf("%s %s\n",
+				LabelStyle.Render("  TTL:"),
+				ValueStyle.Render(fmt.Sprintf("%dms", *data.Sticky.TTLMs))))
+		}
 	}
 
 	b.WriteString("\n")

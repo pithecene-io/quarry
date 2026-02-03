@@ -17,7 +17,13 @@
  */
 import type { Writable } from 'node:stream'
 import type { ArtifactId, EmitSink, EventEnvelope } from '@justapithecus/quarry-sdk'
-import { encodeArtifactChunks, encodeEventFrame } from './frame.js'
+import {
+  encodeArtifactChunks,
+  encodeEventFrame,
+  encodeRunResultFrame,
+  type ProxyEndpointRedactedFrame,
+  type RunResultOutcome
+} from './frame.js'
 
 /**
  * Error thrown when the output stream is closed or finished unexpectedly.
@@ -119,5 +125,21 @@ export class StdioSink implements EmitSink {
     for (const frame of encodeArtifactChunks(artifactId, data)) {
       await writeWithBackpressure(this.output, frame)
     }
+  }
+
+  /**
+   * Write a run result control frame.
+   * Per CONTRACT_IPC.md, this is a control frame emitted once after terminal event.
+   * It does NOT affect seq ordering.
+   *
+   * @param outcome - The run outcome
+   * @param proxyUsed - Optional redacted proxy endpoint (no password)
+   */
+  async writeRunResult(
+    outcome: RunResultOutcome,
+    proxyUsed?: ProxyEndpointRedactedFrame
+  ): Promise<void> {
+    const frame = encodeRunResultFrame(outcome, proxyUsed)
+    await writeWithBackpressure(this.output, frame)
   }
 }

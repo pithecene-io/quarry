@@ -5,10 +5,13 @@ import type {
   EventEnvelope,
   EventId,
   JobId,
+  ProxyEndpoint,
   RunId
 } from '@justapithecus/quarry-sdk'
+import { decode as msgpackDecode } from '@msgpack/msgpack'
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 import { type ExecutorConfig, type ExecutorResult, execute, parseRunMeta } from '../src/executor.js'
+import type { RunResultFrame } from '../src/ipc/frame.js'
 import { ObservingSink, SinkAlreadyFailedError } from '../src/ipc/observing-sink.js'
 import type { LoadedScript } from '../src/loader.js'
 
@@ -474,5 +477,153 @@ describe('SinkAlreadyFailedError', () => {
 
     expect(sinkError.message).toBe('Sink has already failed: string cause')
     expect(sinkError.cause).toBe('string cause')
+  })
+})
+
+/**
+ * Helper to extract run_result frame from output.
+ * Reads all frames and returns the last run_result frame if found.
+ */
+function extractRunResultFrame(output: PassThrough): RunResultFrame | null {
+  const chunks: Buffer[] = []
+  let chunk: Buffer | null
+  while ((chunk = output.read()) !== null) {
+    chunks.push(chunk)
+  }
+  if (chunks.length === 0) return null
+
+  const data = Buffer.concat(chunks)
+  let offset = 0
+
+  // Parse all frames, looking for run_result
+  let lastRunResult: RunResultFrame | null = null
+  while (offset < data.length) {
+    if (offset + 4 > data.length) break
+    const payloadLen = data.readUInt32BE(offset)
+    offset += 4
+    if (offset + payloadLen > data.length) break
+    const payload = data.subarray(offset, offset + payloadLen)
+    offset += payloadLen
+
+    try {
+      const decoded = msgpackDecode(payload) as Record<string, unknown>
+      if (decoded.type === 'run_result') {
+        lastRunResult = decoded as unknown as RunResultFrame
+      }
+    } catch {
+      // Ignore decode errors
+    }
+  }
+
+  return lastRunResult
+}
+
+describe('run_result frame emission', () => {
+  let mockPuppeteer: ReturnType<typeof createMockPuppeteer>
+  let mockOutput: PassThrough
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPuppeteer = createMockPuppeteer()
+    ;(puppeteer.launch as Mock).mockResolvedValue(mockPuppeteer.browser)
+    mockOutput = createMockOutput()
+  })
+
+  function createConfig(overrides: Partial<ExecutorConfig> = {}): ExecutorConfig {
+    return {
+      scriptPath: '/path/to/script.js',
+      job: { test: true },
+      run: {
+        run_id: 'run-123' as RunId,
+        attempt: 1
+      },
+      output: mockOutput,
+      ...overrides
+    }
+  }
+
+  function createMockScript(overrides: Partial<LoadedScript> = {}): LoadedScript {
+    return {
+      script: vi.fn().mockResolvedValue(undefined),
+      hooks: {},
+      module: { default: vi.fn() },
+      ...overrides
+    }
+  }
+
+  it('emits run_result frame with completed status on success', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockImplementation(async (ctx) => {
+        await ctx.emit.runComplete({ summary: { items: 10 } })
+      })
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.type).toBe('run_result')
+    expect(runResult!.outcome.status).toBe('completed')
+  })
+
+  it('emits run_result frame with error status on script error', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockImplementation(async (ctx) => {
+        await ctx.emit.runError({
+          error_type: 'validation_failed',
+          message: 'Invalid data'
+        })
+      })
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.outcome.status).toBe('error')
+    expect(runResult!.outcome.error_type).toBe('validation_failed')
+    expect(runResult!.outcome.message).toBe('Invalid data')
+  })
+
+  it('includes redacted proxy_used when proxy is configured', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockResolvedValue(undefined)
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    const proxy: ProxyEndpoint = {
+      protocol: 'http',
+      host: 'proxy.example.com',
+      port: 8080,
+      username: 'user',
+      password: 'secret123'
+    }
+
+    await execute(createConfig({ proxy }))
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.proxy_used).toBeDefined()
+    expect(runResult!.proxy_used!.protocol).toBe('http')
+    expect(runResult!.proxy_used!.host).toBe('proxy.example.com')
+    expect(runResult!.proxy_used!.port).toBe(8080)
+    expect(runResult!.proxy_used!.username).toBe('user')
+    // Password must NOT be included (per CONTRACT_PROXY.md)
+    expect((runResult!.proxy_used as Record<string, unknown>).password).toBeUndefined()
+  })
+
+  it('omits proxy_used when no proxy is configured', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockResolvedValue(undefined)
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.proxy_used).toBeUndefined()
   })
 })

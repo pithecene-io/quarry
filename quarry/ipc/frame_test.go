@@ -640,3 +640,290 @@ func TestIsFatalFrameError_NonFrameError(t *testing.T) {
 		t.Error("io.EOF should not be a fatal frame error")
 	}
 }
+
+// encodeRunResultFrame encodes a run result frame as a framed msgpack payload.
+func encodeRunResultFrame(result *types.RunResultFrame) ([]byte, error) {
+	payload, err := msgpack.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return encodeFrame(payload), nil
+}
+
+// TestDecodeFrame_RunResult validates run_result frame decoding.
+func TestDecodeFrame_RunResult(t *testing.T) {
+	message := "run completed successfully"
+	result := &types.RunResultFrame{
+		Type: "run_result",
+		Outcome: types.RunResultOutcome{
+			Status:  types.RunResultStatusCompleted,
+			Message: &message,
+		},
+	}
+
+	frame, err := encodeRunResultFrame(result)
+	if err != nil {
+		t.Fatalf("encodeRunResultFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	resultFrame, ok := decoded.(*types.RunResultFrame)
+	if !ok {
+		t.Fatalf("expected *types.RunResultFrame, got %T", decoded)
+	}
+
+	if resultFrame.Type != "run_result" {
+		t.Errorf("result.Type = %q, want %q", resultFrame.Type, "run_result")
+	}
+
+	if resultFrame.Outcome.Status != types.RunResultStatusCompleted {
+		t.Errorf("result.Outcome.Status = %q, want %q", resultFrame.Outcome.Status, types.RunResultStatusCompleted)
+	}
+
+	if resultFrame.Outcome.Message == nil || *resultFrame.Outcome.Message != message {
+		t.Errorf("result.Outcome.Message = %v, want %q", resultFrame.Outcome.Message, message)
+	}
+}
+
+// TestDecodeFrame_RunResult_WithProxy validates run_result frame with proxy_used.
+func TestDecodeFrame_RunResult_WithProxy(t *testing.T) {
+	username := "user"
+	result := &types.RunResultFrame{
+		Type: "run_result",
+		Outcome: types.RunResultOutcome{
+			Status: types.RunResultStatusCompleted,
+		},
+		ProxyUsed: &types.ProxyEndpointRedacted{
+			Protocol: types.ProxyProtocolHTTP,
+			Host:     "proxy.example.com",
+			Port:     8080,
+			Username: &username,
+		},
+	}
+
+	frame, err := encodeRunResultFrame(result)
+	if err != nil {
+		t.Fatalf("encodeRunResultFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	resultFrame, ok := decoded.(*types.RunResultFrame)
+	if !ok {
+		t.Fatalf("expected *types.RunResultFrame, got %T", decoded)
+	}
+
+	if resultFrame.ProxyUsed == nil {
+		t.Fatal("expected ProxyUsed to be set")
+	}
+
+	if resultFrame.ProxyUsed.Protocol != types.ProxyProtocolHTTP {
+		t.Errorf("ProxyUsed.Protocol = %q, want %q", resultFrame.ProxyUsed.Protocol, types.ProxyProtocolHTTP)
+	}
+
+	if resultFrame.ProxyUsed.Host != "proxy.example.com" {
+		t.Errorf("ProxyUsed.Host = %q, want %q", resultFrame.ProxyUsed.Host, "proxy.example.com")
+	}
+
+	if resultFrame.ProxyUsed.Port != 8080 {
+		t.Errorf("ProxyUsed.Port = %d, want %d", resultFrame.ProxyUsed.Port, 8080)
+	}
+
+	if resultFrame.ProxyUsed.Username == nil || *resultFrame.ProxyUsed.Username != username {
+		t.Errorf("ProxyUsed.Username = %v, want %q", resultFrame.ProxyUsed.Username, username)
+	}
+}
+
+// TestDecodeFrame_RunResult_Error validates run_result frame with error status.
+func TestDecodeFrame_RunResult_Error(t *testing.T) {
+	message := "Something went wrong"
+	errorType := "script_error"
+	stack := "Error: something failed\n  at main.ts:42"
+	result := &types.RunResultFrame{
+		Type: "run_result",
+		Outcome: types.RunResultOutcome{
+			Status:    types.RunResultStatusError,
+			Message:   &message,
+			ErrorType: &errorType,
+			Stack:     &stack,
+		},
+	}
+
+	frame, err := encodeRunResultFrame(result)
+	if err != nil {
+		t.Fatalf("encodeRunResultFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	resultFrame, ok := decoded.(*types.RunResultFrame)
+	if !ok {
+		t.Fatalf("expected *types.RunResultFrame, got %T", decoded)
+	}
+
+	if resultFrame.Outcome.Status != types.RunResultStatusError {
+		t.Errorf("result.Outcome.Status = %q, want %q", resultFrame.Outcome.Status, types.RunResultStatusError)
+	}
+
+	if resultFrame.Outcome.ErrorType == nil || *resultFrame.Outcome.ErrorType != errorType {
+		t.Errorf("result.Outcome.ErrorType = %v, want %q", resultFrame.Outcome.ErrorType, errorType)
+	}
+
+	if resultFrame.Outcome.Stack == nil || *resultFrame.Outcome.Stack != stack {
+		t.Errorf("result.Outcome.Stack = %v, want %q", resultFrame.Outcome.Stack, stack)
+	}
+}
+
+// TestDecodeFrame_RunResult_Crash validates run_result frame with crash status.
+func TestDecodeFrame_RunResult_Crash(t *testing.T) {
+	message := "executor crashed"
+	result := &types.RunResultFrame{
+		Type: "run_result",
+		Outcome: types.RunResultOutcome{
+			Status:  types.RunResultStatusCrash,
+			Message: &message,
+		},
+	}
+
+	frame, err := encodeRunResultFrame(result)
+	if err != nil {
+		t.Fatalf("encodeRunResultFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	resultFrame, ok := decoded.(*types.RunResultFrame)
+	if !ok {
+		t.Fatalf("expected *types.RunResultFrame, got %T", decoded)
+	}
+
+	if resultFrame.Outcome.Status != types.RunResultStatusCrash {
+		t.Errorf("result.Outcome.Status = %q, want %q", resultFrame.Outcome.Status, types.RunResultStatusCrash)
+	}
+}
+
+// TestDecodeFrame_MixedWithRunResult validates mixed stream with run_result.
+// Per CONTRACT_IPC.md, run_result is a control frame that does not affect seq.
+func TestDecodeFrame_MixedWithRunResult(t *testing.T) {
+	var buf bytes.Buffer
+
+	// 1. Item event
+	itemEnv := &types.EventEnvelope{
+		ContractVersion: types.Version,
+		EventID:         "evt-001",
+		RunID:           "run-001",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-15T10:00:00Z",
+		Attempt:         1,
+		Payload:         map[string]any{"item_type": "product"},
+	}
+	frame, _ := encodeEventFrame(itemEnv)
+	buf.Write(frame)
+
+	// 2. Run complete
+	completeEnv := &types.EventEnvelope{
+		ContractVersion: types.Version,
+		EventID:         "evt-002",
+		RunID:           "run-001",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-15T10:00:01Z",
+		Attempt:         1,
+		Payload:         map[string]any{},
+	}
+	frame, _ = encodeEventFrame(completeEnv)
+	buf.Write(frame)
+
+	// 3. Run result (control frame, after terminal)
+	message := "run completed"
+	result := &types.RunResultFrame{
+		Type: "run_result",
+		Outcome: types.RunResultOutcome{
+			Status:  types.RunResultStatusCompleted,
+			Message: &message,
+		},
+	}
+	frame, _ = encodeRunResultFrame(result)
+	buf.Write(frame)
+
+	// Decode and verify
+	decoder := NewFrameDecoder(&buf)
+	var events []*types.EventEnvelope
+	var runResults []*types.RunResultFrame
+
+	for {
+		payload, err := decoder.ReadFrame()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("ReadFrame failed: %v", err)
+		}
+
+		decoded, err := DecodeFrame(payload)
+		if err != nil {
+			t.Fatalf("DecodeFrame failed: %v", err)
+		}
+
+		switch v := decoded.(type) {
+		case *types.EventEnvelope:
+			events = append(events, v)
+		case *types.RunResultFrame:
+			runResults = append(runResults, v)
+		default:
+			t.Fatalf("unexpected type: %T", v)
+		}
+	}
+
+	if len(events) != 2 {
+		t.Errorf("got %d events, want 2", len(events))
+	}
+	if len(runResults) != 1 {
+		t.Errorf("got %d run results, want 1", len(runResults))
+	}
+
+	// Verify run_result content
+	if len(runResults) > 0 {
+		if runResults[0].Outcome.Status != types.RunResultStatusCompleted {
+			t.Errorf("run result status = %q, want %q", runResults[0].Outcome.Status, types.RunResultStatusCompleted)
+		}
+	}
+}
