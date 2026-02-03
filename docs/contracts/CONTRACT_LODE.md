@@ -18,14 +18,38 @@ Non-goals:
 
 ---
 
+## Dataset Identity
+
+Quarry writes to a fixed Lode dataset ID: `quarry`.
+
+This dataset ID is a global container and is **not** the same as Quarry's
+logical `category` partition key.
+
+---
+
 ## Required Partition Keys
 
 Lode must support partitioning by:
-- `dataset` (or logical collection)
+- `source` (origin system/provider; required)
+- `category` (logical data type within a source; required; default `category=default`)
+- `day` (derived from run start time; see below)
 - `run_id`
 - `event_type`
 
 Additional keys are allowed, but the above must be present.
+
+### Partition Key Semantics
+
+- `category` is required. If no meaningful category exists for a source,
+  use `category=default`.
+- `day` is derived from the **run start time**, not individual event timestamps.
+  Events may span dates, but must remain in the run's `day` partition.
+
+### Recommended Layout Ordering
+
+For Hive-style layouts, the preferred order is:
+
+`source / category / day / run_id / event_type`
 
 ---
 
