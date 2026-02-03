@@ -1,7 +1,6 @@
 package policy_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -20,7 +19,7 @@ func TestStrictPolicy_IngestEvent_ImmediateWrite(t *testing.T) {
 		Seq:     1,
 	}
 
-	err := pol.IngestEvent(context.Background(), envelope)
+	err := pol.IngestEvent(t.Context(), envelope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +68,7 @@ func TestStrictPolicy_NoDrops(t *testing.T) {
 			RunID:   "run-1",
 			Seq:     int64(i + 1),
 		}
-		if err := pol.IngestEvent(context.Background(), envelope); err != nil {
+		if err := pol.IngestEvent(t.Context(), envelope); err != nil {
 			t.Fatalf("unexpected error for %s: %v", et, err)
 		}
 	}
@@ -94,7 +93,7 @@ func TestStrictPolicy_IngestArtifactChunk(t *testing.T) {
 		IsLast:     true,
 	}
 
-	err := pol.IngestArtifactChunk(context.Background(), chunk)
+	err := pol.IngestArtifactChunk(t.Context(), chunk)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +125,7 @@ func TestStrictPolicy_SinkError(t *testing.T) {
 		Type:    types.EventTypeItem,
 	}
 
-	err := pol.IngestEvent(context.Background(), envelope)
+	err := pol.IngestEvent(t.Context(), envelope)
 	if err != expectedErr {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
@@ -143,12 +142,12 @@ func TestStrictPolicy_Flush_NoOp(t *testing.T) {
 
 	// Ingest an event
 	envelope := &types.EventEnvelope{EventID: "e1", Type: types.EventTypeItem}
-	_ = pol.IngestEvent(context.Background(), envelope)
+	_ = pol.IngestEvent(t.Context(), envelope)
 
 	// Flush should be a no-op (nothing buffered)
 	beforeBatches := sink.Stats().EventBatches
 
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,7 +174,7 @@ func TestStrictPolicy_OrderingPreserved(t *testing.T) {
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
 		}
-		if err := pol.IngestEvent(context.Background(), envelope); err != nil {
+		if err := pol.IngestEvent(t.Context(), envelope); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}

@@ -1,7 +1,6 @@
 package lode
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -46,7 +45,7 @@ func TestLodeClient_WriteEvents(t *testing.T) {
 		},
 	}
 
-	err = client.WriteEvents(context.Background(), cfg.Dataset, cfg.RunID, events)
+	err = client.WriteEvents(t.Context(), cfg.Dataset, cfg.RunID, events)
 	if err != nil {
 		t.Fatalf("WriteEvents failed: %v", err)
 	}
@@ -67,7 +66,7 @@ func TestLodeClient_WriteArtifactEvent(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Must write chunks before commit (chunks-before-commit invariant)
 	chunks := []*types.ArtifactChunk{
@@ -131,7 +130,7 @@ func TestLodeClient_WriteChunks(t *testing.T) {
 		},
 	}
 
-	err = client.WriteChunks(context.Background(), cfg.Dataset, cfg.RunID, chunks)
+	err = client.WriteChunks(t.Context(), cfg.Dataset, cfg.RunID, chunks)
 	if err != nil {
 		t.Fatalf("WriteChunks failed: %v", err)
 	}
@@ -189,7 +188,7 @@ func TestLodeClient_ChunkOffset_AcrossBatches(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// First batch: 10 bytes for art-1
 	batch1 := []*types.ArtifactChunk{
@@ -232,7 +231,7 @@ func TestLodeClient_CommitRequiresChunks(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Try to commit without writing any chunks
 	commitEvent := &types.EventEnvelope{
@@ -272,7 +271,7 @@ func TestLodeClient_CommitSucceedsWithChunks(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Write chunks first
 	chunks := []*types.ArtifactChunk{
@@ -316,7 +315,7 @@ func TestLodeClient_OffsetsResetAfterCommit(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Write chunks
 	chunks := []*types.ArtifactChunk{
@@ -385,7 +384,7 @@ func TestLodeClient_CommitRejectsMissingArtifactID(t *testing.T) {
 		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Commit with missing artifact_id
 	commitEvent := &types.EventEnvelope{

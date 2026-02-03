@@ -23,7 +23,7 @@ func TestBufferedPolicy_Stats_ConcurrentAccess(t *testing.T) {
 		t.Fatalf("NewBufferedPolicy failed: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -124,7 +124,7 @@ func TestBufferedPolicy_Stats_BufferSizeZeroAfterFlush(t *testing.T) {
 	config := policy.BufferedConfig{MaxBufferBytes: 10000}
 	pol, _ := policy.NewBufferedPolicy(sink, config)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Ingest some data
 	for i := 0; i < 10; i++ {
@@ -180,7 +180,7 @@ func TestPolicy_Stats_CrossPolicyConsistency(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			sink := policy.NewStubSink()
 			pol := factory(sink)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Ingest events
 			for i := 0; i < 5; i++ {
@@ -264,7 +264,7 @@ func TestPolicy_Stats_ErrorsOnSinkFailure(t *testing.T) {
 			sink := policy.NewStubSink()
 			sink.ErrorOnWrite = errors.New("sink failure")
 			pol := factory(sink)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Attempt to ingest (will fail on StrictPolicy, buffer on BufferedPolicy)
 			_ = pol.IngestEvent(ctx, &types.EventEnvelope{
@@ -289,7 +289,7 @@ func TestStats_DroppedByType_SnapshotIsolation(t *testing.T) {
 	sink := policy.NewStubSink()
 	config := policy.BufferedConfig{MaxBufferEvents: 1}
 	pol, _ := policy.NewBufferedPolicy(sink, config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Fill buffer with non-droppable
 	_ = pol.IngestEvent(ctx, &types.EventEnvelope{
@@ -337,7 +337,7 @@ func TestStats_FlushCount_IncrementsOnEachFlush(t *testing.T) {
 	sink := policy.NewStubSink()
 	config := policy.BufferedConfig{MaxBufferBytes: 10000}
 	pol, _ := policy.NewBufferedPolicy(sink, config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if pol.Stats().FlushCount != 0 {
 		t.Errorf("expected FlushCount=0 initially, got %d", pol.Stats().FlushCount)
@@ -357,7 +357,7 @@ func TestStats_FlushCount_IncrementsEvenOnFailure(t *testing.T) {
 	sink := policy.NewStubSink()
 	config := policy.BufferedConfig{MaxBufferBytes: 10000}
 	pol, _ := policy.NewBufferedPolicy(sink, config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Add data to buffer
 	_ = pol.IngestEvent(ctx, &types.EventEnvelope{
@@ -385,7 +385,7 @@ func TestStats_EventsPersisted_OnlyOnSuccess(t *testing.T) {
 	sink := policy.NewStubSink()
 	config := policy.BufferedConfig{MaxBufferBytes: 10000}
 	pol, _ := policy.NewBufferedPolicy(sink, config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Add events
 	for i := 0; i < 3; i++ {

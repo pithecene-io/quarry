@@ -107,6 +107,13 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 
 ---
 
+## Testing
+
+- Use `t.Context()` instead of `context.Background()` in tests
+- Use `errors.Is()` for error comparisons, not `==`
+
+---
+
 ## Formatting & Comments
 
 - Formatting is automated; do not hand-format

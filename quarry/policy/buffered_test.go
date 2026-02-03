@@ -31,7 +31,7 @@ func TestBufferedPolicy_BuffersEvents(t *testing.T) {
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
 		}
-		if err := pol.IngestEvent(context.Background(), envelope); err != nil {
+		if err := pol.IngestEvent(t.Context(), envelope); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
@@ -63,11 +63,11 @@ func TestBufferedPolicy_FlushWritesBatch(t *testing.T) {
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
 		}
-		_ = pol.IngestEvent(context.Background(), envelope)
+		_ = pol.IngestEvent(t.Context(), envelope)
 	}
 
 	// Flush should write all events in one batch
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestBufferedPolicy_DropsDroppableWhenFull(t *testing.T) {
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
 		}
-		if err := pol.IngestEvent(context.Background(), envelope); err != nil {
+		if err := pol.IngestEvent(t.Context(), envelope); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
@@ -111,7 +111,7 @@ func TestBufferedPolicy_DropsDroppableWhenFull(t *testing.T) {
 		Type:    types.EventTypeLog,
 		Seq:     4,
 	}
-	if err := pol.IngestEvent(context.Background(), logEvent); err != nil {
+	if err := pol.IngestEvent(t.Context(), logEvent); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -130,13 +130,13 @@ func TestBufferedPolicy_EvictsDroppableForNonDroppable(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Fill buffer: 2 items + 1 log (droppable)
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem, Seq: 1,
 	})
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "log1", Type: types.EventTypeLog, Seq: 2,
 	})
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem, Seq: 3,
 	})
 
@@ -146,7 +146,7 @@ func TestBufferedPolicy_EvictsDroppableForNonDroppable(t *testing.T) {
 		Type:    types.EventTypeItem,
 		Seq:     4,
 	}
-	if err := pol.IngestEvent(context.Background(), itemEvent); err != nil {
+	if err := pol.IngestEvent(t.Context(), itemEvent); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -159,7 +159,7 @@ func TestBufferedPolicy_EvictsDroppableForNonDroppable(t *testing.T) {
 	}
 
 	// Flush and verify the log was evicted
-	_ = pol.Flush(context.Background())
+	_ = pol.Flush(t.Context())
 	if sink.Stats().EventsWritten != 3 {
 		t.Errorf("expected 3 events written, got %d", sink.Stats().EventsWritten)
 	}
@@ -178,10 +178,10 @@ func TestBufferedPolicy_ErrorsOnNonDroppableWhenNoDroppable(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Fill buffer with non-droppable events only
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem, Seq: 1,
 	})
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeCheckpoint, Seq: 2,
 	})
 
@@ -191,7 +191,7 @@ func TestBufferedPolicy_ErrorsOnNonDroppableWhenNoDroppable(t *testing.T) {
 		Type:    types.EventTypeItem,
 		Seq:     3,
 	}
-	err := pol.IngestEvent(context.Background(), itemEvent)
+	err := pol.IngestEvent(t.Context(), itemEvent)
 	if !errors.Is(err, policy.ErrBufferFull) {
 		t.Errorf("expected ErrBufferFull, got %v", err)
 	}
@@ -214,10 +214,10 @@ func TestBufferedPolicy_OrderingPreserved(t *testing.T) {
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
 		}
-		_ = pol.IngestEvent(context.Background(), envelope)
+		_ = pol.IngestEvent(t.Context(), envelope)
 	}
 
-	_ = pol.Flush(context.Background())
+	_ = pol.Flush(t.Context())
 
 	// Verify ordering preserved
 	if len(sink.WrittenEvents) != 5 {
@@ -244,7 +244,7 @@ func TestBufferedPolicy_ArtifactChunksBuffered(t *testing.T) {
 			Data:       []byte("data"),
 			IsLast:     i == 2,
 		}
-		if err := pol.IngestArtifactChunk(context.Background(), chunk); err != nil {
+		if err := pol.IngestArtifactChunk(t.Context(), chunk); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
@@ -255,7 +255,7 @@ func TestBufferedPolicy_ArtifactChunksBuffered(t *testing.T) {
 	}
 
 	// Flush writes chunks
-	_ = pol.Flush(context.Background())
+	_ = pol.Flush(t.Context())
 
 	if sink.Stats().ChunksWritten != 3 {
 		t.Errorf("expected 3 chunks written after flush, got %d", sink.Stats().ChunksWritten)
@@ -271,7 +271,7 @@ func TestBufferedPolicy_SinkError(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer an event
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
 
@@ -279,7 +279,7 @@ func TestBufferedPolicy_SinkError(t *testing.T) {
 	expectedErr := errors.New("sink failure")
 	sink.ErrorOnWrite = expectedErr
 
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err != expectedErr {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
@@ -296,7 +296,7 @@ func TestBufferedPolicy_Close_FlushesAndCloses(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer events
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
 
@@ -331,12 +331,12 @@ func TestBufferedPolicy_DropsOnlyAllowedTypes(t *testing.T) {
 			pol := mustNewBufferedPolicy(t, sink, config)
 
 			// Fill with non-droppable
-			_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+			_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 				EventID: "e1", Type: types.EventTypeItem,
 			})
 
 			// Try droppable - should be dropped (not error)
-			err := pol.IngestEvent(context.Background(), &types.EventEnvelope{
+			err := pol.IngestEvent(t.Context(), &types.EventEnvelope{
 				EventID: "d1", Type: et,
 			})
 			if err != nil {
@@ -368,12 +368,12 @@ func TestBufferedPolicy_NeverDropsNonDroppable(t *testing.T) {
 			pol := mustNewBufferedPolicy(t, sink, config)
 
 			// Fill with non-droppable
-			_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+			_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 				EventID: "e1", Type: types.EventTypeItem,
 			})
 
 			// Try another non-droppable - should error (not drop)
-			err := pol.IngestEvent(context.Background(), &types.EventEnvelope{
+			err := pol.IngestEvent(t.Context(), &types.EventEnvelope{
 				EventID: "e2", Type: et,
 			})
 			if !errors.Is(err, policy.ErrBufferFull) {
@@ -438,7 +438,7 @@ func TestBufferedPolicy_ChunkBuffering_RespectsMaxBufferBytes(t *testing.T) {
 		Seq:        1,
 		Data:       make([]byte, 50),
 	}
-	if err := pol.IngestArtifactChunk(context.Background(), chunk1); err != nil {
+	if err := pol.IngestArtifactChunk(t.Context(), chunk1); err != nil {
 		t.Fatalf("first chunk should fit: %v", err)
 	}
 
@@ -448,7 +448,7 @@ func TestBufferedPolicy_ChunkBuffering_RespectsMaxBufferBytes(t *testing.T) {
 		Seq:        2,
 		Data:       make([]byte, 50),
 	}
-	if err := pol.IngestArtifactChunk(context.Background(), chunk2); err != nil {
+	if err := pol.IngestArtifactChunk(t.Context(), chunk2); err != nil {
 		t.Fatalf("second chunk should fit: %v", err)
 	}
 
@@ -458,7 +458,7 @@ func TestBufferedPolicy_ChunkBuffering_RespectsMaxBufferBytes(t *testing.T) {
 		Seq:        3,
 		Data:       make([]byte, 10),
 	}
-	err := pol.IngestArtifactChunk(context.Background(), chunk3)
+	err := pol.IngestArtifactChunk(t.Context(), chunk3)
 	if !errors.Is(err, policy.ErrBufferFull) {
 		t.Errorf("expected ErrBufferFull when chunk exceeds limit, got %v", err)
 	}
@@ -475,7 +475,7 @@ func TestBufferedPolicy_ChunkBuffering_SharedWithEvents(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Add an event (estimated ~200 bytes)
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
 
@@ -485,7 +485,7 @@ func TestBufferedPolicy_ChunkBuffering_SharedWithEvents(t *testing.T) {
 		Seq:        1,
 		Data:       make([]byte, 200),
 	}
-	if err := pol.IngestArtifactChunk(context.Background(), chunk1); err != nil {
+	if err := pol.IngestArtifactChunk(t.Context(), chunk1); err != nil {
 		t.Fatalf("chunk should fit: %v", err)
 	}
 
@@ -501,7 +501,7 @@ func TestBufferedPolicy_ChunkBuffering_SharedWithEvents(t *testing.T) {
 		Seq:        2,
 		Data:       make([]byte, 200),
 	}
-	err := pol.IngestArtifactChunk(context.Background(), chunk2)
+	err := pol.IngestArtifactChunk(t.Context(), chunk2)
 	if !errors.Is(err, policy.ErrBufferFull) {
 		t.Errorf("expected ErrBufferFull, got %v", err)
 	}
@@ -519,7 +519,7 @@ func TestBufferedPolicy_BufferSize_AccurateAfterChunkBuffering(t *testing.T) {
 			Seq:        int64(i + 1),
 			Data:       make([]byte, 100), // 100 bytes each
 		}
-		_ = pol.IngestArtifactChunk(context.Background(), chunk)
+		_ = pol.IngestArtifactChunk(t.Context(), chunk)
 	}
 
 	stats := pol.Stats()
@@ -534,18 +534,18 @@ func TestBufferedPolicy_BufferSize_AccurateAfterEviction(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Add a droppable event
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "log1", Type: types.EventTypeLog,
 	})
 	sizeAfterLog := pol.Stats().BufferSize
 
 	// Add non-droppable to fill
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
 
 	// Add another non-droppable - should evict log
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
 
@@ -564,7 +564,7 @@ func TestBufferedPolicy_FlushFailure_PreservesEventBuffer(t *testing.T) {
 
 	// Buffer events
 	for i := 1; i <= 3; i++ {
-		_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+		_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 			EventID: "e" + string(rune('0'+i)),
 			Type:    types.EventTypeItem,
 			Seq:     int64(i),
@@ -575,7 +575,7 @@ func TestBufferedPolicy_FlushFailure_PreservesEventBuffer(t *testing.T) {
 	sink.ErrorOnWrite = errors.New("write failed")
 
 	// Flush should fail
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail")
 	}
@@ -588,7 +588,7 @@ func TestBufferedPolicy_FlushFailure_PreservesEventBuffer(t *testing.T) {
 
 	// Fix sink and retry flush
 	sink.ErrorOnWrite = nil
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry flush failed: %v", err)
 	}
 
@@ -605,7 +605,7 @@ func TestBufferedPolicy_FlushFailure_PreservesChunkBuffer(t *testing.T) {
 
 	// Buffer chunks only (no events to avoid partial success complexity)
 	for i := 0; i < 3; i++ {
-		_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+		_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 			ArtifactID: "a1",
 			Seq:        int64(i + 1),
 			Data:       []byte("data"),
@@ -616,7 +616,7 @@ func TestBufferedPolicy_FlushFailure_PreservesChunkBuffer(t *testing.T) {
 	sink.ErrorOnWrite = errors.New("write failed")
 
 	// Flush should fail
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail")
 	}
@@ -629,7 +629,7 @@ func TestBufferedPolicy_FlushFailure_PreservesChunkBuffer(t *testing.T) {
 
 	// Fix sink and retry flush
 	sink.ErrorOnWrite = nil
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry flush failed: %v", err)
 	}
 
@@ -645,10 +645,10 @@ func TestBufferedPolicy_BufferSize_ZeroAfterSuccessfulFlush(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer mixed data
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
@@ -658,7 +658,7 @@ func TestBufferedPolicy_BufferSize_ZeroAfterSuccessfulFlush(t *testing.T) {
 	}
 
 	// Successful flush
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
 
@@ -676,7 +676,7 @@ func TestBufferedPolicy_ChunksPersisted_IncrementedAfterFlush(t *testing.T) {
 
 	// Buffer chunks
 	for i := 0; i < 5; i++ {
-		_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+		_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 			ArtifactID: "a1",
 			Seq:        int64(i + 1),
 			Data:       []byte("data"),
@@ -690,7 +690,7 @@ func TestBufferedPolicy_ChunksPersisted_IncrementedAfterFlush(t *testing.T) {
 	}
 
 	// Flush
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
 
@@ -708,10 +708,10 @@ func TestBufferedPolicy_EvictionRechecksByteLimit(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Fill with 1 small droppable + 1 item (under byte limit)
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "log1", Type: types.EventTypeLog, // ~200 bytes
 	})
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem, // ~200 bytes, total ~400
 	})
 
@@ -719,7 +719,7 @@ func TestBufferedPolicy_EvictionRechecksByteLimit(t *testing.T) {
 	// Adding another ~200 byte event would exceed byte limit (400 + 200 = 600 > 450)
 	// Even after evicting log (~200 bytes), new total would be 200 + 200 = 400, which fits
 
-	err := pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	err := pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
 	if err != nil {
@@ -739,7 +739,7 @@ func TestBufferedPolicy_EventExceedsByteLimitAlone(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Single event is ~200 bytes which exceeds 100 byte limit
-	err := pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	err := pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
 	if !errors.Is(err, policy.ErrBufferFull) {
@@ -753,10 +753,10 @@ func TestBufferedPolicy_FlushFailure_ChunkWriteFail_PreservesBothBuffers(t *test
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer both events and chunks
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("chunk-data"),
 	})
 
@@ -767,7 +767,7 @@ func TestBufferedPolicy_FlushFailure_ChunkWriteFail_PreservesBothBuffers(t *test
 	// Actually StubSink.ErrorOnWrite affects all writes. Let's just verify buffer preservation.
 
 	// For this test, we'll make both fail
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail")
 	}
@@ -780,7 +780,7 @@ func TestBufferedPolicy_FlushFailure_ChunkWriteFail_PreservesBothBuffers(t *test
 
 	// Fix sink and retry
 	sink.ErrorOnWrite = nil
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry flush failed: %v", err)
 	}
 
@@ -805,7 +805,7 @@ func TestBufferedPolicy_ChunkBuffering_RequiresByteLimit(t *testing.T) {
 		Seq:        1,
 		Data:       []byte("data"),
 	}
-	err := pol.IngestArtifactChunk(context.Background(), chunk)
+	err := pol.IngestArtifactChunk(t.Context(), chunk)
 	if !errors.Is(err, policy.ErrBufferFull) {
 		t.Errorf("expected ErrBufferFull when chunk buffering without byte limit, got %v", err)
 	}
@@ -852,10 +852,10 @@ func TestBufferedPolicy_FlushAtLeastOnce_PreservesBuffersOnChunkFailure(t *testi
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
@@ -863,7 +863,7 @@ func TestBufferedPolicy_FlushAtLeastOnce_PreservesBuffersOnChunkFailure(t *testi
 	sink.ErrorOnWrite = errors.New("write failed")
 
 	// Flush fails
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail")
 	}
@@ -876,7 +876,7 @@ func TestBufferedPolicy_FlushAtLeastOnce_PreservesBuffersOnChunkFailure(t *testi
 
 	// Retry succeeds and writes duplicates (events written twice is acceptable)
 	sink.ErrorOnWrite = nil
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry failed: %v", err)
 	}
 
@@ -898,10 +898,10 @@ func TestBufferedPolicy_FlushChunksFirst_NoEventsOnChunkFailure(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
@@ -909,7 +909,7 @@ func TestBufferedPolicy_FlushChunksFirst_NoEventsOnChunkFailure(t *testing.T) {
 	sink.ErrorOnWrite = errors.New("chunk write failed")
 
 	// Flush fails on chunks
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail")
 	}
@@ -935,15 +935,15 @@ func TestBufferedPolicy_FlushTwoPhase_NoEventDuplicatesOnRetry(t *testing.T) {
 	pol := mustNewBufferedPolicy(t, sink, config)
 
 	// Buffer event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
 	// First flush attempt - should succeed
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("first flush should succeed: %v", err)
 	}
 
@@ -953,15 +953,15 @@ func TestBufferedPolicy_FlushTwoPhase_NoEventDuplicatesOnRetry(t *testing.T) {
 	}
 
 	// Buffer another event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a2", Seq: 1, Data: []byte("data2"),
 	})
 
 	// Second flush
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("second flush failed: %v", err)
 	}
 
@@ -989,15 +989,15 @@ func TestBufferedPolicy_FlushTwoPhase_ChunksNotRewrittenOnEventFailure(t *testin
 	pol, _ := policy.NewBufferedPolicy(failingSink, config)
 
 	// Buffer event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
 	// First flush: chunks succeed, events fail
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail on events")
 	}
@@ -1016,7 +1016,7 @@ func TestBufferedPolicy_FlushTwoPhase_ChunksNotRewrittenOnEventFailure(t *testin
 	failingSink.failOnEvents = false
 
 	// Retry flush
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry should succeed: %v", err)
 	}
 
@@ -1071,15 +1071,15 @@ func TestBufferedPolicy_FlushTwoPhase_NewEventsAfterEventFailureAreWritten(t *te
 	pol, _ := policy.NewBufferedPolicy(failingSink, config)
 
 	// Buffer initial event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
 	// First flush: chunks succeed, events fail
-	err := pol.Flush(context.Background())
+	err := pol.Flush(t.Context())
 	if err == nil {
 		t.Fatal("expected flush to fail on events")
 	}
@@ -1095,13 +1095,13 @@ func TestBufferedPolicy_FlushTwoPhase_NewEventsAfterEventFailureAreWritten(t *te
 	}
 
 	// Add a NEW event after the partial flush
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
 
 	// Fix events and retry
 	failingSink.failOnEvents = false
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry should succeed: %v", err)
 	}
 
@@ -1144,7 +1144,7 @@ func TestBufferedPolicy_FlushTwoPhase_NewChunksAfterEventFailureAreWritten(t *te
 	}
 	pol, _ := policy.NewBufferedPolicy(failingSink, config)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Buffer initial event and chunk
 	_ = pol.IngestEvent(ctx, &types.EventEnvelope{
@@ -1214,18 +1214,18 @@ func TestBufferedPolicy_BufferSize_UpdatedWhenEventBufferNextCleared(t *testing.
 	pol, _ := policy.NewBufferedPolicy(failingSink, config)
 
 	// Buffer initial event and chunk
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: make([]byte, 100),
 	})
 
 	// First flush: events succeed, chunks fail
-	_ = pol.Flush(context.Background())
+	_ = pol.Flush(t.Context())
 
 	// Add event to eventBufferNext
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
 
@@ -1233,7 +1233,7 @@ func TestBufferedPolicy_BufferSize_UpdatedWhenEventBufferNextCleared(t *testing.
 
 	// Fix chunks and complete flush
 	failingSink.failOnChunks = false
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("retry should succeed: %v", err)
 	}
 
@@ -1260,29 +1260,29 @@ func TestBufferedPolicy_Eviction_ConsidersEventBufferNext(t *testing.T) {
 	pol, _ := policy.NewBufferedPolicy(failingSink, config)
 
 	// Buffer 2 NON-droppable events (so eventBuffer has no droppable to evict)
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e1", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e2", Type: types.EventTypeItem,
 	})
-	_ = pol.IngestArtifactChunk(context.Background(), &types.ArtifactChunk{
+	_ = pol.IngestArtifactChunk(t.Context(), &types.ArtifactChunk{
 		ArtifactID: "a1", Seq: 1, Data: []byte("data"),
 	})
 
 	// Flush: events succeed, chunks fail
 	// eventBuffer now marked as flushed
-	_ = pol.Flush(context.Background())
+	_ = pol.Flush(t.Context())
 
 	// Add a droppable to eventBufferNext
-	_ = pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "log1", Type: types.EventTypeLog, // droppable, goes to eventBufferNext
 	})
 
 	// Buffer is now at limit: 2 in eventBuffer + 1 in eventBufferNext = 3
 	// Try to add a non-droppable
 	// eventBuffer has no droppable, so must evict log1 from eventBufferNext
-	err := pol.IngestEvent(context.Background(), &types.EventEnvelope{
+	err := pol.IngestEvent(t.Context(), &types.EventEnvelope{
 		EventID: "e3", Type: types.EventTypeItem,
 	})
 	if err != nil {
@@ -1297,7 +1297,7 @@ func TestBufferedPolicy_Eviction_ConsidersEventBufferNext(t *testing.T) {
 
 	// Complete flush
 	failingSink.failOnChunks = false
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("flush should succeed: %v", err)
 	}
 
@@ -1341,7 +1341,7 @@ func TestBufferedPolicy_EventsWrittenInSequenceOrder(t *testing.T) {
 			}
 			pol := mustNewBufferedPolicy(t, sink, config)
 
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Ingest events in a specific sequence order
 			events := []*types.EventEnvelope{
@@ -1397,7 +1397,7 @@ func TestBufferedPolicy_AllEventsWrittenTogether(t *testing.T) {
 	config := policy.BufferedConfig{MaxBufferEvents: 100}
 	pol := mustNewBufferedPolicy(t, sink, config)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Mix regular events and artifact commits
 	_ = pol.IngestEvent(ctx, &types.EventEnvelope{EventID: "e1", Type: types.EventTypeItem, Seq: 1})
