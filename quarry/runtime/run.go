@@ -40,6 +40,10 @@ type RunConfig struct {
 	// ExecutorFactory overrides executor creation (for testing).
 	// If nil, uses NewExecutorManager.
 	ExecutorFactory ExecutorFactory
+	// Source is the partition key for origin system/provider.
+	Source string
+	// Category is the partition key for logical data type (default: "default").
+	Category string
 }
 
 // RunResult represents the result of a run.

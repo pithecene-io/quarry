@@ -76,6 +76,9 @@ var ErrInvalidFlushMode = errors.New("invalid flush mode")
 //   - Must NOT drop: item, artifact, checkpoint, run_error, run_complete
 //   - Batch writes on flush
 //   - Flush on run_complete, run_error, runtime termination
+//
+// The "chunks before commit" invariant is enforced by the Lode client,
+// not by reordering events in the policy. Events are written in seq order.
 type BufferedPolicy struct {
 	sink   Sink
 	config BufferedConfig
@@ -85,8 +88,10 @@ type BufferedPolicy struct {
 	eventBuffer     []*types.EventEnvelope
 	eventBufferNext []*types.EventEnvelope // TwoPhase: events added after eventsFlushed=true
 	chunkBuffer     []*types.ArtifactChunk
+	chunkBufferNext []*types.ArtifactChunk // TwoPhase: chunks added after chunksFlushed=true
 	bufferBytes     int64
-	eventsFlushed   bool // TwoPhase: eventBuffer written, awaiting chunk success
+	chunksFlushed   bool // TwoPhase: chunkBuffer written, awaiting events success
+	eventsFlushed   bool // TwoPhase: eventBuffer written, awaiting full success
 	stats           *statsRecorder
 }
 
@@ -117,6 +122,7 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 		eventBuffer:     make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
 		eventBufferNext: make([]*types.EventEnvelope, 0),
 		chunkBuffer:     make([]*types.ArtifactChunk, 0),
+		chunkBufferNext: make([]*types.ArtifactChunk, 0),
 		stats:           newStatsRecorder(),
 	}, nil
 }
@@ -180,6 +186,7 @@ func (p *BufferedPolicy) appendEvent(envelope *types.EventEnvelope, eventSize in
 // Artifact chunks are never dropped per CONTRACT_POLICY.md.
 // Returns error if chunk would exceed buffer limits (policy failure).
 // Requires MaxBufferBytes to be set; chunks cannot be bounded by event count alone.
+// In TwoPhase mode, chunks added after a partial flush go to chunkBufferNext.
 func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -200,7 +207,12 @@ func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.A
 		return fmt.Errorf("%w: chunk size %d would exceed buffer limit", ErrBufferFull, chunkSize)
 	}
 
-	p.chunkBuffer = append(p.chunkBuffer, chunk)
+	// In TwoPhase mode, route to chunkBufferNext if chunks already flushed
+	if p.config.FlushMode == FlushTwoPhase && p.chunksFlushed {
+		p.chunkBufferNext = append(p.chunkBufferNext, chunk)
+	} else {
+		p.chunkBuffer = append(p.chunkBuffer, chunk)
+	}
 	p.bufferBytes += chunkSize
 	p.stats.setBufferSizeLocked(p.bufferBytes)
 
@@ -220,7 +232,8 @@ func (p *BufferedPolicy) Flush(ctx context.Context) error {
 	}
 }
 
-// flushAtLeastOnce writes events then chunks; preserves all buffers on any failure.
+// flushAtLeastOnce writes chunks then events; preserves all buffers on any failure.
+// Chunks are written first to satisfy the "chunks before commit" invariant.
 func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
@@ -228,21 +241,7 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	chunks := p.chunkBuffer
 	p.mu.Unlock()
 
-	// Write events
-	if len(events) > 0 {
-		if err := p.sink.WriteEvents(ctx, events); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			p.mu.Unlock()
-			p.logFlushFailure("events", err)
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incEventsPersistedLocked(int64(len(events)))
-		p.mu.Unlock()
-	}
-
-	// Write chunks
+	// Write chunks first (required for "chunks before commit" invariant)
 	if len(chunks) > 0 {
 		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
 			p.mu.Lock()
@@ -257,6 +256,21 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
+	// Write events after chunks
+	if len(events) > 0 {
+		if err := p.sink.WriteEvents(ctx, events); err != nil {
+			p.mu.Lock()
+			p.stats.incErrorsLocked()
+			p.mu.Unlock()
+			p.logFlushFailure("events", err)
+			// Keep all buffers intact - prefer duplicates over loss
+			return err
+		}
+		p.mu.Lock()
+		p.stats.incEventsPersistedLocked(int64(len(events)))
+		p.mu.Unlock()
+	}
+
 	// Clear buffers only after full success
 	p.mu.Lock()
 	p.clearEventBuffer()
@@ -266,7 +280,8 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	return nil
 }
 
-// flushChunksFirst writes chunks before events; if chunks fail, events not written.
+// flushChunksFirst writes chunks, then events.
+// If chunks fail, events are not written.
 func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
@@ -313,15 +328,46 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 }
 
 // flushTwoPhase tracks per-buffer success to avoid duplicates on retry.
-// Handles events added after a partial flush via eventBufferNext.
+// Order: chunks → chunksNext → events → eventsNext (chunks first for "chunks before commit").
+// Handles chunks/events added after a partial flush via chunkBufferNext/eventBufferNext.
 func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	eventsNext := p.eventBufferNext
 	chunks := p.chunkBuffer
+	chunksNext := p.chunkBufferNext
+	chunksFlushed := p.chunksFlushed
 	eventsFlushed := p.eventsFlushed
 	p.mu.Unlock()
+
+	// Write original chunks first (required for "chunks before commit" invariant)
+	if len(chunks) > 0 && !chunksFlushed {
+		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
+			p.mu.Lock()
+			p.stats.incErrorsLocked()
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.incChunksPersistedLocked(int64(len(chunks)))
+		p.chunksFlushed = true
+		p.mu.Unlock()
+	}
+
+	// Write new chunks added after partial flush
+	if len(chunksNext) > 0 {
+		if err := p.sink.WriteChunks(ctx, chunksNext); err != nil {
+			p.mu.Lock()
+			p.stats.incErrorsLocked()
+			p.mu.Unlock()
+			return err
+		}
+		p.mu.Lock()
+		p.stats.incChunksPersistedLocked(int64(len(chunksNext)))
+		p.clearChunkBufferNext()
+		p.mu.Unlock()
+	}
 
 	// Write original events if not already flushed
 	if len(events) > 0 && !eventsFlushed {
@@ -333,7 +379,7 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 		}
 		p.mu.Lock()
 		p.stats.incEventsPersistedLocked(int64(len(events)))
-		p.eventsFlushed = true // Mark original events as written
+		p.eventsFlushed = true
 		p.mu.Unlock()
 	}
 
@@ -350,27 +396,13 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
-	// Write chunks
-	if len(chunks) > 0 {
-		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			// Events written; eventsFlushed remains true
-			// Clear eventBufferNext and update buffer accounting
-			p.clearEventBufferNext()
-			p.mu.Unlock()
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incChunksPersistedLocked(int64(len(chunks)))
-		p.mu.Unlock()
-	}
-
 	// Clear all buffers and reset state after full success
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearEventBufferNext()
 	p.clearChunkBuffer()
+	p.clearChunkBufferNext()
+	p.chunksFlushed = false
 	p.eventsFlushed = false
 	p.mu.Unlock()
 
@@ -395,6 +427,12 @@ func (p *BufferedPolicy) clearChunkBuffer() {
 	p.recalculateBufferBytes()
 }
 
+// clearChunkBufferNext resets the next chunk buffer (TwoPhase). Caller must hold mu.
+func (p *BufferedPolicy) clearChunkBufferNext() {
+	p.chunkBufferNext = make([]*types.ArtifactChunk, 0)
+	p.recalculateBufferBytes()
+}
+
 // recalculateBufferBytes recalculates bufferBytes from all buffers. Caller must hold mu.
 func (p *BufferedPolicy) recalculateBufferBytes() {
 	var total int64
@@ -405,6 +443,9 @@ func (p *BufferedPolicy) recalculateBufferBytes() {
 		total += p.estimateEventSize(event)
 	}
 	for _, chunk := range p.chunkBuffer {
+		total += int64(len(chunk.Data))
+	}
+	for _, chunk := range p.chunkBufferNext {
 		total += int64(len(chunk.Data))
 	}
 	p.bufferBytes = total
@@ -431,7 +472,7 @@ func (p *BufferedPolicy) Stats() Stats {
 
 // hasRoomForEvent checks if the buffer can accept an event of the given size.
 func (p *BufferedPolicy) hasRoomForEvent(eventSize int64) bool {
-	// Check event count limit (both buffers combined for TwoPhase)
+	// Check event count limit (all event buffers combined)
 	totalEvents := len(p.eventBuffer) + len(p.eventBufferNext)
 	if p.config.MaxBufferEvents > 0 && totalEvents >= p.config.MaxBufferEvents {
 		return false

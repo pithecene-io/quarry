@@ -3,9 +3,43 @@ package lode
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/justapithecus/quarry/types"
 )
+
+func TestDeriveDay(t *testing.T) {
+	tests := []struct {
+		name      string
+		startTime time.Time
+		want      string
+	}{
+		{
+			name:      "UTC time",
+			startTime: time.Date(2026, 2, 3, 14, 30, 0, 0, time.UTC),
+			want:      "2026-02-03",
+		},
+		{
+			name:      "Non-UTC time converts to UTC",
+			startTime: time.Date(2026, 2, 3, 22, 0, 0, 0, time.FixedZone("EST", -5*3600)),
+			want:      "2026-02-04", // 22:00 EST = 03:00 UTC next day
+		},
+		{
+			name:      "Single digit month and day",
+			startTime: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC),
+			want:      "2026-01-05",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DeriveDay(tt.startTime)
+			if got != tt.want {
+				t.Errorf("DeriveDay() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestSink_WriteEvents(t *testing.T) {
 	client := NewStubClient()

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/runtime"
@@ -69,6 +70,17 @@ func RunCommand() *cli.Command {
 				Name:  "quiet",
 				Usage: "Suppress result output",
 			},
+			// Partition key flags
+			&cli.StringFlag{
+				Name:     "source",
+				Usage:    "Source identifier for partitioning (required)",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "category",
+				Usage: "Category identifier for partitioning",
+				Value: "default",
+			},
 			// Policy flags
 			&cli.StringFlag{
 				Name:  "policy",
@@ -115,6 +127,21 @@ func RunCommand() *cli.Command {
 				Name:  "proxy-origin",
 				Usage: "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)",
 			},
+			// Storage flags
+			&cli.StringFlag{
+				Name:     "storage-backend",
+				Usage:    "Storage backend: fs or s3",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "storage-path",
+				Usage:    "Storage path (fs: directory, s3: bucket/prefix)",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "storage-region",
+				Usage: "AWS region for S3 backend (optional, uses default chain)",
+			},
 		},
 		Action: runAction,
 	}
@@ -136,6 +163,13 @@ type proxyChoice struct {
 	stickyKey  string
 	domain     string
 	origin     string
+}
+
+// storageChoice holds parsed storage configuration.
+type storageChoice struct {
+	backend string // "fs" or "s3"
+	path    string // fs: directory, s3: bucket/prefix
+	region  string // AWS region for S3 (optional)
 }
 
 func runAction(c *cli.Context) error {
@@ -170,8 +204,17 @@ func runAction(c *cli.Context) error {
 		runMeta.ParentRunID = &parentRunID
 	}
 
-	// Build policy
-	pol, err := buildPolicy(choice)
+	// Parse storage config
+	storageConfig := storageChoice{
+		backend: c.String("storage-backend"),
+		path:    c.String("storage-path"),
+		region:  c.String("storage-region"),
+	}
+
+	// Build policy with storage sink
+	// Start time is "now" - used to derive partition day
+	startTime := time.Now()
+	pol, err := buildPolicy(choice, storageConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -205,6 +248,8 @@ func runAction(c *cli.Context) error {
 		RunMeta:      runMeta,
 		Policy:       pol,
 		Proxy:        resolvedProxy,
+		Source:       c.String("source"),
+		Category:     c.String("category"),
 	}
 
 	// Create orchestrator
@@ -224,8 +269,7 @@ func runAction(c *cli.Context) error {
 		cancel()
 	}()
 
-	// Execute run
-	startTime := time.Now()
+	// Execute run (startTime was set earlier for Lode day derivation)
 	result, err := orchestrator.Execute(ctx)
 	if err != nil {
 		return fmt.Errorf("execution failed: %w", err)
@@ -264,8 +308,12 @@ func validatePolicyConfig(choice policyChoice) error {
 	}
 }
 
-func buildPolicy(choice policyChoice) (policy.Policy, error) {
-	sink := policy.NewStubSink()
+func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {
+	// Build storage sink
+	sink, err := buildStorageSink(storageConfig, source, category, runID, startTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create storage sink: %w", err)
+	}
 
 	switch choice.name {
 	case "strict":
@@ -282,6 +330,43 @@ func buildPolicy(choice policyChoice) (policy.Policy, error) {
 	default:
 		return nil, fmt.Errorf("unknown policy: %s", choice.name)
 	}
+}
+
+// buildStorageSink creates a Lode storage sink based on CLI configuration.
+// Storage backend and path are required - no silent fallback to stub.
+func buildStorageSink(storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Sink, error) {
+	// Build Lode config with partition keys
+	cfg := lode.Config{
+		Dataset:  "quarry",
+		Source:   source,
+		Category: category,
+		Day:      lode.DeriveDay(startTime),
+		RunID:    runID,
+	}
+
+	var client lode.Client
+	var err error
+
+	switch storageConfig.backend {
+	case "fs":
+		client, err = lode.NewLodeClient(cfg, storageConfig.path)
+	case "s3":
+		bucket, prefix := lode.ParseS3Path(storageConfig.path)
+		s3cfg := lode.S3Config{
+			Bucket: bucket,
+			Prefix: prefix,
+			Region: storageConfig.region,
+		}
+		client, err = lode.NewLodeS3Client(cfg, s3cfg)
+	default:
+		return nil, fmt.Errorf("unknown storage-backend: %s (must be fs or s3)", storageConfig.backend)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return lode.NewSink(cfg, client), nil
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {
