@@ -20,6 +20,7 @@ remain immutable once written.
 
 ## Partitioning Semantics (Informational)
 
+- Lode dataset ID is fixed to `quarry` (global container).
 - `source` is the origin system/provider (required).
 - `category` is the logical data type within a source (required).
   For one-to-one sources, use `category=default`.

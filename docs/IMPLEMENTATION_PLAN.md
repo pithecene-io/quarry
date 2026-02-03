@@ -124,7 +124,7 @@ Defines:
 
 #### 0.5.5 Lode Expectations (`docs/contracts/CONTRACT_LODE.md`)
 Defines Quarry’s **minimal expectations** of Lode:
-- Required partition keys (e.g. dataset / run_id / event_type)
+- Required partition keys (source / category / day / run_id / event_type)
 - Append-only semantics
 - Policy-independent layout invariants
 - Concrete meaning of “consistency across policies”
