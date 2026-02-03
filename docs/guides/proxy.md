@@ -69,8 +69,11 @@ You can also select proxies directly from the CLI using a JSON config file:
 
 ```
 quarry run \
-  --script ./examples/demo.js \
+  --script ./examples/demo.ts \
   --run-id run-001 \
+  --source demo \
+  --storage-backend fs \
+  --storage-path ./quarry-data \
   --proxy-config ./proxies.json \
   --proxy-pool residential_sticky \
   --proxy-domain example.com \
