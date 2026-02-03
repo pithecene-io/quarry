@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/runtime"
@@ -163,6 +164,13 @@ type proxyChoice struct {
 	origin     string
 }
 
+// lodeChoice holds parsed Lode storage configuration.
+type lodeChoice struct {
+	backend  string // "fs" or "s3"
+	path     string // fs: directory, s3: bucket/prefix
+	s3Region string
+}
+
 func runAction(c *cli.Context) error {
 	// Parse policy config
 	choice := policyChoice{
@@ -195,8 +203,17 @@ func runAction(c *cli.Context) error {
 		runMeta.ParentRunID = &parentRunID
 	}
 
-	// Build policy
-	pol, err := buildPolicy(choice)
+	// Parse Lode config
+	lodeConfig := lodeChoice{
+		backend:  c.String("lode-backend"),
+		path:     c.String("lode-path"),
+		s3Region: c.String("lode-s3-region"),
+	}
+
+	// Build policy with Lode sink
+	// Start time is "now" - used to derive partition day
+	startTime := time.Now()
+	pol, err := buildPolicy(choice, lodeConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -251,8 +268,7 @@ func runAction(c *cli.Context) error {
 		cancel()
 	}()
 
-	// Execute run
-	startTime := time.Now()
+	// Execute run (startTime was set earlier for Lode day derivation)
 	result, err := orchestrator.Execute(ctx)
 	if err != nil {
 		return fmt.Errorf("execution failed: %w", err)
@@ -291,8 +307,12 @@ func validatePolicyConfig(choice policyChoice) error {
 	}
 }
 
-func buildPolicy(choice policyChoice) (policy.Policy, error) {
-	sink := policy.NewStubSink()
+func buildPolicy(choice policyChoice, lodeConfig lodeChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {
+	// Build Lode sink
+	sink, err := buildLodeSink(lodeConfig, source, category, runID, startTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Lode sink: %w", err)
+	}
 
 	switch choice.name {
 	case "strict":
@@ -309,6 +329,48 @@ func buildPolicy(choice policyChoice) (policy.Policy, error) {
 	default:
 		return nil, fmt.Errorf("unknown policy: %s", choice.name)
 	}
+}
+
+// buildLodeSink creates a Lode sink based on CLI configuration.
+// Returns StubSink if --lode-path is not specified (for backwards compatibility).
+func buildLodeSink(lodeConfig lodeChoice, source, category, runID string, startTime time.Time) (policy.Sink, error) {
+	// If no path specified, use stub sink (backwards compatible)
+	if lodeConfig.path == "" {
+		return policy.NewStubSink(), nil
+	}
+
+	// Build Lode config with partition keys
+	cfg := lode.Config{
+		Dataset:  "quarry",
+		Source:   source,
+		Category: category,
+		Day:      lode.DeriveDay(startTime),
+		RunID:    runID,
+	}
+
+	var client lode.Client
+	var err error
+
+	switch lodeConfig.backend {
+	case "fs", "":
+		client, err = lode.NewLodeClient(cfg, lodeConfig.path)
+	case "s3":
+		bucket, prefix := lode.ParseS3Path(lodeConfig.path)
+		s3cfg := lode.S3Config{
+			Bucket: bucket,
+			Prefix: prefix,
+			Region: lodeConfig.s3Region,
+		}
+		client, err = lode.NewLodeS3Client(cfg, s3cfg)
+	default:
+		return nil, fmt.Errorf("unknown lode-backend: %s (must be fs or s3)", lodeConfig.backend)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return lode.NewSink(cfg, client), nil
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {

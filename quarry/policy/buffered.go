@@ -77,22 +77,20 @@ var ErrInvalidFlushMode = errors.New("invalid flush mode")
 //   - Batch writes on flush
 //   - Flush on run_complete, run_error, runtime termination
 //
-// Artifact commit events are stored in a dedicated buffer to ensure they
-// are always written AFTER chunks, regardless of flush mode. This enforces
-// the "chunks before commit" invariant per CONTRACT_LODE.md.
+// The "chunks before commit" invariant is enforced by the Lode client,
+// not by reordering events in the policy. Events are written in seq order.
 type BufferedPolicy struct {
 	sink   Sink
 	config BufferedConfig
 	logger *log.Logger
 
-	mu                   sync.Mutex // guards buffer state only
-	eventBuffer          []*types.EventEnvelope
-	eventBufferNext      []*types.EventEnvelope // TwoPhase: events added after eventsFlushed=true
-	artifactCommitBuffer []*types.EventEnvelope // artifact commit events (written last)
-	chunkBuffer          []*types.ArtifactChunk
-	bufferBytes          int64
-	eventsFlushed        bool // TwoPhase: eventBuffer written, awaiting chunk success
-	stats                *statsRecorder
+	mu              sync.Mutex // guards buffer state only
+	eventBuffer     []*types.EventEnvelope
+	eventBufferNext []*types.EventEnvelope // TwoPhase: events added after eventsFlushed=true
+	chunkBuffer     []*types.ArtifactChunk
+	bufferBytes     int64
+	eventsFlushed   bool // TwoPhase: eventBuffer written, awaiting chunk success
+	stats           *statsRecorder
 }
 
 // NewBufferedPolicy creates a new buffered policy.
@@ -116,14 +114,13 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 	}
 
 	return &BufferedPolicy{
-		sink:                 sink,
-		config:               config,
-		logger:               config.Logger,
-		eventBuffer:          make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
-		eventBufferNext:      make([]*types.EventEnvelope, 0),
-		artifactCommitBuffer: make([]*types.EventEnvelope, 0),
-		chunkBuffer:          make([]*types.ArtifactChunk, 0),
-		stats:                newStatsRecorder(),
+		sink:            sink,
+		config:          config,
+		logger:          config.Logger,
+		eventBuffer:     make([]*types.EventEnvelope, 0, max(config.MaxBufferEvents, 100)),
+		eventBufferNext: make([]*types.EventEnvelope, 0),
+		chunkBuffer:     make([]*types.ArtifactChunk, 0),
+		stats:           newStatsRecorder(),
 	}, nil
 }
 
@@ -133,9 +130,6 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 //   - If incoming event is droppable: drop it, record in stats
 //   - If incoming event is non-droppable and buffer has droppable events: drop oldest droppable
 //   - If incoming event is non-droppable and no droppable events: return error (fail run)
-//
-// Artifact commit events (type=artifact) are routed to a dedicated buffer
-// to ensure they are always written after chunks per CONTRACT_LODE.md.
 //
 // In TwoPhase mode, events added after a partial flush go to eventBufferNext.
 func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
@@ -173,13 +167,9 @@ func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventE
 }
 
 // appendEvent adds an event to the appropriate buffer. Caller must hold mu.
-// Artifact commit events go to the dedicated artifactCommitBuffer.
-// In TwoPhase mode with eventsFlushed=true, regular events go to eventBufferNext.
+// In TwoPhase mode with eventsFlushed=true, appends to eventBufferNext.
 func (p *BufferedPolicy) appendEvent(envelope *types.EventEnvelope, eventSize int64) {
-	// Route artifact commits to dedicated buffer (always written last)
-	if envelope.Type == types.EventTypeArtifact {
-		p.artifactCommitBuffer = append(p.artifactCommitBuffer, envelope)
-	} else if p.config.FlushMode == FlushTwoPhase && p.eventsFlushed {
+	if p.config.FlushMode == FlushTwoPhase && p.eventsFlushed {
 		// Events added after partial flush go to next buffer
 		p.eventBufferNext = append(p.eventBufferNext, envelope)
 	} else {
@@ -233,17 +223,15 @@ func (p *BufferedPolicy) Flush(ctx context.Context) error {
 	}
 }
 
-// flushAtLeastOnce writes events, chunks, then artifact commits; preserves all buffers on any failure.
-// Order: regular events → chunks → artifact commits (commits always last per CONTRACT_LODE.md)
+// flushAtLeastOnce writes events then chunks; preserves all buffers on any failure.
 func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	chunks := p.chunkBuffer
-	artifactCommits := p.artifactCommitBuffer
 	p.mu.Unlock()
 
-	// Write regular events first
+	// Write events
 	if len(events) > 0 {
 		if err := p.sink.WriteEvents(ctx, events); err != nil {
 			p.mu.Lock()
@@ -272,40 +260,22 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
-	// Write artifact commits LAST (after chunks per CONTRACT_LODE.md)
-	if len(artifactCommits) > 0 {
-		if err := p.sink.WriteEvents(ctx, artifactCommits); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			p.mu.Unlock()
-			p.logFlushFailure("artifact_commits", err)
-			// Keep all buffers intact - prefer duplicates over loss
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incEventsPersistedLocked(int64(len(artifactCommits)))
-		p.mu.Unlock()
-	}
-
 	// Clear buffers only after full success
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearChunkBuffer()
-	p.clearArtifactCommitBuffer()
 	p.mu.Unlock()
 
 	return nil
 }
 
-// flushChunksFirst writes chunks, then regular events, then artifact commits.
-// Order: chunks → regular events → artifact commits (commits always last per CONTRACT_LODE.md)
-// If chunks fail, nothing else is written.
+// flushChunksFirst writes chunks, then events.
+// If chunks fail, events are not written.
 func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
 	events := p.eventBuffer
 	chunks := p.chunkBuffer
-	artifactCommits := p.artifactCommitBuffer
 	p.mu.Unlock()
 
 	// Write chunks first
@@ -322,7 +292,7 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
-	// Write regular events after chunks succeed
+	// Write events after chunks succeed
 	if len(events) > 0 {
 		if err := p.sink.WriteEvents(ctx, events); err != nil {
 			p.mu.Lock()
@@ -337,34 +307,16 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
-	// Write artifact commits LAST (after chunks per CONTRACT_LODE.md)
-	if len(artifactCommits) > 0 {
-		if err := p.sink.WriteEvents(ctx, artifactCommits); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			// Chunks and events succeeded - clear them
-			p.clearChunkBuffer()
-			p.clearEventBuffer()
-			p.mu.Unlock()
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incEventsPersistedLocked(int64(len(artifactCommits)))
-		p.mu.Unlock()
-	}
-
 	// Clear all buffers after full success
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearChunkBuffer()
-	p.clearArtifactCommitBuffer()
 	p.mu.Unlock()
 
 	return nil
 }
 
 // flushTwoPhase tracks per-buffer success to avoid duplicates on retry.
-// Order: regular events → chunks → artifact commits (commits always last per CONTRACT_LODE.md)
 // Handles events added after a partial flush via eventBufferNext.
 func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	p.mu.Lock()
@@ -372,7 +324,6 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	events := p.eventBuffer
 	eventsNext := p.eventBufferNext
 	chunks := p.chunkBuffer
-	artifactCommits := p.artifactCommitBuffer
 	eventsFlushed := p.eventsFlushed
 	p.mu.Unlock()
 
@@ -419,28 +370,11 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 		p.mu.Unlock()
 	}
 
-	// Write artifact commits LAST (after chunks per CONTRACT_LODE.md)
-	if len(artifactCommits) > 0 {
-		if err := p.sink.WriteEvents(ctx, artifactCommits); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			// Clear successfully written buffers
-			p.clearEventBufferNext()
-			p.clearChunkBuffer()
-			p.mu.Unlock()
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incEventsPersistedLocked(int64(len(artifactCommits)))
-		p.mu.Unlock()
-	}
-
 	// Clear all buffers and reset state after full success
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearEventBufferNext()
 	p.clearChunkBuffer()
-	p.clearArtifactCommitBuffer()
 	p.eventsFlushed = false
 	p.mu.Unlock()
 
@@ -465,12 +399,6 @@ func (p *BufferedPolicy) clearChunkBuffer() {
 	p.recalculateBufferBytes()
 }
 
-// clearArtifactCommitBuffer resets the artifact commit buffer. Caller must hold mu.
-func (p *BufferedPolicy) clearArtifactCommitBuffer() {
-	p.artifactCommitBuffer = make([]*types.EventEnvelope, 0)
-	p.recalculateBufferBytes()
-}
-
 // recalculateBufferBytes recalculates bufferBytes from all buffers. Caller must hold mu.
 func (p *BufferedPolicy) recalculateBufferBytes() {
 	var total int64
@@ -478,9 +406,6 @@ func (p *BufferedPolicy) recalculateBufferBytes() {
 		total += p.estimateEventSize(event)
 	}
 	for _, event := range p.eventBufferNext {
-		total += p.estimateEventSize(event)
-	}
-	for _, event := range p.artifactCommitBuffer {
 		total += p.estimateEventSize(event)
 	}
 	for _, chunk := range p.chunkBuffer {
@@ -511,7 +436,7 @@ func (p *BufferedPolicy) Stats() Stats {
 // hasRoomForEvent checks if the buffer can accept an event of the given size.
 func (p *BufferedPolicy) hasRoomForEvent(eventSize int64) bool {
 	// Check event count limit (all event buffers combined)
-	totalEvents := len(p.eventBuffer) + len(p.eventBufferNext) + len(p.artifactCommitBuffer)
+	totalEvents := len(p.eventBuffer) + len(p.eventBufferNext)
 	if p.config.MaxBufferEvents > 0 && totalEvents >= p.config.MaxBufferEvents {
 		return false
 	}

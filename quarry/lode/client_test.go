@@ -164,6 +164,49 @@ func TestLodeClient_ChunkOffset(t *testing.T) {
 	}
 }
 
+func TestLodeClient_ChunkOffset_AcrossBatches(t *testing.T) {
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test-source",
+		Category: "test-category",
+		Day:      "2026-02-03",
+		RunID:    "run-123",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// First batch: 10 bytes for art-1
+	batch1 := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 1, Data: []byte("0123456789")}, // 10 bytes
+	}
+	if err := client.WriteChunks(ctx, cfg.Dataset, cfg.RunID, batch1); err != nil {
+		t.Fatalf("WriteChunks batch 1 failed: %v", err)
+	}
+
+	// Verify offset tracked
+	if client.offsets["art-1"] != 10 {
+		t.Errorf("after batch 1: offset = %d, want 10", client.offsets["art-1"])
+	}
+
+	// Second batch: 5 more bytes for art-1
+	batch2 := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 2, IsLast: true, Data: []byte("abcde")}, // 5 bytes
+	}
+	if err := client.WriteChunks(ctx, cfg.Dataset, cfg.RunID, batch2); err != nil {
+		t.Fatalf("WriteChunks batch 2 failed: %v", err)
+	}
+
+	// Verify cumulative offset
+	if client.offsets["art-1"] != 15 {
+		t.Errorf("after batch 2: offset = %d, want 15", client.offsets["art-1"])
+	}
+}
+
 func TestComputeMD5(t *testing.T) {
 	data := []byte("hello world")
 	got := computeMD5(data)

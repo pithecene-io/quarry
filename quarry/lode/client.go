@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"sync"
 
 	"github.com/justapithecus/lode/lode"
 	"github.com/justapithecus/quarry/types"
@@ -18,6 +19,9 @@ const checksumEnabled = false
 type LodeClient struct {
 	dataset lode.Dataset
 	config  Config
+
+	mu      sync.Mutex       // guards chunkOffsets
+	offsets map[string]int64 // cumulative offset per artifact across batches
 }
 
 // NewLodeClient creates a new Lode client with filesystem storage.
@@ -42,6 +46,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 	return &LodeClient{
 		dataset: ds,
 		config:  cfg,
+		offsets: make(map[string]int64),
 	}, nil
 }
 
@@ -71,19 +76,19 @@ func (c *LodeClient) WriteEvents(ctx context.Context, dataset, runID string, eve
 
 // WriteChunks writes a batch of artifact chunks to Lode.
 // Chunks are written to event_type=artifact partition with record_kind=artifact_chunk.
-// Offset is computed cumulatively within the batch.
+// Offset is computed cumulatively across batches per artifact.
 func (c *LodeClient) WriteChunks(ctx context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	records := make([]any, 0, len(chunks))
 
-	// Track offset per artifact within this batch
-	offsets := make(map[string]int64)
-
 	for _, chunk := range chunks {
-		offset := offsets[chunk.ArtifactID]
+		offset := c.offsets[chunk.ArtifactID]
 		record := toChunkRecordMap(chunk, offset, c.config)
 
 		// Add checksum if enabled
@@ -94,7 +99,7 @@ func (c *LodeClient) WriteChunks(ctx context.Context, dataset, runID string, chu
 		}
 
 		records = append(records, record)
-		offsets[chunk.ArtifactID] = offset + int64(len(chunk.Data))
+		c.offsets[chunk.ArtifactID] = offset + int64(len(chunk.Data))
 	}
 
 	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
