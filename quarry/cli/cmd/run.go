@@ -127,18 +127,19 @@ func RunCommand() *cli.Command {
 				Name:  "proxy-origin",
 				Usage: "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)",
 			},
-			// Lode storage flags
+			// Storage flags
 			&cli.StringFlag{
-				Name:  "lode-backend",
-				Usage: "Lode storage backend: fs or s3 (experimental)",
-				Value: "fs",
+				Name:     "storage-backend",
+				Usage:    "Storage backend: fs or s3",
+				Required: true,
 			},
 			&cli.StringFlag{
-				Name:  "lode-path",
-				Usage: "Lode storage path (fs: directory, s3: bucket/prefix)",
+				Name:     "storage-path",
+				Usage:    "Storage path (fs: directory, s3: bucket/prefix)",
+				Required: true,
 			},
 			&cli.StringFlag{
-				Name:  "lode-s3-region",
+				Name:  "storage-region",
 				Usage: "AWS region for S3 backend (optional, uses default chain)",
 			},
 		},
@@ -164,11 +165,11 @@ type proxyChoice struct {
 	origin     string
 }
 
-// lodeChoice holds parsed Lode storage configuration.
-type lodeChoice struct {
-	backend  string // "fs" or "s3"
-	path     string // fs: directory, s3: bucket/prefix
-	s3Region string
+// storageChoice holds parsed storage configuration.
+type storageChoice struct {
+	backend string // "fs" or "s3"
+	path    string // fs: directory, s3: bucket/prefix
+	region  string // AWS region for S3 (optional)
 }
 
 func runAction(c *cli.Context) error {
@@ -203,17 +204,17 @@ func runAction(c *cli.Context) error {
 		runMeta.ParentRunID = &parentRunID
 	}
 
-	// Parse Lode config
-	lodeConfig := lodeChoice{
-		backend:  c.String("lode-backend"),
-		path:     c.String("lode-path"),
-		s3Region: c.String("lode-s3-region"),
+	// Parse storage config
+	storageConfig := storageChoice{
+		backend: c.String("storage-backend"),
+		path:    c.String("storage-path"),
+		region:  c.String("storage-region"),
 	}
 
-	// Build policy with Lode sink
+	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, err := buildPolicy(choice, lodeConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime)
+	pol, err := buildPolicy(choice, storageConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -307,11 +308,11 @@ func validatePolicyConfig(choice policyChoice) error {
 	}
 }
 
-func buildPolicy(choice policyChoice, lodeConfig lodeChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {
-	// Build Lode sink
-	sink, err := buildLodeSink(lodeConfig, source, category, runID, startTime)
+func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {
+	// Build storage sink
+	sink, err := buildStorageSink(storageConfig, source, category, runID, startTime)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Lode sink: %w", err)
+		return nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
 
 	switch choice.name {
@@ -331,14 +332,9 @@ func buildPolicy(choice policyChoice, lodeConfig lodeChoice, source, category, r
 	}
 }
 
-// buildLodeSink creates a Lode sink based on CLI configuration.
-// Returns StubSink if --lode-path is not specified (for backwards compatibility).
-func buildLodeSink(lodeConfig lodeChoice, source, category, runID string, startTime time.Time) (policy.Sink, error) {
-	// If no path specified, use stub sink (backwards compatible)
-	if lodeConfig.path == "" {
-		return policy.NewStubSink(), nil
-	}
-
+// buildStorageSink creates a Lode storage sink based on CLI configuration.
+// Storage backend and path are required - no silent fallback to stub.
+func buildStorageSink(storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Sink, error) {
 	// Build Lode config with partition keys
 	cfg := lode.Config{
 		Dataset:  "quarry",
@@ -351,19 +347,19 @@ func buildLodeSink(lodeConfig lodeChoice, source, category, runID string, startT
 	var client lode.Client
 	var err error
 
-	switch lodeConfig.backend {
-	case "fs", "":
-		client, err = lode.NewLodeClient(cfg, lodeConfig.path)
+	switch storageConfig.backend {
+	case "fs":
+		client, err = lode.NewLodeClient(cfg, storageConfig.path)
 	case "s3":
-		bucket, prefix := lode.ParseS3Path(lodeConfig.path)
+		bucket, prefix := lode.ParseS3Path(storageConfig.path)
 		s3cfg := lode.S3Config{
 			Bucket: bucket,
 			Prefix: prefix,
-			Region: lodeConfig.s3Region,
+			Region: storageConfig.region,
 		}
 		client, err = lode.NewLodeS3Client(cfg, s3cfg)
 	default:
-		return nil, fmt.Errorf("unknown lode-backend: %s (must be fs or s3)", lodeConfig.backend)
+		return nil, fmt.Errorf("unknown storage-backend: %s (must be fs or s3)", storageConfig.backend)
 	}
 
 	if err != nil {

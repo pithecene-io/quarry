@@ -223,7 +223,8 @@ func (p *BufferedPolicy) Flush(ctx context.Context) error {
 	}
 }
 
-// flushAtLeastOnce writes events then chunks; preserves all buffers on any failure.
+// flushAtLeastOnce writes chunks then events; preserves all buffers on any failure.
+// Chunks are written first to satisfy the "chunks before commit" invariant.
 func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	p.mu.Lock()
 	p.stats.incFlushLocked()
@@ -231,21 +232,7 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	chunks := p.chunkBuffer
 	p.mu.Unlock()
 
-	// Write events
-	if len(events) > 0 {
-		if err := p.sink.WriteEvents(ctx, events); err != nil {
-			p.mu.Lock()
-			p.stats.incErrorsLocked()
-			p.mu.Unlock()
-			p.logFlushFailure("events", err)
-			return err
-		}
-		p.mu.Lock()
-		p.stats.incEventsPersistedLocked(int64(len(events)))
-		p.mu.Unlock()
-	}
-
-	// Write chunks
+	// Write chunks first (required for "chunks before commit" invariant)
 	if len(chunks) > 0 {
 		if err := p.sink.WriteChunks(ctx, chunks); err != nil {
 			p.mu.Lock()
@@ -257,6 +244,21 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 		}
 		p.mu.Lock()
 		p.stats.incChunksPersistedLocked(int64(len(chunks)))
+		p.mu.Unlock()
+	}
+
+	// Write events after chunks
+	if len(events) > 0 {
+		if err := p.sink.WriteEvents(ctx, events); err != nil {
+			p.mu.Lock()
+			p.stats.incErrorsLocked()
+			p.mu.Unlock()
+			p.logFlushFailure("events", err)
+			// Keep all buffers intact - prefer duplicates over loss
+			return err
+		}
+		p.mu.Lock()
+		p.stats.incEventsPersistedLocked(int64(len(events)))
 		p.mu.Unlock()
 	}
 

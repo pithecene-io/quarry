@@ -278,6 +278,25 @@ Quarry is ready to expand when:
 
 ---
 
+## Future Work — Lode v0.3.0 Checksum Adoption (Internal-Only)
+
+### Goal
+Adopt Lode's native checksum support while keeping checksums invisible to users.
+This is internal-only; no CLI or config surface is added.
+
+### Plan
+- Update Lode dependency when v0.3.0 is available.
+- Switch to Lode-native checksum metadata and stop emitting custom checksum fields.
+- Maintain read compatibility for existing records that include custom checksum fields.
+- Add migration tests for mixed legacy and new data.
+
+### Acceptance Criteria
+- No user-facing checksum flags or configuration.
+- Quarry writes remain valid across Lode v0.2.x and v0.3.x.
+- Mixed data (custom checksum fields + native checksums) reads without errors.
+
+---
+
 ## Contract Change Protocol
 
 Any change to SDK, executor, runtime, or policy that affects contract behavior
