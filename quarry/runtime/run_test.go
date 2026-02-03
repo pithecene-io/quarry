@@ -502,3 +502,128 @@ func TestIsStreamError(t *testing.T) {
 		})
 	}
 }
+
+// encodeTestRunResultFrame creates a framed run_result control frame.
+func encodeTestRunResultFrame(status types.RunResultStatus, message *string) []byte {
+	frame := &types.RunResultFrame{
+		Type: types.RunResultType,
+		Outcome: types.RunResultOutcome{
+			Status:  status,
+			Message: message,
+		},
+	}
+	payload, _ := msgpack.Marshal(frame)
+	return encodeTestFrame(payload)
+}
+
+// makeEventStreamWithRunResult creates a stream with event + run_result frame.
+func makeEventStreamWithRunResult(runMeta *types.RunMeta, status types.RunResultStatus) []byte {
+	// Event frame
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           runMeta.RunID,
+		Seq:             1,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{},
+		Attempt:         runMeta.Attempt,
+	}
+	eventFrame := encodeTestEventFrame(envelope)
+
+	// run_result frame
+	runResultFrame := encodeTestRunResultFrame(status, nil)
+
+	// Concatenate
+	result := make([]byte, len(eventFrame)+len(runResultFrame))
+	copy(result, eventFrame)
+	copy(result[len(eventFrame):], runResultFrame)
+	return result
+}
+
+func TestRunOrchestrator_ExitCodeConflictWithRunResult(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-exit-conflict",
+		Attempt: 1,
+	}
+
+	// Create executor that:
+	// - Emits run_result with status "completed"
+	// - But exits with non-zero code (1)
+	// This simulates a misbehaving executor that reports success but crashes
+	eventData := makeEventStreamWithRunResult(runMeta, types.RunResultStatusCompleted)
+	mockExec := newMockExecutor(eventData, 1) // Exit code 1 indicates failure
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(context.Background())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Exit code should win over run_result when they conflict
+	// (non-zero exit code with "completed" status = executor crash)
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash (exit code wins), got %s: %s",
+			result.Outcome.Status, result.Outcome.Message)
+	}
+}
+
+func TestRunOrchestrator_RunResultErrorRespected(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-result-error",
+		Attempt: 1,
+	}
+
+	// Create executor that:
+	// - Emits run_result with status "error"
+	// - Exits with non-zero code (1)
+	// This is consistent - both indicate failure
+	eventData := makeEventStreamWithRunResult(runMeta, types.RunResultStatusError)
+	mockExec := newMockExecutor(eventData, 1)
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(context.Background())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// run_result "error" should result in ScriptError (consistent with exit code)
+	if result.Outcome.Status != types.OutcomeScriptError {
+		t.Errorf("expected OutcomeScriptError, got %s: %s",
+			result.Outcome.Status, result.Outcome.Message)
+	}
+}

@@ -288,6 +288,9 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 }
 
 // selectProxy loads proxy pools and selects an endpoint.
+// Note: The selector is created fresh per invocation (CLI is one-shot).
+// Round-robin counters and sticky maps do not persist across runs.
+// This is intentional - each run is independent.
 func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoint, error) {
 	// Load proxy pools from config file
 	if config.configPath == "" {
@@ -300,10 +303,25 @@ func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoi
 	}
 
 	// Create selector and register pools
+	// Note: Selector is per-invocation; state doesn't persist across CLI runs.
 	selector := proxy.NewSelector()
 	for _, pool := range pools {
 		if err := selector.RegisterPool(&pool); err != nil {
 			return nil, fmt.Errorf("failed to register pool %q: %w", pool.Name, err)
+		}
+	}
+
+	// Warn about domain/origin sticky scopes without explicit key
+	// These scopes are for per-request stickiness inside the executor,
+	// not for run-start selection from CLI.
+	for _, pool := range pools {
+		if pool.Name == config.poolName && pool.Sticky != nil {
+			scope := pool.Sticky.Scope
+			if (scope == types.ProxyStickyDomain || scope == types.ProxyStickyOrigin) && config.stickyKey == "" {
+				fmt.Fprintf(os.Stderr, "Warning: pool %q uses %s sticky scope but no --proxy-sticky-key provided; "+
+					"domain/origin scopes are for per-request stickiness inside executor, not CLI selection\n",
+					pool.Name, scope)
+			}
 		}
 	}
 

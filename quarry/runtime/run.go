@@ -265,12 +265,30 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	// Determine outcome based on exit code and terminal event
 	// If we have a run_result frame from the executor, use it as the primary source
 	// Otherwise fall back to exit code + terminal event analysis
+	//
+	// IMPORTANT: Exit codes are authoritative when they indicate failure.
+	// A non-zero exit code with run_result "completed" indicates executor misbehavior.
 	var outcome *types.RunOutcome
 	runResultFrame := ingestion.GetRunResult()
 
 	if runResultFrame != nil {
-		// Use run_result frame from executor
-		outcome = runResultOutcomeToRunOutcome(runResultFrame)
+		// Check for exit code / run_result consistency
+		// Exit codes are authoritative when they indicate failure
+		if execResult.ExitCode != 0 && runResultFrame.Outcome.Status == types.RunResultStatusCompleted {
+			// Executor reported success but exited with error - this is suspicious
+			r.logger.Warn("exit code conflicts with run_result", map[string]any{
+				"exit_code":         execResult.ExitCode,
+				"run_result_status": runResultFrame.Outcome.Status,
+			})
+			// Trust exit code over run_result when exit code indicates failure
+			outcome = &types.RunOutcome{
+				Status:  types.OutcomeExecutorCrash,
+				Message: fmt.Sprintf("executor reported completed but exited with code %d", execResult.ExitCode),
+			}
+		} else {
+			// Use run_result frame from executor
+			outcome = runResultOutcomeToRunOutcome(runResultFrame)
+		}
 		r.logger.Info("run completed (from run_result)", map[string]any{
 			"outcome":   outcome.Status,
 			"exit_code": execResult.ExitCode,
