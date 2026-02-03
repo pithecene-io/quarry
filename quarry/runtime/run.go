@@ -268,11 +268,11 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	// The run_result frame provides supplementary context (message, error_type, stack)
 	// but does not override the exit code's determination of outcome category.
 	//
-	// Exit code mapping (per CONTRACT_RUN.md):
-	//   0 = success
-	//   1 = script_error
+	// Executor exit code mapping (see runtime/outcome.go):
+	//   0 = success (run_complete emitted)
+	//   1 = script_error (run_error emitted)
 	//   2 = executor_crash
-	//   3 = policy_failure
+	//   3 = invalid_input (treated as executor_crash)
 	var outcome *types.RunOutcome
 	runResultFrame := ingestion.GetRunResult()
 

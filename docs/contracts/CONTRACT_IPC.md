@@ -110,17 +110,19 @@ ProxyEndpointRedacted:
 
 ### Outcome Status Mapping
 
-| run_result status | Exit code | Final outcome    |
-|-------------------|-----------|------------------|
-| completed         | 0         | success          |
-| completed         | 1         | script_error     |
-| completed         | 2         | executor_crash   |
-| error             | 0         | success*         |
-| error             | 1         | script_error     |
-| error             | 2         | executor_crash   |
-| crash             | any       | executor_crash   |
+Exit codes are authoritative. The table shows how exit code determines
+the final outcome regardless of run_result status:
 
-*Exit code 0 with run_result "error" logs a warning but trusts exit code.
+| Exit code | Meaning        | Final outcome    | run_result used for |
+|-----------|----------------|------------------|---------------------|
+| 0         | completed      | success          | context only        |
+| 1         | script error   | script_error     | message, stack      |
+| 2         | executor crash | executor_crash   | message, stack      |
+| 3         | invalid input  | executor_crash   | message             |
+
+If run_result status conflicts with exit code (e.g., run_result says
+"completed" but exit code is 1), exit code wins and a warning is logged.
+The run_result's message, error_type, and stack are still used for context.
 
 ---
 
