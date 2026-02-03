@@ -29,6 +29,7 @@ import {
 } from '@justapithecus/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
 import puppeteer from 'puppeteer'
+import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
 import { ObservingSink, SinkAlreadyFailedError, type SinkState } from './ipc/observing-sink.js'
 import { StdioSink } from './ipc/sink.js'
 import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
@@ -163,6 +164,44 @@ function isSinkFailure(err: unknown): boolean {
   }
   // Any other error from emit is a sink failure
   return true
+}
+
+/**
+ * Convert ExecutionOutcome to RunResultOutcome for IPC frame.
+ */
+function toRunResultOutcome(outcome: ExecutionOutcome): RunResultOutcome {
+  switch (outcome.status) {
+    case 'completed':
+      return {
+        status: 'completed',
+        message: outcome.summary ? 'run completed with summary' : 'run completed'
+      }
+    case 'error':
+      return {
+        status: 'error',
+        message: outcome.message,
+        error_type: outcome.errorType,
+        stack: outcome.stack
+      }
+    case 'crash':
+      return {
+        status: 'crash',
+        message: outcome.message
+      }
+  }
+}
+
+/**
+ * Convert ProxyEndpoint to redacted form for run result.
+ * Per CONTRACT_PROXY.md: proxy_used must exclude password fields.
+ */
+function redactProxy(proxy: ProxyEndpoint): ProxyEndpointRedactedFrame {
+  return {
+    protocol: proxy.protocol,
+    host: proxy.host,
+    port: proxy.port,
+    ...(proxy.username && { username: proxy.username })
+  }
 }
 
 /**
@@ -371,12 +410,35 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
     }
 
     // 7. Determine final outcome
-    return determineOutcome(sink)
+    const result = determineOutcome(sink)
+
+    // 8. Emit run_result control frame per CONTRACT_IPC.md
+    // This is emitted exactly once, after terminal event emission attempt
+    try {
+      const runResultOutcome = toRunResultOutcome(result.outcome)
+      const proxyUsed = config.proxy ? redactProxy(config.proxy) : undefined
+      await stdioSink.writeRunResult(runResultOutcome, proxyUsed)
+    } catch {
+      // Best effort - don't fail the run if run_result emission fails
+    }
+
+    return result
   } catch (err) {
     // Executor-level crash (Puppeteer launch failure, etc.)
     const message = err instanceof Error ? err.message : String(err)
+    const crashOutcome: ExecutionOutcome = { status: 'crash', message }
+
+    // Emit run_result even for executor-level crashes if possible
+    try {
+      const runResultOutcome = toRunResultOutcome(crashOutcome)
+      const proxyUsed = config.proxy ? redactProxy(config.proxy) : undefined
+      await stdioSink.writeRunResult(runResultOutcome, proxyUsed)
+    } catch {
+      // Best effort - sink may not be available
+    }
+
     return {
-      outcome: { status: 'crash', message },
+      outcome: crashOutcome,
       terminalEmitted: false
     }
   } finally {

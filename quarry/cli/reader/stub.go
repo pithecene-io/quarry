@@ -52,13 +52,14 @@ func (r *StubReader) InspectTask(taskID string) *InspectTaskResponse {
 // InspectProxy returns stub proxy pool details.
 func (r *StubReader) InspectProxy(poolName string) *InspectProxyPoolResponse {
 	now := time.Now()
+	ttlMs := int64(3600000) // 1 hour in milliseconds
 	return &InspectProxyPoolResponse{
 		Name:        poolName,
 		Strategy:    "round_robin",
 		EndpointCnt: 3,
 		Sticky: &ProxySticky{
-			Scope: "run",
-			TTL:   "1h",
+			Scope: "job", // Valid scopes: job, domain, origin
+			TTLMs: &ttlMs,
 		},
 		Runtime: ProxyRuntime{
 			RoundRobinIndex: 1,

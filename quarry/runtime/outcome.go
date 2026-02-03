@@ -14,6 +14,21 @@ const (
 	ExitCodeInvalidInput = 3 // invalid arguments or input
 )
 
+// outcomeFromExitCode maps exit code directly to outcome status.
+// This is the authoritative mapping per CONTRACT_RUN.md.
+func outcomeFromExitCode(exitCode int) types.OutcomeStatus {
+	switch exitCode {
+	case ExitCodeCompleted:
+		return types.OutcomeSuccess
+	case ExitCodeError:
+		return types.OutcomeScriptError
+	case ExitCodeCrash, ExitCodeInvalidInput:
+		return types.OutcomeExecutorCrash
+	default:
+		return types.OutcomeExecutorCrash
+	}
+}
+
 // DetermineOutcome determines the run outcome based on exit code and terminal event.
 // Per CONTRACT_RUN.md, outcome is determined by:
 //  1. Exit code from executor

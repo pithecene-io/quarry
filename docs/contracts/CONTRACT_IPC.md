@@ -65,6 +65,67 @@ If present, the run result may include `proxy_used` metadata:
 
 ---
 
+## Run Result Control Frame
+
+The **run_result** frame is a control frame emitted by the executor after
+determining run outcome. It provides structured outcome information and
+optional proxy usage metadata.
+
+### Frame Structure
+
+The run_result frame is msgpack-encoded with the following fields:
+
+```
+RunResultFrame:
+  type: "run_result"          # literal string discriminator
+  outcome:
+    status: string            # "completed" | "error" | "crash"
+    message: string | null    # optional error/status message
+    error_type: string | null # optional error type (e.g., "TypeError")
+    stack: string | null      # optional stack trace
+  proxy_used: ProxyEndpointRedacted | null  # optional, no password
+```
+
+Where `ProxyEndpointRedacted` is:
+```
+ProxyEndpointRedacted:
+  protocol: string    # "http" | "https" | "socks5"
+  host: string
+  port: integer
+  username: string | null
+```
+
+### Control Frame Semantics
+
+- **Not an event**: The run_result frame does NOT affect event sequence ordering.
+  It is a control frame, not counted in `seq`.
+- **Single emission**: The executor emits exactly one run_result frame per run,
+  after the terminal event.
+- **Duplicate handling**: If multiple run_result frames are received, only the
+  first is processed; subsequent frames are ignored.
+- **Exit code authority**: Exit codes are authoritative for outcome classification.
+  If exit code conflicts with run_result status, exit code wins. The run_result
+  provides supplementary context (message, error_type, stack) but does not
+  override exit code determination.
+
+### Outcome Status Mapping
+
+Exit codes are authoritative. The table shows how exit code determines
+the final outcome regardless of run_result status:
+
+| Exit code | Meaning        | Final outcome    | run_result used for |
+|-----------|----------------|------------------|---------------------|
+| 0         | completed      | success          | context only        |
+| 1         | script error   | script_error     | message, stack      |
+| 2         | executor crash | executor_crash   | message, stack      |
+| 3         | invalid input  | executor_crash   | message             |
+
+If run_result status conflicts with exit code (e.g., run_result says
+"completed" but exit code is 1), exit code wins and a warning is logged.
+The run_result's message, error_type, and stack are still used for context.
+
+---
+
 ## Maximum Frame Size
 
 - Maximum frame size: **16 MiB**

@@ -102,6 +102,12 @@ Optional flags:
 - `--flush-mode at_least_once|chunks_first|two_phase`
 - `--buffer-events <n>`
 - `--buffer-bytes <n>`
+- `--proxy-config <path>` (JSON pool config)
+- `--proxy-pool <name>`
+- `--proxy-strategy round_robin|random|sticky`
+- `--proxy-sticky-key <key>`
+- `--proxy-domain <domain>` (when sticky scope = domain)
+- `--proxy-origin <origin>` (when sticky scope = origin, format: scheme://host:port)
 
 Exit codes (per CONTRACT_RUN.md):
 - `0`: success (run_complete)
@@ -116,6 +122,18 @@ quarry run \
   --script ./examples/demo.js \
   --run-id run-001 \
   --policy strict \
+  --job '{"source":"demo"}'
+```
+
+Proxy selection example:
+
+```
+quarry run \
+  --script ./examples/demo.js \
+  --run-id run-001 \
+  --proxy-config ./proxies.json \
+  --proxy-pool residential_sticky \
+  --proxy-domain example.com \
   --job '{"source":"demo"}'
 ```
 
@@ -189,8 +207,8 @@ Subcommands:
 Examples:
 
 ```
-quarry debug resolve proxy default
-quarry debug resolve proxy default --commit
+quarry debug resolve proxy default --proxy-config ./proxies.json
+quarry debug resolve proxy default --proxy-config ./proxies.json --commit
 quarry debug ipc --verbose
 ```
 

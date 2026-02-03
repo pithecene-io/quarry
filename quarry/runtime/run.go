@@ -262,18 +262,101 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		}, string(execResult.StderrBytes), artifacts, ingestion), nil
 	}
 
-	// Determine outcome based on exit code and terminal event
-	terminalEvent, hasTerminal := ingestion.GetTerminalEvent()
-	outcome := DetermineOutcome(execResult.ExitCode, hasTerminal, terminalEvent)
+	// Determine outcome based on exit code and run_result frame.
+	//
+	// IMPORTANT: Exit codes are AUTHORITATIVE for outcome classification.
+	// The run_result frame provides supplementary context (message, error_type, stack)
+	// but does not override the exit code's determination of outcome category.
+	//
+	// Executor exit code mapping (see runtime/outcome.go):
+	//   0 = success (run_complete emitted)
+	//   1 = script_error (run_error emitted)
+	//   2 = executor_crash
+	//   3 = invalid_input (treated as executor_crash)
+	var outcome *types.RunOutcome
+	runResultFrame := ingestion.GetRunResult()
 
-	r.logger.Info("run completed", map[string]any{
-		"outcome":      outcome.Status,
-		"exit_code":    execResult.ExitCode,
-		"duration":     time.Since(r.startTime).String(),
-		"has_terminal": hasTerminal,
-	})
+	// Exit code determines outcome category
+	exitOutcome := outcomeFromExitCode(execResult.ExitCode)
+
+	if runResultFrame != nil {
+		// Check for exit code / run_result consistency
+		runResultOutcome := runResultOutcomeToRunOutcome(runResultFrame)
+
+		if exitOutcome != runResultOutcome.Status {
+			r.logger.Warn("exit code conflicts with run_result", map[string]any{
+				"exit_code":            execResult.ExitCode,
+				"exit_outcome":         exitOutcome,
+				"run_result_status":    runResultFrame.Outcome.Status,
+				"run_result_outcome":   runResultOutcome.Status,
+			})
+		}
+
+		// Exit code is authoritative for outcome category
+		// run_result provides supplementary context (message, error_type, stack)
+		outcome = &types.RunOutcome{
+			Status:    exitOutcome,
+			Message:   runResultOutcome.Message,
+			ErrorType: runResultOutcome.ErrorType,
+			Stack:     runResultOutcome.Stack,
+		}
+
+		// If exit code says success but run_result has more specific failure info,
+		// use run_result's message but keep exit code's status
+		if exitOutcome == types.OutcomeSuccess && runResultOutcome.Status != types.OutcomeSuccess {
+			outcome.Message = fmt.Sprintf("exit code 0 but run_result reported %s: %s",
+				runResultFrame.Outcome.Status, runResultOutcome.Message)
+		}
+
+		r.logger.Info("run completed (from run_result)", map[string]any{
+			"outcome":   outcome.Status,
+			"exit_code": execResult.ExitCode,
+			"duration":  time.Since(r.startTime).String(),
+		})
+	} else {
+		// Fall back to exit code + terminal event analysis
+		terminalEvent, hasTerminal := ingestion.GetTerminalEvent()
+		outcome = DetermineOutcome(execResult.ExitCode, hasTerminal, terminalEvent)
+		r.logger.Info("run completed", map[string]any{
+			"outcome":      outcome.Status,
+			"exit_code":    execResult.ExitCode,
+			"duration":     time.Since(r.startTime).String(),
+			"has_terminal": hasTerminal,
+		})
+	}
 
 	return r.buildResult(outcome, string(execResult.StderrBytes), artifacts, ingestion), nil
+}
+
+// runResultOutcomeToRunOutcome converts a RunResultFrame to a RunOutcome.
+func runResultOutcomeToRunOutcome(frame *types.RunResultFrame) *types.RunOutcome {
+	var status types.OutcomeStatus
+	switch frame.Outcome.Status {
+	case types.RunResultStatusCompleted:
+		status = types.OutcomeSuccess
+	case types.RunResultStatusError:
+		status = types.OutcomeScriptError
+	case types.RunResultStatusCrash:
+		status = types.OutcomeExecutorCrash
+	default:
+		status = types.OutcomeExecutorCrash
+	}
+
+	var message string
+	if frame.Outcome.Message != nil {
+		message = *frame.Outcome.Message
+	} else {
+		message = string(frame.Outcome.Status)
+	}
+
+	outcome := &types.RunOutcome{
+		Status:    status,
+		Message:   message,
+		ErrorType: frame.Outcome.ErrorType,
+		Stack:     frame.Outcome.Stack,
+	}
+
+	return outcome
 }
 
 // buildResult constructs the final run result.
@@ -292,7 +375,13 @@ func (r *RunOrchestrator) buildResult(
 	}
 
 	// Set redacted proxy (per CONTRACT_PROXY.md: exclude password)
-	if r.config.Proxy != nil {
+	// Prefer run_result.proxy_used if available, otherwise use config.Proxy
+	if ingestion != nil {
+		if runResult := ingestion.GetRunResult(); runResult != nil && runResult.ProxyUsed != nil {
+			result.ProxyUsed = runResult.ProxyUsed
+		}
+	}
+	if result.ProxyUsed == nil && r.config.Proxy != nil {
 		redacted := r.config.Proxy.Redact()
 		result.ProxyUsed = &redacted
 	}

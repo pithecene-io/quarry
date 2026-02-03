@@ -35,10 +35,11 @@ type InspectTaskResponse struct {
 	RunID  *string `json:"run_id"`
 }
 
-// ProxySticky represents proxy sticky configuration.
+// ProxySticky represents proxy sticky configuration per CONTRACT_PROXY.md.
+// Scope must be one of: "job", "domain", "origin".
 type ProxySticky struct {
 	Scope string `json:"scope"`
-	TTL   string `json:"ttl"`
+	TTLMs *int64 `json:"ttl_ms,omitempty"`
 }
 
 // ProxyRuntime represents runtime proxy state.

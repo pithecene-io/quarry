@@ -74,6 +74,7 @@ func IsStreamError(err error) bool {
 //   - First terminal event wins; subsequent terminals ignored
 //   - Invalid framing is fatal (no resync)
 //   - Policy failure on non-droppable events terminates run
+//   - run_result control frames do not affect seq ordering
 type IngestionEngine struct {
 	decoder       *ipc.FrameDecoder
 	policy        policy.Policy
@@ -83,6 +84,7 @@ type IngestionEngine struct {
 	currentSeq    int64
 	terminalSeen  bool
 	terminalEvent *types.EventEnvelope
+	runResult     *types.RunResultFrame // control frame, not counted in seq
 }
 
 // NewIngestionEngine creates a new ingestion engine.
@@ -166,6 +168,8 @@ func (e *IngestionEngine) processFrame(ctx context.Context, payload []byte) erro
 		return e.processArtifactChunk(ctx, frame)
 	case *types.EventEnvelope:
 		return e.processEvent(ctx, frame)
+	case *types.RunResultFrame:
+		return e.processRunResult(frame)
 	default:
 		return &IngestionError{
 			Kind: IngestionErrorStream,
@@ -386,4 +390,30 @@ func (e *IngestionEngine) HasTerminal() bool {
 // CurrentSeq returns the current sequence number.
 func (e *IngestionEngine) CurrentSeq() int64 {
 	return e.currentSeq
+}
+
+// processRunResult processes a run result control frame.
+// Per CONTRACT_IPC.md, run_result is a control frame that:
+//   - Does NOT affect seq ordering (not counted as an event)
+//   - Is emitted once after terminal event emission
+//   - Contains outcome and optional proxy_used (redacted)
+func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
+	// Only accept the first run_result frame
+	if e.runResult != nil {
+		e.logger.Warn("ignoring duplicate run_result frame", nil)
+		return nil
+	}
+
+	e.runResult = frame
+	e.logger.Debug("run_result frame received", map[string]any{
+		"status":     frame.Outcome.Status,
+		"has_proxy":  frame.ProxyUsed != nil,
+	})
+
+	return nil
+}
+
+// GetRunResult returns the run result frame if received.
+func (e *IngestionEngine) GetRunResult() *types.RunResultFrame {
+	return e.runResult
 }

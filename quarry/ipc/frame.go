@@ -27,6 +27,9 @@ const (
 // ArtifactChunkType is the type discriminant for artifact chunk frames.
 const ArtifactChunkType = "artifact_chunk"
 
+// RunResultType is the type discriminant for run result control frames.
+const RunResultType = "run_result"
+
 // FrameErrorKind classifies frame decoding errors.
 type FrameErrorKind int
 
@@ -147,10 +150,14 @@ func DecodeFrame(payload []byte) (any, error) {
 		}
 	}
 
-	if probe.Type == ArtifactChunkType {
+	switch probe.Type {
+	case ArtifactChunkType:
 		return DecodeArtifactChunk(payload)
+	case RunResultType:
+		return DecodeRunResult(payload)
+	default:
+		return DecodeEventEnvelope(payload)
 	}
-	return DecodeEventEnvelope(payload)
 }
 
 // DecodeEventEnvelope decodes a payload as an EventEnvelope.
@@ -177,4 +184,17 @@ func DecodeArtifactChunk(payload []byte) (*types.ArtifactChunkFrame, error) {
 		}
 	}
 	return &chunk, nil
+}
+
+// DecodeRunResult decodes a payload as a RunResultFrame.
+func DecodeRunResult(payload []byte) (*types.RunResultFrame, error) {
+	var result types.RunResultFrame
+	if err := msgpack.Unmarshal(payload, &result); err != nil {
+		return nil, &FrameError{
+			Kind: FrameErrorDecode,
+			Msg:  "failed to decode run result",
+			Err:  err,
+		}
+	}
+	return &result, nil
 }

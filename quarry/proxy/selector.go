@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"time"
 
@@ -40,9 +41,16 @@ func NewSelector() *Selector {
 
 // RegisterPool registers a proxy pool.
 // Returns error if pool validation fails.
+// Emits soft warnings per CONTRACT_PROXY.md to stderr.
 func (s *Selector) RegisterPool(pool *types.ProxyPool) error {
 	if err := pool.Validate(); err != nil {
 		return fmt.Errorf("pool validation failed: %w", err)
+	}
+
+	// Emit soft warnings per CONTRACT_PROXY.md
+	warnings := pool.Warnings()
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
 
 	s.mu.Lock()
@@ -72,6 +80,9 @@ type SelectRequest struct {
 	Origin string
 	// JobID is used to derive sticky key when scope is "job".
 	JobID string
+	// Commit determines whether to advance rotation counters.
+	// When false, returns what would be selected without mutating state.
+	Commit bool
 }
 
 // Select selects a proxy endpoint from the specified pool.
@@ -96,14 +107,14 @@ func (s *Selector) Select(req SelectRequest) (*types.ProxyEndpoint, error) {
 
 	switch strategy {
 	case types.ProxyStrategyRoundRobin:
-		idx = s.selectRoundRobin(state)
+		idx = s.selectRoundRobin(state, req.Commit)
 	case types.ProxyStrategyRandom:
 		idx, err = s.selectRandom(state)
 		if err != nil {
 			return nil, err
 		}
 	case types.ProxyStrategySticky:
-		idx, err = s.selectSticky(state, req)
+		idx, err = s.selectSticky(state, req, req.Commit)
 		if err != nil {
 			return nil, err
 		}
@@ -117,10 +128,12 @@ func (s *Selector) Select(req SelectRequest) (*types.ProxyEndpoint, error) {
 }
 
 // selectRoundRobin selects using round-robin.
-// Increments counter atomically.
-func (s *Selector) selectRoundRobin(state *poolState) int {
+// Increments counter only when commit is true.
+func (s *Selector) selectRoundRobin(state *poolState, commit bool) int {
 	idx := int(state.rrIndex % int64(len(state.pool.Endpoints)))
-	state.rrIndex++
+	if commit {
+		state.rrIndex++
+	}
 	return idx
 }
 
@@ -142,7 +155,8 @@ func (s *Selector) selectRandom(state *poolState) (int, error) {
 }
 
 // selectSticky selects using sticky assignment.
-func (s *Selector) selectSticky(state *poolState, req SelectRequest) (int, error) {
+// Stores new assignment only when commit is true.
+func (s *Selector) selectSticky(state *poolState, req SelectRequest, commit bool) (int, error) {
 	// Derive sticky key per CONTRACT_PROXY.md precedence
 	stickyKey := s.deriveStickyKey(state, req)
 	if stickyKey == "" {
@@ -167,14 +181,16 @@ func (s *Selector) selectSticky(state *poolState, req SelectRequest) (int, error
 		return 0, err
 	}
 
-	// Store assignment
-	entry := &stickyEntry{endpointIdx: idx}
-	if state.pool.Sticky != nil && state.pool.Sticky.TTLMs != nil {
-		ttl := time.Duration(*state.pool.Sticky.TTLMs) * time.Millisecond
-		expiresAt := now.Add(ttl)
-		entry.expiresAt = &expiresAt
+	// Store assignment only when commit is true
+	if commit {
+		entry := &stickyEntry{endpointIdx: idx}
+		if state.pool.Sticky != nil && state.pool.Sticky.TTLMs != nil {
+			ttl := time.Duration(*state.pool.Sticky.TTLMs) * time.Millisecond
+			expiresAt := now.Add(ttl)
+			entry.expiresAt = &expiresAt
+		}
+		state.stickyMap[stickyKey] = entry
 	}
-	state.stickyMap[stickyKey] = entry
 
 	return idx, nil
 }

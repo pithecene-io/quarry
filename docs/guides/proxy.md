@@ -63,6 +63,33 @@ job:
 
 ---
 
+## CLI Selection
+
+You can also select proxies directly from the CLI using a JSON config file:
+
+```
+quarry run \
+  --script ./examples/demo.js \
+  --run-id run-001 \
+  --proxy-config ./proxies.json \
+  --proxy-pool residential_sticky \
+  --proxy-domain example.com \
+  --job '{"source":"demo"}'
+```
+
+Relevant flags:
+- `--proxy-config <path>` (JSON pool config)
+- `--proxy-pool <name>`
+- `--proxy-strategy round_robin|random|sticky`
+- `--proxy-sticky-key <key>`
+- `--proxy-domain <domain>` (when sticky scope = domain)
+- `--proxy-origin <origin>` (when sticky scope = origin, format: scheme://host:port)
+
+If a pool uses sticky scope `domain` or `origin` and you do not supply the
+corresponding input, the CLI will warn and fall back to other sticky inputs.
+
+---
+
 ## Strategies
 
 ### Round-robin
