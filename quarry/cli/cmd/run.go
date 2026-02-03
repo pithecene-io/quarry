@@ -107,6 +107,14 @@ func RunCommand() *cli.Command {
 				Name:  "proxy-sticky-key",
 				Usage: "Sticky key override for proxy selection",
 			},
+			&cli.StringFlag{
+				Name:  "proxy-domain",
+				Usage: "Domain for sticky scope derivation (when scope=domain)",
+			},
+			&cli.StringFlag{
+				Name:  "proxy-origin",
+				Usage: "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)",
+			},
 		},
 		Action: runAction,
 	}
@@ -126,6 +134,8 @@ type proxyChoice struct {
 	poolName   string
 	strategy   string
 	stickyKey  string
+	domain     string
+	origin     string
 }
 
 func runAction(c *cli.Context) error {
@@ -173,6 +183,8 @@ func runAction(c *cli.Context) error {
 		poolName:   c.String("proxy-pool"),
 		strategy:   c.String("proxy-strategy"),
 		stickyKey:  c.String("proxy-sticky-key"),
+		domain:     c.String("proxy-domain"),
+		origin:     c.String("proxy-origin"),
 	}
 
 	// Select proxy if configured
@@ -311,16 +323,20 @@ func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoi
 		}
 	}
 
-	// Warn about domain/origin sticky scopes without explicit key
-	// These scopes are for per-request stickiness inside the executor,
-	// not for run-start selection from CLI.
+	// Warn about domain/origin sticky scopes without the required input
 	for _, pool := range pools {
 		if pool.Name == config.poolName && pool.Sticky != nil {
 			scope := pool.Sticky.Scope
-			if (scope == types.ProxyStickyDomain || scope == types.ProxyStickyOrigin) && config.stickyKey == "" {
-				fmt.Fprintf(os.Stderr, "Warning: pool %q uses %s sticky scope but no --proxy-sticky-key provided; "+
-					"domain/origin scopes are for per-request stickiness inside executor, not CLI selection\n",
-					pool.Name, scope)
+			// Check if required input is missing for the scope
+			switch scope {
+			case types.ProxyStickyDomain:
+				if config.stickyKey == "" && config.domain == "" {
+					fmt.Fprintf(os.Stderr, "Warning: pool %q uses domain sticky scope but no --proxy-sticky-key or --proxy-domain provided\n", pool.Name)
+				}
+			case types.ProxyStickyOrigin:
+				if config.stickyKey == "" && config.origin == "" {
+					fmt.Fprintf(os.Stderr, "Warning: pool %q uses origin sticky scope but no --proxy-sticky-key or --proxy-origin provided\n", pool.Name)
+				}
 			}
 		}
 	}
@@ -329,6 +345,8 @@ func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoi
 	req := proxy.SelectRequest{
 		Pool:      config.poolName,
 		StickyKey: config.stickyKey,
+		Domain:    config.domain,
+		Origin:    config.origin,
 		Commit:    true,
 	}
 

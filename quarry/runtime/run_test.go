@@ -518,6 +518,11 @@ func encodeTestRunResultFrame(status types.RunResultStatus, message *string) []b
 
 // makeEventStreamWithRunResult creates a stream with event + run_result frame.
 func makeEventStreamWithRunResult(runMeta *types.RunMeta, status types.RunResultStatus) []byte {
+	return makeEventStreamWithRunResultMessage(runMeta, status, nil)
+}
+
+// makeEventStreamWithRunResultMessage creates a stream with event + run_result frame including message.
+func makeEventStreamWithRunResultMessage(runMeta *types.RunMeta, status types.RunResultStatus, message *string) []byte {
 	// Event frame
 	envelope := &types.EventEnvelope{
 		ContractVersion: types.ContractVersion,
@@ -532,7 +537,7 @@ func makeEventStreamWithRunResult(runMeta *types.RunMeta, status types.RunResult
 	eventFrame := encodeTestEventFrame(envelope)
 
 	// run_result frame
-	runResultFrame := encodeTestRunResultFrame(status, nil)
+	runResultFrame := encodeTestRunResultFrame(status, message)
 
 	// Concatenate
 	result := make([]byte, len(eventFrame)+len(runResultFrame))
@@ -552,7 +557,7 @@ func TestRunOrchestrator_ExitCodeConflictWithRunResult(t *testing.T) {
 	// - But exits with non-zero code (1)
 	// This simulates a misbehaving executor that reports success but crashes
 	eventData := makeEventStreamWithRunResult(runMeta, types.RunResultStatusCompleted)
-	mockExec := newMockExecutor(eventData, 1) // Exit code 1 indicates failure
+	mockExec := newMockExecutor(eventData, 1) // Exit code 1 = script_error
 
 	trackingPol := newFlushTrackingPolicy()
 
@@ -577,25 +582,70 @@ func TestRunOrchestrator_ExitCodeConflictWithRunResult(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// Exit code should win over run_result when they conflict
-	// (non-zero exit code with "completed" status = executor crash)
-	if result.Outcome.Status != types.OutcomeExecutorCrash {
-		t.Errorf("expected OutcomeExecutorCrash (exit code wins), got %s: %s",
+	// Exit code is authoritative: exit code 1 = script_error
+	// (even though run_result said "completed")
+	if result.Outcome.Status != types.OutcomeScriptError {
+		t.Errorf("expected OutcomeScriptError (exit code authoritative), got %s: %s",
 			result.Outcome.Status, result.Outcome.Message)
 	}
 }
 
-func TestRunOrchestrator_RunResultErrorRespected(t *testing.T) {
+func TestRunOrchestrator_ExitCodeCrashOverridesRunResult(t *testing.T) {
 	runMeta := &types.RunMeta{
-		RunID:   "run-result-error",
+		RunID:   "run-exit-crash",
 		Attempt: 1,
 	}
 
 	// Create executor that:
-	// - Emits run_result with status "error"
-	// - Exits with non-zero code (1)
-	// This is consistent - both indicate failure
+	// - Emits run_result with status "error" (script error)
+	// - But exits with code 2 (executor crash)
+	// Exit code should win - this is a crash, not a script error
 	eventData := makeEventStreamWithRunResult(runMeta, types.RunResultStatusError)
+	mockExec := newMockExecutor(eventData, 2) // Exit code 2 = executor_crash
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(context.Background())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Exit code is authoritative: exit code 2 = executor_crash
+	// (even though run_result said "error")
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash (exit code authoritative), got %s: %s",
+			result.Outcome.Status, result.Outcome.Message)
+	}
+}
+
+func TestRunOrchestrator_RunResultContextPreserved(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-result-context",
+		Attempt: 1,
+	}
+
+	// Create executor that:
+	// - Emits run_result with status "error" and context (message, error_type)
+	// - Exits with code 1 (script_error)
+	// Exit code and run_result are consistent; context should be preserved
+	msg := "TypeError: Cannot read property 'foo' of undefined"
+	eventData := makeEventStreamWithRunResultMessage(runMeta, types.RunResultStatusError, &msg)
 	mockExec := newMockExecutor(eventData, 1)
 
 	trackingPol := newFlushTrackingPolicy()
@@ -621,9 +671,11 @@ func TestRunOrchestrator_RunResultErrorRespected(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// run_result "error" should result in ScriptError (consistent with exit code)
+	// Exit code determines category, run_result provides context
 	if result.Outcome.Status != types.OutcomeScriptError {
-		t.Errorf("expected OutcomeScriptError, got %s: %s",
-			result.Outcome.Status, result.Outcome.Message)
+		t.Errorf("expected OutcomeScriptError, got %s", result.Outcome.Status)
+	}
+	if result.Outcome.Message != msg {
+		t.Errorf("expected message %q, got %q", msg, result.Outcome.Message)
 	}
 }

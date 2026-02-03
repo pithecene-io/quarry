@@ -262,33 +262,52 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		}, string(execResult.StderrBytes), artifacts, ingestion), nil
 	}
 
-	// Determine outcome based on exit code and terminal event
-	// If we have a run_result frame from the executor, use it as the primary source
-	// Otherwise fall back to exit code + terminal event analysis
+	// Determine outcome based on exit code and run_result frame.
 	//
-	// IMPORTANT: Exit codes are authoritative when they indicate failure.
-	// A non-zero exit code with run_result "completed" indicates executor misbehavior.
+	// IMPORTANT: Exit codes are AUTHORITATIVE for outcome classification.
+	// The run_result frame provides supplementary context (message, error_type, stack)
+	// but does not override the exit code's determination of outcome category.
+	//
+	// Exit code mapping (per CONTRACT_RUN.md):
+	//   0 = success
+	//   1 = script_error
+	//   2 = executor_crash
+	//   3 = policy_failure
 	var outcome *types.RunOutcome
 	runResultFrame := ingestion.GetRunResult()
 
+	// Exit code determines outcome category
+	exitOutcome := outcomeFromExitCode(execResult.ExitCode)
+
 	if runResultFrame != nil {
 		// Check for exit code / run_result consistency
-		// Exit codes are authoritative when they indicate failure
-		if execResult.ExitCode != 0 && runResultFrame.Outcome.Status == types.RunResultStatusCompleted {
-			// Executor reported success but exited with error - this is suspicious
+		runResultOutcome := runResultOutcomeToRunOutcome(runResultFrame)
+
+		if exitOutcome != runResultOutcome.Status {
 			r.logger.Warn("exit code conflicts with run_result", map[string]any{
-				"exit_code":         execResult.ExitCode,
-				"run_result_status": runResultFrame.Outcome.Status,
+				"exit_code":            execResult.ExitCode,
+				"exit_outcome":         exitOutcome,
+				"run_result_status":    runResultFrame.Outcome.Status,
+				"run_result_outcome":   runResultOutcome.Status,
 			})
-			// Trust exit code over run_result when exit code indicates failure
-			outcome = &types.RunOutcome{
-				Status:  types.OutcomeExecutorCrash,
-				Message: fmt.Sprintf("executor reported completed but exited with code %d", execResult.ExitCode),
-			}
-		} else {
-			// Use run_result frame from executor
-			outcome = runResultOutcomeToRunOutcome(runResultFrame)
 		}
+
+		// Exit code is authoritative for outcome category
+		// run_result provides supplementary context (message, error_type, stack)
+		outcome = &types.RunOutcome{
+			Status:    exitOutcome,
+			Message:   runResultOutcome.Message,
+			ErrorType: runResultOutcome.ErrorType,
+			Stack:     runResultOutcome.Stack,
+		}
+
+		// If exit code says success but run_result has more specific failure info,
+		// use run_result's message but keep exit code's status
+		if exitOutcome == types.OutcomeSuccess && runResultOutcome.Status != types.OutcomeSuccess {
+			outcome.Message = fmt.Sprintf("exit code 0 but run_result reported %s: %s",
+				runResultFrame.Outcome.Status, runResultOutcome.Message)
+		}
+
 		r.logger.Info("run completed (from run_result)", map[string]any{
 			"outcome":   outcome.Status,
 			"exit_code": execResult.ExitCode,
