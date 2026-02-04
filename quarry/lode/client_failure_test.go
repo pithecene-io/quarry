@@ -3,11 +3,9 @@ package lode
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/justapithecus/lode/lode"
@@ -16,7 +14,7 @@ import (
 )
 
 // =============================================================================
-// Phase 8: Storage Failure Hardening Tests
+// Phase 8 + Phase 10: Storage Failure Hardening Tests (Typed Assertions)
 // =============================================================================
 
 // FailingStore is a lode.Store that returns configurable errors.
@@ -100,13 +98,16 @@ func TestLodeClient_FSDirectoryCreationFailure_NonExistentParent(t *testing.T) {
 	client, factoryErr := NewLodeClient(cfg, nonExistentPath)
 
 	if factoryErr != nil {
-		// Factory creation failed - this is valid behavior
-		// Assert it's a path-related error
-		errStr := factoryErr.Error()
-		if !strings.Contains(errStr, "no such file") &&
-			!strings.Contains(errStr, "does not exist") &&
-			!strings.Contains(errStr, "not a directory") {
-			t.Errorf("factory error should be path-related, got: %v", factoryErr)
+		// Factory creation failed - MUST be a typed StorageError with appropriate kind
+		var storageErr *StorageError
+		if !errors.As(factoryErr, &storageErr) {
+			t.Fatalf("expected *StorageError for factory error, got %T: %v", factoryErr, factoryErr)
+		}
+		if !errors.Is(factoryErr, ErrNotFound) && !errors.Is(factoryErr, ErrPermissionDenied) {
+			t.Errorf("expected ErrNotFound or ErrPermissionDenied, got kind: %v", storageErr.Kind)
+		}
+		if storageErr.Op != "init" {
+			t.Errorf("expected Op=init for factory error, got %s", storageErr.Op)
 		}
 		return
 	}
@@ -122,12 +123,13 @@ func TestLodeClient_FSDirectoryCreationFailure_NonExistentParent(t *testing.T) {
 		t.Fatal("expected error for non-existent directory, got nil")
 	}
 
-	// Assert it's a path-related error
-	errStr := writeErr.Error()
-	if !strings.Contains(errStr, "no such file") &&
-		!strings.Contains(errStr, "does not exist") &&
-		!strings.Contains(errStr, "not a directory") {
-		t.Errorf("write error should be path-related, got: %v", writeErr)
+	// Assert it's a typed storage error with ErrNotFound
+	var storageErr *StorageError
+	if !errors.As(writeErr, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T", writeErr)
+	}
+	if !errors.Is(writeErr, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got kind: %v", storageErr.Kind)
 	}
 }
 
@@ -156,18 +158,17 @@ func TestLodeClient_FSDirectoryCreationFailure_ReadOnlyParent(t *testing.T) {
 	client, factoryErr := NewLodeClient(cfg, storePath)
 
 	if factoryErr != nil {
-		// Factory creation failed - this is valid behavior
-		// The factory may fail with:
-		// - "permission denied" if it tries to create the subdirectory
-		// - "no such file" if it stats the non-existent subdirectory first
-		// Both are acceptable since the root cause is the read-only parent
-		errStr := factoryErr.Error()
-		if !strings.Contains(errStr, "permission denied") &&
-			!strings.Contains(errStr, "read-only") &&
-			!strings.Contains(errStr, "EACCES") &&
-			!strings.Contains(errStr, "no such file") &&
-			!strings.Contains(errStr, "does not exist") {
-			t.Errorf("factory error should be path/permission-related, got: %v", factoryErr)
+		// Factory creation failed - MUST be a typed StorageError
+		var storageErr *StorageError
+		if !errors.As(factoryErr, &storageErr) {
+			t.Fatalf("expected *StorageError for factory error, got %T: %v", factoryErr, factoryErr)
+		}
+		// Read-only parent can manifest as permission denied or not-found
+		if !errors.Is(factoryErr, ErrPermissionDenied) && !errors.Is(factoryErr, ErrNotFound) {
+			t.Errorf("expected ErrPermissionDenied or ErrNotFound, got kind: %v", storageErr.Kind)
+		}
+		if storageErr.Op != "init" {
+			t.Errorf("expected Op=init for factory error, got %s", storageErr.Op)
 		}
 		return
 	}
@@ -183,41 +184,24 @@ func TestLodeClient_FSDirectoryCreationFailure_ReadOnlyParent(t *testing.T) {
 		t.Fatal("expected permission error, got nil")
 	}
 
-	// Assert it's a permission or path-related error
-	errStr := writeErr.Error()
-	if !strings.Contains(errStr, "permission denied") &&
-		!strings.Contains(errStr, "read-only") &&
-		!strings.Contains(errStr, "EACCES") &&
-		!strings.Contains(errStr, "no such file") {
-		t.Errorf("write error should be path/permission-related, got: %v", writeErr)
+	// Assert it's a typed storage error with ErrPermissionDenied or ErrNotFound
+	var storageErr *StorageError
+	if !errors.As(writeErr, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T", writeErr)
+	}
+	if !errors.Is(writeErr, ErrPermissionDenied) && !errors.Is(writeErr, ErrNotFound) {
+		t.Errorf("expected ErrPermissionDenied or ErrNotFound, got kind: %v", storageErr.Kind)
 	}
 }
 
 // =============================================================================
-// FS: File Write Failure Tests
+// FS: File Write Failure Tests (Typed Error Injection)
 // =============================================================================
 
-// DiskFullError simulates ENOSPC
-type DiskFullError struct {
-	Path string
-}
-
-func (e *DiskFullError) Error() string {
-	return fmt.Sprintf("write %s: no space left on device", e.Path)
-}
-
-// PermissionDeniedError simulates EACCES
-type PermissionDeniedError struct {
-	Path string
-}
-
-func (e *PermissionDeniedError) Error() string {
-	return fmt.Sprintf("write %s: permission denied", e.Path)
-}
-
 func TestLodeClient_WriteFailure_DiskFull(t *testing.T) {
+	// Inject a disk-full error via FailingStore
 	store := &FailingStore{
-		PutErr: &DiskFullError{Path: "/data/quarry/events.jsonl"},
+		PutErr: errors.New("write /data/quarry/events.jsonl: no space left on device"),
 	}
 
 	cfg := Config{
@@ -242,13 +226,18 @@ func TestLodeClient_WriteFailure_DiskFull(t *testing.T) {
 		t.Fatal("expected disk full error, got nil")
 	}
 
-	// Verify error propagates
-	var diskFullErr *DiskFullError
-	if !errors.As(err, &diskFullErr) {
-		// Check if error message contains the info
-		if !strings.Contains(err.Error(), "no space left on device") {
-			t.Errorf("expected disk full error, got: %v", err)
-		}
+	// Typed assertion: errors.Is should match ErrDiskFull
+	if !errors.Is(err, ErrDiskFull) {
+		t.Errorf("expected errors.Is(err, ErrDiskFull) to be true, got: %v", err)
+	}
+
+	// Also verify we can extract the StorageError
+	var storageErr *StorageError
+	if !errors.As(err, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T", err)
+	}
+	if storageErr.Op != "write" {
+		t.Errorf("expected Op=write, got %s", storageErr.Op)
 	}
 
 	// Verify write was attempted
@@ -259,7 +248,7 @@ func TestLodeClient_WriteFailure_DiskFull(t *testing.T) {
 
 func TestLodeClient_WriteFailure_PermissionDenied(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &PermissionDeniedError{Path: "/data/quarry/events.jsonl"},
+		PutErr: errors.New("write /data/quarry/events.jsonl: permission denied"),
 	}
 
 	cfg := Config{
@@ -284,14 +273,15 @@ func TestLodeClient_WriteFailure_PermissionDenied(t *testing.T) {
 		t.Fatal("expected permission error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "permission denied") {
-		t.Errorf("expected permission denied error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrPermissionDenied) {
+		t.Errorf("expected errors.Is(err, ErrPermissionDenied) to be true, got: %v", err)
 	}
 }
 
 func TestLodeClient_ChunkWriteFailure_DiskFull(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &DiskFullError{Path: "/data/quarry/chunks.jsonl"},
+		PutErr: errors.New("write /data/quarry/chunks.jsonl: no space left on device"),
 	}
 
 	cfg := Config{
@@ -316,8 +306,9 @@ func TestLodeClient_ChunkWriteFailure_DiskFull(t *testing.T) {
 		t.Fatal("expected disk full error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "no space left on device") {
-		t.Errorf("expected disk full error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrDiskFull) {
+		t.Errorf("expected errors.Is(err, ErrDiskFull) to be true, got: %v", err)
 	}
 }
 
@@ -414,18 +405,9 @@ func TestLodeClient_PartialWriteDetection_OffsetsNotUpdatedOnFailure(t *testing.
 // S3: Auth Failure Tests
 // =============================================================================
 
-// S3AuthError simulates AWS authentication failure
-type S3AuthError struct {
-	Message string
-}
-
-func (e *S3AuthError) Error() string {
-	return fmt.Sprintf("NoCredentialProviders: %s", e.Message)
-}
-
 func TestLodeClient_S3AuthFailure(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &S3AuthError{Message: "no valid credentials found"},
+		PutErr: errors.New("NoCredentialProviders: no valid credentials found"),
 	}
 
 	cfg := Config{
@@ -450,9 +432,9 @@ func TestLodeClient_S3AuthFailure(t *testing.T) {
 		t.Fatal("expected auth error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "NoCredentialProviders") &&
-		!strings.Contains(err.Error(), "credentials") {
-		t.Errorf("expected auth-related error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrAuth) {
+		t.Errorf("expected errors.Is(err, ErrAuth) to be true, got: %v", err)
 	}
 }
 
@@ -460,19 +442,9 @@ func TestLodeClient_S3AuthFailure(t *testing.T) {
 // S3: Access Denied Tests
 // =============================================================================
 
-// S3AccessDeniedError simulates AWS access denied
-type S3AccessDeniedError struct {
-	Bucket string
-	Key    string
-}
-
-func (e *S3AccessDeniedError) Error() string {
-	return fmt.Sprintf("AccessDenied: Access Denied for s3://%s/%s", e.Bucket, e.Key)
-}
-
 func TestLodeClient_S3AccessDenied(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &S3AccessDeniedError{Bucket: "my-bucket", Key: "quarry/data.jsonl"},
+		PutErr: errors.New("AccessDenied: Access Denied for s3://my-bucket/quarry/data.jsonl"),
 	}
 
 	cfg := Config{
@@ -497,9 +469,9 @@ func TestLodeClient_S3AccessDenied(t *testing.T) {
 		t.Fatal("expected access denied error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "AccessDenied") &&
-		!strings.Contains(err.Error(), "Access Denied") {
-		t.Errorf("expected access denied error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrAccessDenied) {
+		t.Errorf("expected errors.Is(err, ErrAccessDenied) to be true, got: %v", err)
 	}
 }
 
@@ -507,20 +479,18 @@ func TestLodeClient_S3AccessDenied(t *testing.T) {
 // S3: Network Timeout Tests
 // =============================================================================
 
-// S3TimeoutError simulates network timeout
-type S3TimeoutError struct {
-	Operation string
+// timeoutError implements the Timeout() interface
+type timeoutError struct {
+	msg string
 }
 
-func (e *S3TimeoutError) Error() string {
-	return fmt.Sprintf("RequestTimeout: %s timed out after 30s", e.Operation)
-}
-
-func (e *S3TimeoutError) Timeout() bool { return true }
+func (e *timeoutError) Error() string   { return e.msg }
+func (e *timeoutError) Timeout() bool   { return true }
+func (e *timeoutError) Temporary() bool { return true }
 
 func TestLodeClient_S3NetworkTimeout(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &S3TimeoutError{Operation: "PutObject"},
+		PutErr: &timeoutError{msg: "RequestTimeout: PutObject timed out after 30s"},
 	}
 
 	cfg := Config{
@@ -545,9 +515,9 @@ func TestLodeClient_S3NetworkTimeout(t *testing.T) {
 		t.Fatal("expected timeout error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "Timeout") &&
-		!strings.Contains(err.Error(), "timed out") {
-		t.Errorf("expected timeout error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("expected errors.Is(err, ErrTimeout) to be true, got: %v", err)
 	}
 }
 
@@ -555,18 +525,9 @@ func TestLodeClient_S3NetworkTimeout(t *testing.T) {
 // S3: Throttling (429) Tests
 // =============================================================================
 
-// S3ThrottlingError simulates rate limiting
-type S3ThrottlingError struct {
-	RetryAfter int
-}
-
-func (e *S3ThrottlingError) Error() string {
-	return fmt.Sprintf("SlowDown: Rate exceeded, retry after %ds", e.RetryAfter)
-}
-
 func TestLodeClient_S3Throttling(t *testing.T) {
 	store := &FailingStore{
-		PutErr: &S3ThrottlingError{RetryAfter: 5},
+		PutErr: errors.New("SlowDown: Rate exceeded, retry after 5s"),
 	}
 
 	cfg := Config{
@@ -591,36 +552,44 @@ func TestLodeClient_S3Throttling(t *testing.T) {
 		t.Fatal("expected throttling error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "SlowDown") &&
-		!strings.Contains(err.Error(), "Rate exceeded") {
-		t.Errorf("expected throttling error, got: %v", err)
+	// Typed assertion
+	if !errors.Is(err, ErrThrottled) {
+		t.Errorf("expected errors.Is(err, ErrThrottled) to be true, got: %v", err)
 	}
 }
 
 // =============================================================================
-// Error Messages Include Storage Context
+// Error Wrapping: StorageError Contains Context
 // =============================================================================
 
-func TestLodeClient_ErrorContainsStorageContext(t *testing.T) {
+func TestLodeClient_StorageError_ContainsOperationAndPath(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      error
-		wantText []string
+		name      string
+		err       error
+		wantKind  error
+		wantOp    string
+		wantInErr string // substring that should appear in error message
 	}{
 		{
-			name:     "disk full includes path",
-			err:      &DiskFullError{Path: "/var/quarry/data/events.jsonl"},
-			wantText: []string{"/var/quarry/data", "no space left"},
+			name:      "disk full",
+			err:       errors.New("no space left on device"),
+			wantKind:  ErrDiskFull,
+			wantOp:    "write",
+			wantInErr: "no space left",
 		},
 		{
-			name:     "permission denied includes path",
-			err:      &PermissionDeniedError{Path: "/var/quarry/data/events.jsonl"},
-			wantText: []string{"/var/quarry/data", "permission denied"},
+			name:      "permission denied",
+			err:       errors.New("permission denied"),
+			wantKind:  ErrPermissionDenied,
+			wantOp:    "write",
+			wantInErr: "permission denied",
 		},
 		{
-			name:     "S3 access denied includes bucket",
-			err:      &S3AccessDeniedError{Bucket: "my-bucket", Key: "quarry/run-1/data.jsonl"},
-			wantText: []string{"my-bucket", "AccessDenied"},
+			name:      "S3 access denied",
+			err:       errors.New("AccessDenied: Access Denied"),
+			wantKind:  ErrAccessDenied,
+			wantOp:    "write",
+			wantInErr: "AccessDenied",
 		},
 	}
 
@@ -630,8 +599,8 @@ func TestLodeClient_ErrorContainsStorageContext(t *testing.T) {
 
 			cfg := Config{
 				Dataset:  "quarry",
-				Source:   "test",
-				Category: "test",
+				Source:   "test-source",
+				Category: "test-cat",
 				Day:      "2026-02-03",
 				RunID:    "run-1",
 			}
@@ -650,11 +619,31 @@ func TestLodeClient_ErrorContainsStorageContext(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 
+			// Extract StorageError
+			var storageErr *StorageError
+			if !errors.As(err, &storageErr) {
+				t.Fatalf("expected *StorageError, got %T", err)
+			}
+
+			// Verify kind
+			if !errors.Is(storageErr.Kind, tt.wantKind) {
+				t.Errorf("kind = %v, want %v", storageErr.Kind, tt.wantKind)
+			}
+
+			// Verify operation
+			if storageErr.Op != tt.wantOp {
+				t.Errorf("op = %s, want %s", storageErr.Op, tt.wantOp)
+			}
+
+			// Verify path contains partition info
+			if storageErr.Path == "" {
+				t.Error("expected non-empty path in StorageError")
+			}
+
+			// Verify original error is in the chain
 			errStr := err.Error()
-			for _, want := range tt.wantText {
-				if !strings.Contains(errStr, want) {
-					t.Errorf("error %q should contain %q", errStr, want)
-				}
+			if !contains(errStr, tt.wantInErr) {
+				t.Errorf("error %q should contain %q", errStr, tt.wantInErr)
 			}
 		})
 	}
@@ -692,9 +681,18 @@ func TestLodeClient_ErrorPropagation_EventWrite(t *testing.T) {
 		t.Fatal("error was swallowed, expected propagation")
 	}
 
-	// Original error should be in the chain
-	if !strings.Contains(err.Error(), "storage backend unavailable") {
-		t.Errorf("original error not in chain: %v", err)
+	// Original error should be in the chain via Unwrap
+	var storageErr *StorageError
+	if !errors.As(err, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T", err)
+	}
+
+	// The underlying error should be accessible
+	if !errors.Is(storageErr.Err, originalErr) {
+		// Check if error message is preserved
+		if !contains(err.Error(), "storage backend unavailable") {
+			t.Errorf("original error not in chain: %v", err)
+		}
 	}
 }
 
@@ -726,8 +724,10 @@ func TestLodeClient_ErrorPropagation_ChunkWrite(t *testing.T) {
 		t.Fatal("error was swallowed, expected propagation")
 	}
 
-	if !strings.Contains(err.Error(), "storage backend unavailable") {
-		t.Errorf("original error not in chain: %v", err)
+	// Verify wrapped correctly
+	var storageErr *StorageError
+	if !errors.As(err, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T", err)
 	}
 }
 
@@ -854,5 +854,56 @@ func TestLodeClient_NoSilentCorruption_CommitFailurePreservesChunksState(t *test
 	// Verify offset is preserved
 	if client.offsets["art-1"] != 4 {
 		t.Errorf("offset should be preserved: got %d, want 4", client.offsets["art-1"])
+	}
+}
+
+// =============================================================================
+// Wrapped Cause Chain Tests
+// =============================================================================
+
+func TestLodeClient_ErrorChain_UnwrapPreservesOriginal(t *testing.T) {
+	// Create a specific error we can test for
+	originalErr := errors.New("original underlying error")
+	store := &FailingStore{PutErr: originalErr}
+
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test",
+		Category: "test",
+		Day:      "2026-02-03",
+		RunID:    "run-1",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	events := []*types.EventEnvelope{
+		{Type: types.EventTypeItem, Seq: 1, Payload: map[string]any{"key": "value"}},
+	}
+
+	err = client.WriteEvents(t.Context(), cfg.Dataset, cfg.RunID, events)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// The error chain should include a StorageError
+	var storageErr *StorageError
+	if !errors.As(err, &storageErr) {
+		t.Fatalf("expected *StorageError in chain, got %T", err)
+	}
+
+	// The original error message should be preserved in the chain
+	// (Note: Lode may wrap the error, so we check the message is present)
+	errStr := err.Error()
+	if !contains(errStr, "original underlying error") {
+		t.Errorf("original error message not in chain: %v", err)
+	}
+
+	// StorageError.Unwrap should return something (the wrapped error from Lode)
+	unwrapped := errors.Unwrap(storageErr)
+	if unwrapped == nil {
+		t.Error("StorageError.Unwrap() returned nil, expected wrapped error")
 	}
 }

@@ -51,7 +51,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 		lode.WithCodec(lode.NewJSONLCodec()),
 	)
 	if err != nil {
-		return nil, err
+		return nil, WrapInitError(err, cfg.Dataset)
 	}
 
 	return &LodeClient{
@@ -103,7 +103,7 @@ func (c *LodeClient) WriteEvents(ctx context.Context, _, _ string, events []*typ
 
 	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
 	if err != nil {
-		return err
+		return WrapWriteError(err, buildPartitionPath(c.config, string(events[0].Type)))
 	}
 
 	// Reset state for committed artifacts
@@ -154,7 +154,7 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 	// Write to storage
 	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
 	if err != nil {
-		return err
+		return WrapWriteError(err, buildPartitionPath(c.config, "artifact"))
 	}
 
 	// Only update state after successful write
@@ -188,6 +188,11 @@ func extractArtifactID(payload map[string]any) string {
 		return id
 	}
 	return ""
+}
+
+// buildPartitionPath constructs a human-readable partition path for error messages.
+func buildPartitionPath(cfg Config, eventType string) string {
+	return cfg.Dataset + "/" + cfg.Source + "/" + cfg.Category + "/" + cfg.Day + "/" + cfg.RunID + "/" + eventType
 }
 
 // Verify LodeClient implements Client.
