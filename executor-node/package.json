@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/bin/executor.js",
+    "bundle": "mkdir -p dist/bundle && tsx scripts/bundle.ts && chmod +x dist/bundle/executor.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
     "typecheck": "tsc --noEmit",
@@ -23,6 +24,7 @@
     "puppeteer": "^24"
   },
   "devDependencies": {
+    "esbuild": "^0.27.2",
     "puppeteer": "^24.36.1"
   }
 }
