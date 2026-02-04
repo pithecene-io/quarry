@@ -74,9 +74,18 @@ tasks:
   go:build:
     desc: Build Go module
     aliases: [go:b]
+    deps: [executor:bundle]
     dir: quarry
     cmds:
       - go build -o quarry ./cmd/quarry
+
+  executor:bundle:
+    desc: Bundle executor for embedding
+    deps: [ts:build]
+    cmds:
+      - pnpm -C executor-node run bundle
+      - mkdir -p quarry/executor/bundle
+      - cp executor-node/dist/bundle/executor.mjs quarry/executor/bundle/
 
   go:lint:
     desc: Lint Go module

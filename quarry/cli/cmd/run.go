@@ -13,6 +13,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/proxy"
@@ -410,8 +411,9 @@ Valid options:
 // resolveExecutor finds the executor binary path.
 // Resolution order:
 //  1. Explicit --executor flag (if provided)
-//  2. Bundled path relative to quarry binary (../executor-node/dist/bin/executor.js)
-//  3. "quarry-executor" in PATH
+//  2. Embedded executor (extracted to temp dir)
+//  3. Bundled path relative to quarry binary (development layout)
+//  4. "quarry-executor" in PATH
 func resolveExecutor(explicit string) (string, error) {
 	// 1. Explicit override takes priority
 	if explicit != "" {
@@ -421,8 +423,17 @@ func resolveExecutor(explicit string) (string, error) {
 		return explicit, nil
 	}
 
-	// 2. Try bundled path relative to this binary
-	// This handles development and installed layouts
+	// 2. Try embedded executor (primary method for distributed binary)
+	if executor.IsEmbedded() {
+		path, err := executor.ExtractedPath()
+		if err == nil {
+			return path, nil
+		}
+		// Log extraction failure but continue to fallbacks
+		fmt.Fprintf(os.Stderr, "Warning: failed to extract embedded executor: %v\n", err)
+	}
+
+	// 3. Try bundled path relative to this binary (development layout)
 	execPath, err := os.Executable()
 	if err == nil {
 		execDir := filepath.Dir(execPath)
@@ -443,7 +454,7 @@ func resolveExecutor(explicit string) (string, error) {
 		}
 	}
 
-	// 3. Try PATH lookup
+	// 4. Try PATH lookup
 	if path, err := exec.LookPath("quarry-executor"); err == nil {
 		return path, nil
 	}

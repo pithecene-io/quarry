@@ -17,6 +17,8 @@
  *
  * @module
  */
+import { createRequire } from 'node:module'
+import { resolve, dirname } from 'node:path'
 import type { Writable } from 'node:stream'
 import {
   type CreateContextOptions,
@@ -28,11 +30,61 @@ import {
   TerminalEventError
 } from '@justapithecus/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
-import puppeteer from 'puppeteer'
 import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
 import { ObservingSink, SinkAlreadyFailedError, type SinkState } from './ipc/observing-sink.js'
 import { StdioSink } from './ipc/sink.js'
 import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
+
+/**
+ * Lazily import puppeteer to support bundled executor.
+ *
+ * When the executor runs from a temp directory (embedded bundle), puppeteer
+ * must be resolved from the user's script location or global installation.
+ * This function tries multiple resolution strategies:
+ * 1. Resolve from the script's directory (for project-installed puppeteer)
+ * 2. Fallback to standard import (for globally installed puppeteer)
+ */
+let puppeteerModule: { launch: (options?: LaunchOptions) => Promise<Browser> } | null = null
+
+async function getPuppeteer(
+  scriptPath: string
+): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
+  if (puppeteerModule) {
+    return puppeteerModule
+  }
+
+  // Try to resolve puppeteer from the script's location first
+  // This allows the bundled executor to find puppeteer in the user's project
+  const absoluteScriptPath = resolve(scriptPath)
+  const scriptDir = dirname(absoluteScriptPath)
+
+  // Strategy 1: Use createRequire to resolve from script's directory
+  try {
+    const require = createRequire(absoluteScriptPath)
+    const puppeteerPath = require.resolve('puppeteer')
+    const mod = await import(puppeteerPath)
+    const pptr = mod.default as { launch: (options?: LaunchOptions) => Promise<Browser> }
+    puppeteerModule = pptr
+    return pptr
+  } catch {
+    // Fall through to strategy 2
+  }
+
+  // Strategy 2: Standard import (may work if puppeteer is globally installed)
+  try {
+    const mod = await import('puppeteer')
+    const pptr = mod.default as { launch: (options?: LaunchOptions) => Promise<Browser> }
+    puppeteerModule = pptr
+    return pptr
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Failed to load puppeteer: ${message}\n` +
+        'Puppeteer is a peer dependency of quarry-executor. ' +
+        `Install it in your project (${scriptDir}): npm install puppeteer`
+    )
+  }
+}
 
 /**
  * Executor configuration passed from the runtime.
@@ -319,6 +371,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
     }
 
     // 2. Launch Puppeteer (with proxy if configured)
+    const puppeteer = await getPuppeteer(config.scriptPath)
     const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy)
     browser = await puppeteer.launch(launchOptions)
     browserContext = await browser.createBrowserContext()
