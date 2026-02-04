@@ -20,6 +20,10 @@ tasks:
     desc: Run all tests (Go + TS)
     deps: [go:test, ts:test]
 
+  test:race:
+    desc: Run all tests with race detector
+    deps: [go:test:race, ts:test]
+
   examples:
     desc: Validate examples are present
     cmds:
@@ -40,6 +44,20 @@ tasks:
     desc: Format all packages (Go + TS)
     aliases: [fmt]
     deps: [go:format, ts:format]
+
+  version:lockstep:
+    desc: Verify version lockstep (Go == SDK)
+    cmds:
+      - |
+        GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
+        SDK_VERSION=$(jq -r '.version' sdk/package.json)
+        echo "Go version:  $GO_VERSION"
+        echo "SDK version: $SDK_VERSION"
+        if [ "$GO_VERSION" != "$SDK_VERSION" ]; then
+          echo "❌ Version mismatch!"
+          exit 1
+        fi
+        echo "✅ Versions match"
 
   # ==========
   # Go tasks
@@ -65,6 +83,13 @@ tasks:
     dir: quarry
     cmds:
       - go test ./...
+
+  go:test:race:
+    desc: Test Go module with race detector
+    aliases: [go:tr]
+    dir: quarry
+    cmds:
+      - go test -race ./...
 
   go:format:
     desc: Format Go module
