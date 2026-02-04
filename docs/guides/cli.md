@@ -101,7 +101,8 @@ Optional flags:
 - `--attempt <n>` (default: 1)
 - `--job-id <id>`
 - `--parent-run-id <id>`
-- `--job <json>`
+- `--job <json>` (inline JSON payload)
+- `--job-json <path>` (load payload from file; mutually exclusive with `--job`)
 - `--quiet`
 - `--policy strict|buffered`
 - `--flush-mode at_least_once|chunks_first|two_phase`
