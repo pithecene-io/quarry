@@ -380,14 +380,10 @@ Create the directory first:
   mkdir -p %s`, config.path, config.path)
 		}
 		if err != nil {
-			return fmt.Errorf(`cannot access storage path %q: %v
-
-Ensure the path exists and is readable.`, config.path, err)
+			return fmt.Errorf("cannot access storage path %q: %v (ensure the path exists and is readable)", config.path, err)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf(`storage path is not a directory: %s
-
-The --storage-path for fs backend must be a directory, not a file.`, config.path)
+			return fmt.Errorf("storage path is not a directory: %s (--storage-path for fs backend must be a directory, not a file)", config.path)
 		}
 		return nil
 
@@ -420,9 +416,7 @@ func resolveExecutor(explicit string) (string, error) {
 	// 1. Explicit override takes priority
 	if explicit != "" {
 		if _, err := os.Stat(explicit); err != nil {
-			return "", fmt.Errorf(`executor not found: %s
-
-The specified executor does not exist. Check the path and try again.`, explicit)
+			return "", fmt.Errorf("executor not found at %s (check the path and try again)", explicit)
 		}
 		return explicit, nil
 	}
@@ -511,7 +505,7 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 	case "fs":
 		client, err = lode.NewLodeClient(cfg, storageConfig.path)
 		if err != nil {
-			return nil, fmt.Errorf("filesystem storage initialization failed: %w\n\nEnsure the directory exists and is writable: %s", err, storageConfig.path)
+			return nil, fmt.Errorf("filesystem storage initialization failed: %w (ensure directory %s exists and is writable)", err, storageConfig.path)
 		}
 	case "s3":
 		bucket, prefix := lode.ParseS3Path(storageConfig.path)
@@ -522,7 +516,7 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 		}
 		client, err = lode.NewLodeS3Client(cfg, s3cfg)
 		if err != nil {
-			return nil, fmt.Errorf("S3 storage initialization failed: %w\n\nCheck AWS credentials and bucket permissions.", err)
+			return nil, fmt.Errorf("S3 storage initialization failed: %w (check AWS credentials and bucket permissions)", err)
 		}
 	default:
 		// Should not reach here due to validateStorageConfig
