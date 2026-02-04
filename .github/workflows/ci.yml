@@ -7,6 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  version-lockstep:
+    name: "🔒 Version Lockstep"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🔒 Check Version Lockstep"
+        run: |
+          GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
+          SDK_VERSION=$(jq -r '.version' sdk/package.json)
+          echo "Go version: $GO_VERSION"
+          echo "SDK version: $SDK_VERSION"
+          if [ "$GO_VERSION" != "$SDK_VERSION" ]; then
+            echo "::error::Version mismatch! quarry/types/version.go ($GO_VERSION) != sdk/package.json ($SDK_VERSION)"
+            exit 1
+          fi
+          echo "✅ Versions match: $GO_VERSION"
+
   lint:
     name: "🧹 Lint"
     runs-on: ubuntu-latest

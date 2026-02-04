@@ -1,0 +1,151 @@
+# Release Readiness Checklist — v0.1.0
+
+This document tracks release gates for Quarry v0.1.0.
+All gates must be satisfied before tagging a release.
+
+---
+
+## Hard Gates (Blocking)
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| CI green on main | ⬜ | [CI Run](#) |
+| Nightly green (3+ consecutive) | ⬜ | [Nightly Runs](#) |
+| Release dry-run passes | ⬜ | [Dry-run Log](#) |
+| Examples validated end-to-end | ⬜ | [Example Logs](#) |
+| Version lockstep verified | ⬜ | `quarry/types/version.go` == `sdk/package.json` |
+
+---
+
+## Phase Checklist
+
+### Phase 1 — Example Correctness
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Single supported script format decided | ⬜ | JS or TS runtime |
+| All examples executable as documented | ⬜ | |
+| Per-example success assertions added | ⬜ | Event counts/types/artifacts |
+| Negative example (failure path) added | ⬜ | |
+| No external websites; local fixtures only | ⬜ | |
+| Artifact example validates chunk+commit | ⬜ | |
+| Deterministic outputs (stable order) | ⬜ | |
+| `task examples` executes, not just checks | ⬜ | |
+| Example run logs in CI artifacts | ⬜ | |
+
+### Phase 2 — Public API Documentation
+
+| Item | Status | Notes |
+|------|--------|-------|
+| PUBLIC_API.md rewritten for first-run clarity | ⬜ | |
+| Prerequisites with exact versions | ⬜ | From repo pins |
+| Minimal setup documented | ⬜ | |
+| One canonical run command | ⬜ | |
+| Troubleshooting section | ⬜ | |
+| No Lode internals exposed | ⬜ | Quarry-level terms only |
+| Script authoring contract section | ⬜ | Export shape, hooks, terminal behavior |
+| Known limitations section | ⬜ | |
+| Doc snippets from tested examples | ⬜ | |
+| Every command has CI counterpart | ⬜ | |
+| Internal doc review sign-off | ⬜ | |
+
+### Phase 3 — CLI Ergonomics
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Required/optional flags normalized | ⬜ | |
+| Storage flags validated with clear errors | ⬜ | |
+| `--help` examples match working examples | ⬜ | |
+| Run output includes metadata + summary | ⬜ | |
+| JSON/job payload validation | ⬜ | |
+| Storage backend/path validation | ⬜ | |
+| No silent fallbacks | ⬜ | |
+| CLI UX tests for misconfigurations | ⬜ | |
+| Error messages include "what to do next" | ⬜ | |
+
+### Phase 4 — Runtime & Ingestion Resilience
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Sink write failure (before chunks) tested | ⬜ | |
+| Sink write failure (after chunks) tested | ⬜ | |
+| Executor crash mid-stream tested | ⬜ | |
+| Malformed frame tested | ⬜ | |
+| Policy flush failure tested | ⬜ | |
+| Outcome mapping verified per failure | ⬜ | |
+| Buffered policy ordering invariants | ⬜ | |
+| Chunk/commit invariants upheld | ⬜ | |
+| Partial flush + new events matrix | ⬜ | |
+| No silent data-loss paths | ⬜ | |
+
+### Phase 5 — Storage Backend Hardening
+
+| Item | Status | Notes |
+|------|--------|-------|
+| FS: permissions/path validation | ⬜ | |
+| FS: disk-full/error behavior tests | ⬜ | |
+| S3: config validation tests | ⬜ | |
+| S3: auth failure handling | ⬜ | |
+| S3: consistency caveats documented | ⬜ | |
+| Checksum internal-only and off | ⬜ | |
+| Backpressure/retry behavior documented | ⬜ | Or explicit non-goals |
+
+### Phase 6 — CI/Nightly/Release Reliability
+
+| Item | Status | Notes |
+|------|--------|-------|
+| CI: lint/test/build/examples required | ⬜ | |
+| Nightly: test:race meaningful | ⬜ | |
+| Nightly: artifacts/logs retained | ⬜ | |
+| Release: semver tag check | ⬜ | |
+| Release: version lockstep check | ⬜ | |
+| Release: package + hold + release flow | ⬜ | |
+| Release: GitHub Packages publish | ⬜ | |
+| Release: dry-run workflow added | ⬜ | |
+| Release: missing checks block release | ⬜ | |
+| Release: pre-publish validation | ⬜ | |
+| Successful full dry-run completed | ⬜ | |
+
+### Phase 7 — Go/No-Go Review
+
+| Item | Status | Notes |
+|------|--------|-------|
+| All phase exit criteria complete | ⬜ | |
+| No open P0/P1 defects | ⬜ | |
+| Docs/examples/CI green on main | ⬜ | |
+| Known limitations documented | ⬜ | |
+| Support posture documented | ⬜ | |
+| Release decision doc complete | ⬜ | |
+
+---
+
+## Scope Summary
+
+### Supported (v0.1.0)
+
+- Node.js executor with TypeScript/JavaScript scripts
+- Filesystem storage backend
+- Buffered ingestion policies (FlushAtLeastOnce, FlushTwoPhase)
+- Event and artifact emission via SDK
+- CLI: `run`, `inspect`, `stats` commands
+
+### Experimental (v0.1.0)
+
+- S3 storage backend (requires explicit opt-in)
+
+### Out of Scope (Post-v0.1.0)
+
+- TBD
+
+---
+
+## Sign-off
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| Maintainer | | | |
+| Reviewer | | | |
+
+---
+
+*Last updated: 2026-02-03*

@@ -14,5 +14,17 @@ jobs:
         uses: actions/checkout@v4
       - name: "🧰 Setup"
         uses: jdx/mise-action@v2
+      - name: "📦 Install dependencies"
+        run: pnpm install
       - name: "🧪 Race Tests"
         run: task test:race
+      - name: "⬆️ Upload Test Logs"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-test-logs
+          path: |
+            quarry/**/*.log
+            sdk/**/*.log
+            executor-node/**/*.log
+          retention-days: 14

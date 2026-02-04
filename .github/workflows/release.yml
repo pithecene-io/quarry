@@ -22,10 +22,36 @@ jobs:
           text: ${{ github.ref_name }}
           regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'
 
+  version_lockstep:
+    name: "🔒 Version Lockstep"
+    runs-on: ubuntu-latest
+    needs: [tag_check]
+    if: ${{ needs.tag_check.outputs.semver_match != '' }}
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🔒 Check Version Matches Tag"
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
+          SDK_VERSION=$(jq -r '.version' sdk/package.json)
+          echo "Tag version: $TAG_VERSION"
+          echo "Go version: $GO_VERSION"
+          echo "SDK version: $SDK_VERSION"
+          if [ "$GO_VERSION" != "$SDK_VERSION" ]; then
+            echo "::error::Version mismatch! quarry/types/version.go ($GO_VERSION) != sdk/package.json ($SDK_VERSION)"
+            exit 1
+          fi
+          if [ "$GO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag mismatch! Tag ($TAG_VERSION) != code version ($GO_VERSION)"
+            exit 1
+          fi
+          echo "✅ All versions match: $TAG_VERSION"
+
   package:
     name: "📦 Package"
     runs-on: ubuntu-latest
-    needs: [tag_check]
+    needs: [tag_check, version_lockstep]
     if: ${{ needs.tag_check.outputs.semver_match != '' }}
     steps:
       - name: "📥 Checkout"
