@@ -231,52 +231,44 @@ func TestResolveExecutor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests := []struct {
-		name        string
-		explicit    string
-		wantErr     bool
-		errContains string
-		wantPath    string
-	}{
-		{
-			name:     "explicit path found",
-			explicit: mockExecutor,
-			wantErr:  false,
-			wantPath: mockExecutor,
-		},
-		{
-			name:        "explicit path not found",
-			explicit:    "/nonexistent/executor.js",
-			wantErr:     true,
-			errContains: "executor not found",
-		},
-		{
-			name:        "no executor anywhere",
-			explicit:    "",
-			wantErr:     true,
-			errContains: "executor not found",
-		},
-	}
+	t.Run("explicit path found", func(t *testing.T) {
+		path, err := resolveExecutor(mockExecutor)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if path != mockExecutor {
+			t.Errorf("got path %q, want %q", path, mockExecutor)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path, err := resolveExecutor(tt.explicit)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("error %q should contain %q", err.Error(), tt.errContains)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if tt.wantPath != "" && path != tt.wantPath {
-					t.Errorf("got path %q, want %q", path, tt.wantPath)
-				}
+	t.Run("explicit path not found", func(t *testing.T) {
+		_, err := resolveExecutor("/nonexistent/executor.js")
+		if err == nil {
+			t.Error("expected error, got nil")
+		} else if !strings.Contains(err.Error(), "executor not found") {
+			t.Errorf("error %q should contain %q", err.Error(), "executor not found")
+		}
+	})
+
+	t.Run("auto-resolution returns valid path or error", func(t *testing.T) {
+		// This test verifies the auto-resolution behavior without being environment-dependent.
+		// It succeeds if either: (1) a valid path is returned, or (2) an actionable error is returned.
+		path, err := resolveExecutor("")
+		if err != nil {
+			// Verify error is actionable
+			if !strings.Contains(err.Error(), "executor not found") {
+				t.Errorf("error should mention 'executor not found', got: %v", err)
 			}
-		})
-	}
+			if !strings.Contains(err.Error(), "pnpm") {
+				t.Errorf("error should include build instructions, got: %v", err)
+			}
+		} else {
+			// Verify returned path exists
+			if _, statErr := os.Stat(path); statErr != nil {
+				t.Errorf("resolved path %q does not exist: %v", path, statErr)
+			}
+		}
+	})
 }
 
 func TestResolveExecutorErrorIsActionable(t *testing.T) {
