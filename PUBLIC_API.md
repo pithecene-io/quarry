@@ -74,7 +74,7 @@ The `QuarryContext` provides:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `job` | `unknown` | Job payload (parsed from `--job` JSON) |
+| `job` | `unknown` | Job payload (from `--job` or `--job-json`) |
 | `run` | `RunMeta` | Run metadata (run_id, attempt, job_id, etc.) |
 | `page` | `Page` | Puppeteer page instance |
 | `browser` | `Browser` | Puppeteer browser instance |
