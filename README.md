@@ -68,18 +68,22 @@ A typical pipeline might look like:
 # Extract
 quarry run \
   --script streeteasy.ts \
-  --job jobs/streeteasy.json \
-  --dataset nyc-rent/streeteasy/raw \
+  --run-id "streeteasy-$(date +%s)" \
+  --source nyc-rent \
+  --category streeteasy \
+  --job '{"url": "https://streeteasy.com/rentals"}' \
+  --storage-backend fs \
+  --storage-path /var/quarry/data \
   --policy buffered
 
 # Transform (outside Quarry)
 nyc-rent-transform \
-  --input nyc-rent/streeteasy/raw \
-  --output nyc-rent/streeteasy/normalized
+  --input /var/quarry/data/source=nyc-rent \
+  --output /var/quarry/normalized
 
 # Index / analyze (outside Quarry)
 nyc-rent-index \
-  --input nyc-rent/streeteasy/normalized
+  --input /var/quarry/normalized
 ```
 
 Quarry owns **only** the extraction step.
@@ -100,13 +104,14 @@ They should:
 ### Example
 
 ```ts
-import type { QuarryScript } from 'quarry/sdk'
+import type { QuarryContext } from '@justapithecus/quarry-sdk'
 
-export default async function run(ctx) {
+export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.page.goto(ctx.job.url)
 
   const listings = await ctx.page.evaluate(() => {
     // scrape DOM
+    return []
   })
 
   for (const listing of listings) {
@@ -134,8 +139,8 @@ All output flows through `emit.*`:
 - `emit.artifact(...)` — binary artifacts (screenshots, files)
 - `emit.checkpoint(...)` — progress markers
 - `emit.log(...)` — structured logs
-- `emit.run_error(...)` — terminal failure
-- `emit.run_complete(...)` — successful completion
+- `emit.runError(...)` — terminal failure
+- `emit.runComplete(...)` — successful completion
 
 Emission is:
 - **ordered**
