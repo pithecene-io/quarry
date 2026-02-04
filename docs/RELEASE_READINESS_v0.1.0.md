@@ -97,16 +97,16 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| CI: lint/test/build/examples required | ⬜ | |
-| Nightly: test:race meaningful | ⬜ | |
-| Nightly: artifacts/logs retained | ⬜ | |
-| Release: semver tag check | ⬜ | |
-| Release: version lockstep check | ⬜ | |
-| Release: package + hold + release flow | ⬜ | |
-| Release: GitHub Packages publish | ⬜ | |
-| Release: dry-run workflow added | ⬜ | |
-| Release: missing checks block release | ⬜ | |
-| Release: pre-publish validation | ⬜ | |
+| CI: lint/test/build/examples required | ✅ | All jobs in ci.yml; branch protection TBD |
+| Nightly: test:race meaningful | ✅ | Runs at 4am daily |
+| Nightly: artifacts/logs retained | ✅ | 14-day retention on failure |
+| Release: semver tag check | ✅ | Regex match ^v[0-9]+\.[0-9]+\.[0-9]+$ |
+| Release: version lockstep check | ✅ | Verifies Go/SDK/Tag versions match |
+| Release: package + hold + release flow | ✅ | hold job with release environment |
+| Release: GitHub Packages publish | ✅ | publish_npm job to npm.pkg.github.com |
+| Release: dry-run workflow added | ✅ | release-dry-run.yml with full validation |
+| Release: missing checks block release | ⚠️ | Branch protection config needed (manual) |
+| Release: pre-publish validation | ✅ | lint/test/build/examples before package |
 | Successful full dry-run completed | ⬜ | |
 
 ### Phase 7 — Go/No-Go Review
@@ -119,6 +119,36 @@ All gates must be satisfied before tagging a release.
 | Known limitations documented | ⬜ | |
 | Support posture documented | ⬜ | |
 | Release decision doc complete | ⬜ | |
+
+### Phase 8 — Storage Failure Hardening
+
+| Item | Status | Notes |
+|------|--------|-------|
+| FS: directory creation failure tested | ⬜ | Real mkdir failures (permissions, path) |
+| FS: file write failure tested | ⬜ | Real write failures (disk full, quota) |
+| FS: atomic write semantics validated | ⬜ | Partial write detection |
+| S3: auth failure tested | ⬜ | Invalid/expired credentials |
+| S3: bucket access denied tested | ⬜ | Missing permissions |
+| S3: network timeout tested | ⬜ | Transient network failures |
+| S3: throttling (429) tested | ⬜ | Rate limit handling |
+| Error messages include storage context | ⬜ | Path/bucket in errors |
+| Policy failure propagation verified | ⬜ | Storage errors → run outcome |
+| No silent corruption paths | ⬜ | All partial writes detectable |
+
+### Phase 9 — Bundle Executor with Go Distribution
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Executor embedded in quarry binary | ⬜ | Go embed for Node executor |
+| Executor extraction to temp dir | ⬜ | Extract on first run |
+| Executor version validation | ⬜ | Embedded matches expected |
+| Fallback to PATH executor | ⬜ | If embedded extraction fails |
+| Cross-platform extraction tested | ⬜ | Linux, macOS, Windows |
+| Extraction permissions correct | ⬜ | Executable bit set |
+| Temp dir cleanup on exit | ⬜ | No orphaned extractors |
+| `--executor` override still works | ⬜ | Explicit path takes precedence |
+| Build reproduces embedded content | ⬜ | Deterministic embed |
+| Binary size impact documented | ⬜ | Size delta tracked |
 
 ---
 
