@@ -168,9 +168,12 @@ quarry run [options]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--attempt <n>` | 1 | Attempt number |
-| `--job <json>` | `{}` | Job payload as JSON |
+| `--job <json>` | `{}` | Job payload as inline JSON |
+| `--job-json <path>` | | Path to JSON file containing job payload |
 | `--category <name>` | `default` | Category for partitioning |
 | `--policy <strict\|buffered>` | `strict` | Ingestion policy |
+
+> **Note:** `--job` and `--job-json` are mutually exclusive. Using both is an error.
 
 **Advanced flags:**
 

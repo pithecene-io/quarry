@@ -48,19 +48,24 @@ EXAMPLES:
   quarry run --script ./script.ts --run-id run-001 --source my-source \
     --storage-backend fs --storage-path ./data
 
-  # Run with job payload
+  # Run with inline job payload
   quarry run --script ./script.ts --run-id run-002 --source my-source \
     --storage-backend fs --storage-path ./data \
     --job '{"url": "https://example.com"}'
 
-  # Run with S3 storage
+  # Run with job payload from file
   quarry run --script ./script.ts --run-id run-003 --source my-source \
+    --storage-backend fs --storage-path ./data \
+    --job-json ./jobs/crawl-config.json
+
+  # Run with S3 storage
+  quarry run --script ./script.ts --run-id run-004 --source my-source \
     --storage-backend s3 --storage-path my-bucket/prefix \
     --storage-region us-east-1
 
 ADVANCED:
   # Override executor path (troubleshooting)
-  quarry run --script ./script.ts --run-id run-004 --source my-source \
+  quarry run --script ./script.ts --run-id run-005 --source my-source \
     --storage-backend fs --storage-path ./data \
     --executor /custom/path/to/executor.js`,
 		Flags: []cli.Flag{
@@ -90,8 +95,11 @@ ADVANCED:
 			},
 			&cli.StringFlag{
 				Name:  "job",
-				Usage: "Job payload as JSON",
-				Value: "{}",
+				Usage: "Job payload as inline JSON",
+			},
+			&cli.StringFlag{
+				Name:  "job-json",
+				Usage: "Path to JSON file containing job payload",
 			},
 			&cli.StringFlag{
 				Name:  "executor",
@@ -217,18 +225,10 @@ func runAction(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("invalid policy config: %v", err), exitExecutorCrash)
 	}
 
-	// Parse job payload
-	var job any
-	jobStr := c.String("job")
-	if err := json.Unmarshal([]byte(jobStr), &job); err != nil {
-		return cli.Exit(fmt.Sprintf(`invalid --job JSON: %v
-
-The --job flag must contain valid JSON. Examples:
-  --job '{}'
-  --job '{"key": "value"}'
-  --job '{"url": "https://example.com", "page": 1}'
-
-Received: %s`, err, jobStr), exitConfigError)
+	// Parse job payload (--job or --job-json, not both)
+	job, err := parseJobPayload(c.String("job"), c.String("job-json"))
+	if err != nil {
+		return cli.Exit(err.Error(), exitConfigError)
 	}
 
 	// Build run metadata
@@ -406,6 +406,64 @@ Valid options:
   fs   Filesystem storage (requires writable directory)
   s3   Amazon S3 storage (requires AWS credentials)`, config.backend)
 	}
+}
+
+// parseJobPayload parses job payload from --job (inline) or --job-json (file).
+// Using both flags is an explicit error. If neither is specified, returns empty object.
+func parseJobPayload(jobInline, jobFile string) (any, error) {
+	hasInline := jobInline != ""
+	hasFile := jobFile != ""
+
+	// Conflict: both specified
+	if hasInline && hasFile {
+		return nil, fmt.Errorf(`cannot use both --job and --job-json
+
+Provide job payload via ONE of:
+  --job '{"key": "value"}'     (inline JSON)
+  --job-json ./payload.json    (path to JSON file)`)
+	}
+
+	// Load from file
+	if hasFile {
+		data, err := os.ReadFile(jobFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf(`job file not found: %s
+
+Ensure the file exists:
+  ls -la %s`, jobFile, jobFile)
+			}
+			return nil, fmt.Errorf("cannot read job file %q: %v", jobFile, err)
+		}
+
+		var job any
+		if err := json.Unmarshal(data, &job); err != nil {
+			return nil, fmt.Errorf(`invalid JSON in job file %s: %v
+
+The file must contain valid JSON. Example:
+  {"url": "https://example.com", "page": 1}`, jobFile, err)
+		}
+		return job, nil
+	}
+
+	// Parse inline JSON
+	if hasInline {
+		var job any
+		if err := json.Unmarshal([]byte(jobInline), &job); err != nil {
+			return nil, fmt.Errorf(`invalid --job JSON: %v
+
+The --job flag must contain valid JSON. Examples:
+  --job '{}'
+  --job '{"key": "value"}'
+  --job '{"url": "https://example.com", "page": 1}'
+
+Received: %s`, err, jobInline)
+		}
+		return job, nil
+	}
+
+	// Neither specified: empty object
+	return map[string]any{}, nil
 }
 
 // resolveExecutor finds the executor binary path.
