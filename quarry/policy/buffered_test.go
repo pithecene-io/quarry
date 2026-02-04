@@ -280,7 +280,7 @@ func TestBufferedPolicy_SinkError(t *testing.T) {
 	sink.ErrorOnWrite = expectedErr
 
 	err := pol.Flush(t.Context())
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 
@@ -1346,13 +1346,15 @@ func TestBufferedPolicy_EventsWrittenInSequenceOrder(t *testing.T) {
 			// Ingest events in a specific sequence order
 			events := []*types.EventEnvelope{
 				{EventID: "e1", Type: types.EventTypeItem, Seq: 1},
-				{EventID: "art-commit", Type: types.EventTypeArtifact, Seq: 2,
+				{
+					EventID: "art-commit", Type: types.EventTypeArtifact, Seq: 2,
 					Payload: map[string]any{
 						"artifact_id":  "art-1",
 						"name":         "test.txt",
 						"content_type": "text/plain",
 						"size_bytes":   float64(10),
-					}},
+					},
+				},
 				{EventID: "e2", Type: types.EventTypeLog, Seq: 3},
 			}
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/justapithecus/lode/lode"
+
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -148,9 +149,9 @@ func TestLodeClient_ChunkOffset(t *testing.T) {
 
 	// Test that offsets are computed correctly per-artifact
 	chunks := []*types.ArtifactChunk{
-		{ArtifactID: "art-1", Seq: 1, Data: []byte("12345")},      // offset 0, length 5
-		{ArtifactID: "art-1", Seq: 2, Data: []byte("67890")},      // offset 5, length 5
-		{ArtifactID: "art-2", Seq: 1, Data: []byte("abc")},        // offset 0 (different artifact)
+		{ArtifactID: "art-1", Seq: 1, Data: []byte("12345")},           // offset 0, length 5
+		{ArtifactID: "art-1", Seq: 2, Data: []byte("67890")},           // offset 5, length 5
+		{ArtifactID: "art-2", Seq: 1, Data: []byte("abc")},             // offset 0 (different artifact)
 		{ArtifactID: "art-1", Seq: 3, IsLast: true, Data: []byte("!")}, // offset 10, length 1
 	}
 

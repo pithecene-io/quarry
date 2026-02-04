@@ -289,10 +289,10 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 
 		if exitOutcome != runResultOutcome.Status {
 			r.logger.Warn("exit code conflicts with run_result", map[string]any{
-				"exit_code":            execResult.ExitCode,
-				"exit_outcome":         exitOutcome,
-				"run_result_status":    runResultFrame.Outcome.Status,
-				"run_result_outcome":   runResultOutcome.Status,
+				"exit_code":          execResult.ExitCode,
+				"exit_outcome":       exitOutcome,
+				"run_result_status":  runResultFrame.Outcome.Status,
+				"run_result_outcome": runResultOutcome.Status,
 			})
 		}
 

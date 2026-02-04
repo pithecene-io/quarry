@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/reader"
 	"github.com/justapithecus/quarry/cli/render"
-	"github.com/urfave/cli/v2"
 )
 
 // StatsCommand returns the stats command with subcommands.

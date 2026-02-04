@@ -94,6 +94,7 @@ tasks:
   ts:test:
     desc: Run runtime tests (Vitest) for all TS packages
     aliases: [ts:t]
+    deps: [ts:build]
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run test

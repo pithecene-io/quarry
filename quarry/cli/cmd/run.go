@@ -9,12 +9,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/runtime"
 	"github.com/justapithecus/quarry/types"
-	"github.com/urfave/cli/v2"
 )
 
 // Exit codes per CONTRACT_RUN.md.

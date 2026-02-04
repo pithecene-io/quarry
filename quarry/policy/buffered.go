@@ -489,7 +489,6 @@ func (p *BufferedPolicy) hasRoomForBytes(size int64) bool {
 	return true
 }
 
-
 // dropOldestDroppable removes the oldest droppable event from the buffer.
 // Scans eventBuffer first, then eventBufferNext (TwoPhase mode).
 // Returns true if an event was dropped, false if no droppable events exist.

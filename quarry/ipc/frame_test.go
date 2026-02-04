@@ -130,7 +130,7 @@ func TestFrameDecoder_MultipleEvents(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -377,7 +377,7 @@ func TestFrameDecoder_MixedEventsAndChunks(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -507,7 +507,7 @@ func TestFrameDecoder_EmptyStream(t *testing.T) {
 	decoder := NewFrameDecoder(bytes.NewReader(nil))
 	_, err := decoder.ReadFrame()
 
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		t.Errorf("expected io.EOF, got: %v", err)
 	}
 }
@@ -891,7 +891,7 @@ func TestDecodeFrame_MixedWithRunResult(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

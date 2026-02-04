@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/reader"
 	"github.com/justapithecus/quarry/cli/render"
-	"github.com/urfave/cli/v2"
 )
 
 // listWarningThreshold is the number of items above which we warn about using --limit.

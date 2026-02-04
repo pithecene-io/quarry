@@ -27,6 +27,9 @@ export type {
   QuarryHooks,
   QuarryScriptModule
 } from './hooks'
+// Proxy validation (from sdk/src/proxy.ts)
+export type { ProxyValidationError, ProxyValidationResult, ProxyValidationWarning } from './proxy'
+export { redactProxyEndpoint, validateProxyEndpoint, validateProxyPool } from './proxy'
 // Context types (from sdk/src/types/context.ts)
 export type { QuarryContext, QuarryScript, RunMeta } from './types/context'
 export type {
@@ -63,6 +66,3 @@ export type {
   ProxyStickyScope,
   ProxyStrategy
 } from './types/proxy'
-// Proxy validation (from sdk/src/proxy.ts)
-export type { ProxyValidationError, ProxyValidationResult, ProxyValidationWarning } from './proxy'
-export { redactProxyEndpoint, validateProxyEndpoint, validateProxyPool } from './proxy'

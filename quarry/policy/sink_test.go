@@ -61,12 +61,12 @@ func TestStubSink_ErrorOnWrite(t *testing.T) {
 	sink.ErrorOnWrite = expectedErr
 
 	err := sink.WriteEvents(t.Context(), []*types.EventEnvelope{{EventID: "e1"}})
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 
 	err = sink.WriteChunks(t.Context(), []*types.ArtifactChunk{{ArtifactID: "a1"}})
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 }

@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/reader"
 	"github.com/justapithecus/quarry/cli/render"
 	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/types"
-	"github.com/urfave/cli/v2"
 )
 
 // DebugCommand returns the debug command with subcommands.

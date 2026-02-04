@@ -20,9 +20,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/justapithecus/quarry/cli/tui"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/justapithecus/quarry/cli/tui"
 )
 
 // Format represents an output format.

@@ -19,9 +19,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/cmd"
 	"github.com/justapithecus/quarry/types"
-	"github.com/urfave/cli/v2"
 )
 
 // Commit is set via ldflags at build time.

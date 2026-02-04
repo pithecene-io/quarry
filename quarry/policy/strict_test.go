@@ -126,7 +126,7 @@ func TestStrictPolicy_SinkError(t *testing.T) {
 	}
 
 	err := pol.IngestEvent(t.Context(), envelope)
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 

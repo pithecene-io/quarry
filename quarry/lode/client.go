@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/justapithecus/lode/lode"
+
 	"github.com/justapithecus/quarry/types"
 )
 

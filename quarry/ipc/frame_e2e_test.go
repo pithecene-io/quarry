@@ -13,6 +13,7 @@ package ipc
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -25,10 +26,10 @@ import (
 
 // testPaths holds resolved paths for E2E tests.
 type testPaths struct {
-	repoRoot     string
-	executorBin  string
-	fixtureDir   string
-	testdataDir  string
+	repoRoot    string
+	executorBin string
+	fixtureDir  string
+	testdataDir string
 }
 
 // resolveTestPaths finds the repository root and executor binary.
@@ -52,10 +53,10 @@ func resolveTestPaths(t *testing.T) testPaths {
 	testdataDir := filepath.Join(ipcDir, "testdata")
 
 	return testPaths{
-		repoRoot:     repoRoot,
-		executorBin:  executorBin,
-		fixtureDir:   fixtureDir,
-		testdataDir:  testdataDir,
+		repoRoot:    repoRoot,
+		executorBin: executorBin,
+		fixtureDir:  fixtureDir,
+		testdataDir: testdataDir,
 	}
 }
 
@@ -135,7 +136,8 @@ func TestE2E_WireHarness(t *testing.T) {
 	stdout, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
 		// Exit code 1 is ok (run_error), 2+ is crash
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -150,7 +152,7 @@ func TestE2E_WireHarness(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -193,7 +195,8 @@ func TestE2E_LiveDecode(t *testing.T) {
 
 	stdout, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -201,12 +204,12 @@ func TestE2E_LiveDecode(t *testing.T) {
 	// Decode all frames
 	decoder := NewFrameDecoder(bytes.NewReader(stdout))
 	var frames []any
-	var terminalSeenAt int = -1 // Index where terminal event was seen
+	terminalSeenAt := -1 // Index where terminal event was seen
 	var terminalType string
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -302,7 +305,8 @@ func TestE2E_FixtureDrift(t *testing.T) {
 
 	newFixture, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -402,7 +406,7 @@ func parseFixture(t *testing.T, data []byte) ([]*types.EventEnvelope, []*types.A
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -461,7 +465,7 @@ func countFrames(t *testing.T, data []byte) int {
 	count := 0
 	for {
 		_, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
