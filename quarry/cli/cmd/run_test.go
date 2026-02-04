@@ -292,6 +292,152 @@ func TestResolveExecutorErrorIsActionable(t *testing.T) {
 	}
 }
 
+func TestParseJobPayload(t *testing.T) {
+	t.Run("neither flag returns empty object", func(t *testing.T) {
+		job, err := parseJobPayload("", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		m, ok := job.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map[string]any, got %T", job)
+		}
+		if len(m) != 0 {
+			t.Errorf("expected empty map, got %v", m)
+		}
+	})
+
+	t.Run("inline JSON parsed", func(t *testing.T) {
+		job, err := parseJobPayload(`{"url": "https://example.com", "page": 1}`, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		m, ok := job.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map[string]any, got %T", job)
+		}
+		if m["url"] != "https://example.com" {
+			t.Errorf("expected url=https://example.com, got %v", m["url"])
+		}
+	})
+
+	t.Run("invalid inline JSON error", func(t *testing.T) {
+		_, err := parseJobPayload(`{invalid}`, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "invalid --job JSON") {
+			t.Errorf("error should mention invalid --job JSON, got: %v", err)
+		}
+	})
+
+	t.Run("file JSON parsed", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "job.json")
+		if err := os.WriteFile(tmpFile, []byte(`{"target": "test"}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		job, err := parseJobPayload("", tmpFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		m, ok := job.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map[string]any, got %T", job)
+		}
+		if m["target"] != "test" {
+			t.Errorf("expected target=test, got %v", m["target"])
+		}
+	})
+
+	t.Run("file not found error", func(t *testing.T) {
+		_, err := parseJobPayload("", "/nonexistent/job.json")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "job file not found") {
+			t.Errorf("error should mention 'job file not found', got: %v", err)
+		}
+	})
+
+	t.Run("invalid file JSON error", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "bad.json")
+		if err := os.WriteFile(tmpFile, []byte(`{not valid json}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload("", tmpFile)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "invalid JSON in job file") {
+			t.Errorf("error should mention 'invalid JSON in job file', got: %v", err)
+		}
+	})
+
+	t.Run("both flags error", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "job.json")
+		if err := os.WriteFile(tmpFile, []byte(`{}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload(`{"inline": true}`, tmpFile)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot use both --job and --job-json") {
+			t.Errorf("error should mention conflict, got: %v", err)
+		}
+	})
+}
+
+func TestParseJobPayloadErrorsAreActionable(t *testing.T) {
+	tests := []struct {
+		name        string
+		jobInline   string
+		jobFile     string
+		mustContain []string
+		description string
+	}{
+		{
+			name:        "conflict lists both options",
+			jobInline:   `{}`,
+			jobFile:     "/some/file.json",
+			mustContain: []string{"--job", "--job-json", "ONE of"},
+			description: "should list both options and clarify to use one",
+		},
+		{
+			name:        "file not found suggests ls",
+			jobInline:   "",
+			jobFile:     "/nonexistent/payload.json",
+			mustContain: []string{"not found", "ls -la"},
+			description: "should suggest checking file existence",
+		},
+		{
+			name:        "invalid inline shows examples",
+			jobInline:   `{broken`,
+			jobFile:     "",
+			mustContain: []string{"--job '{}'", `{"key": "value"}`},
+			description: "should show valid JSON examples",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseJobPayload(tt.jobInline, tt.jobFile)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			errMsg := err.Error()
+			for _, must := range tt.mustContain {
+				if !strings.Contains(errMsg, must) {
+					t.Errorf("%s: error should contain %q\nGot: %s", tt.description, must, errMsg)
+				}
+			}
+		})
+	}
+}
+
 func TestExitCodeConstants(t *testing.T) {
 	// Verify exit code semantics
 	if exitConfigError != exitExecutorCrash {

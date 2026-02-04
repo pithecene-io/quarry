@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **CLI**: `--job-json <path>` flag to load job payload from file (alternative to inline `--job`)
+
+### Changed
+
+- **CLI**: `--job` description clarified as "inline JSON" to distinguish from `--job-json`
+
+---
+
 ## [0.1.0] - 2026-02-04
 
 ### Added
