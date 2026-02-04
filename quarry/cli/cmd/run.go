@@ -32,6 +32,25 @@ func RunCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "run",
 		Usage: "Execute a script run (the only execution entrypoint)",
+		UsageText: `quarry run --script <path> --run-id <id> --source <name> \
+    --storage-backend <fs|s3> --storage-path <path> [options]
+
+EXAMPLES:
+  # Run a script with filesystem storage
+  quarry run --script ./script.ts --run-id run-001 --source my-source \
+    --storage-backend fs --storage-path ./data \
+    --executor ./executor-node/dist/bin/executor.js
+
+  # Run with job payload
+  quarry run --script ./script.ts --run-id run-002 --source my-source \
+    --storage-backend fs --storage-path ./data \
+    --executor ./executor-node/dist/bin/executor.js \
+    --job '{"url": "https://example.com"}'
+
+  # Run with S3 storage
+  quarry run --script ./script.ts --run-id run-003 --source my-source \
+    --storage-backend s3 --storage-path my-bucket/prefix \
+    --storage-region us-east-1`,
 		Flags: []cli.Flag{
 			// Execution flags
 			&cli.StringFlag{
@@ -189,8 +208,16 @@ func runAction(c *cli.Context) error {
 
 	// Parse job payload
 	var job any
-	if err := json.Unmarshal([]byte(c.String("job")), &job); err != nil {
-		return fmt.Errorf("invalid job JSON: %w", err)
+	jobStr := c.String("job")
+	if err := json.Unmarshal([]byte(jobStr), &job); err != nil {
+		return cli.Exit(fmt.Sprintf(`invalid --job JSON: %v
+
+The --job flag must contain valid JSON. Examples:
+  --job '{}'
+  --job '{"key": "value"}'
+  --job '{"url": "https://example.com", "page": 1}'
+
+Received: %s`, err, jobStr), 1)
 	}
 
 	// Build run metadata
@@ -205,11 +232,14 @@ func runAction(c *cli.Context) error {
 		runMeta.ParentRunID = &parentRunID
 	}
 
-	// Parse storage config
+	// Parse and validate storage config
 	storageConfig := storageChoice{
 		backend: c.String("storage-backend"),
 		path:    c.String("storage-path"),
 		region:  c.String("storage-region"),
+	}
+	if err := validateStorageConfig(storageConfig); err != nil {
+		return cli.Exit(err.Error(), 1)
 	}
 
 	// Build policy with storage sink
@@ -295,17 +325,73 @@ func validatePolicyConfig(choice policyChoice) error {
 
 	case "buffered":
 		if choice.maxEvents <= 0 && choice.maxBytes <= 0 {
-			return fmt.Errorf("buffered policy requires --buffer-events > 0 or --buffer-bytes > 0")
+			return fmt.Errorf(`buffered policy requires buffer limits
+
+Add one or both of:
+  --buffer-events <n>   Maximum events to buffer (e.g., --buffer-events 1000)
+  --buffer-bytes <n>    Maximum bytes to buffer (e.g., --buffer-bytes 1048576)`)
 		}
 		switch policy.FlushMode(choice.flushMode) {
 		case policy.FlushAtLeastOnce, policy.FlushChunksFirst, policy.FlushTwoPhase:
 			return nil
 		default:
-			return fmt.Errorf("invalid flush-mode: %s", choice.flushMode)
+			return fmt.Errorf(`invalid --flush-mode: %q
+
+Valid options:
+  at_least_once   Flush all buffered data at least once (default)
+  chunks_first    Flush artifact chunks before events
+  two_phase       Two-phase commit for transactional semantics`, choice.flushMode)
 		}
 
 	default:
-		return fmt.Errorf("invalid policy: %s (must be strict or buffered)", choice.name)
+		return fmt.Errorf(`invalid --policy: %q
+
+Valid options:
+  strict     Write events immediately, fail on any error (default)
+  buffered   Buffer events in memory, flush periodically`, choice.name)
+	}
+}
+
+func validateStorageConfig(config storageChoice) error {
+	switch config.backend {
+	case "fs":
+		// Validate path exists and is a directory
+		info, err := os.Stat(config.path)
+		if os.IsNotExist(err) {
+			return fmt.Errorf(`storage path does not exist: %s
+
+Create the directory first:
+  mkdir -p %s`, config.path, config.path)
+		}
+		if err != nil {
+			return fmt.Errorf(`cannot access storage path %q: %v
+
+Ensure the path exists and is readable.`, config.path, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf(`storage path is not a directory: %s
+
+The --storage-path for fs backend must be a directory, not a file.`, config.path)
+		}
+		return nil
+
+	case "s3":
+		// Basic validation for S3 path format
+		if config.path == "" {
+			return fmt.Errorf(`--storage-path required for s3 backend
+
+Format: bucket-name/optional-prefix
+Example: --storage-path my-bucket/quarry-data`)
+		}
+		// S3 credentials are validated at runtime by AWS SDK
+		return nil
+
+	default:
+		return fmt.Errorf(`invalid --storage-backend: %q
+
+Valid options:
+  fs   Filesystem storage (requires writable directory)
+  s3   Amazon S3 storage (requires AWS credentials)`, config.backend)
 	}
 }
 
@@ -351,6 +437,9 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 	switch storageConfig.backend {
 	case "fs":
 		client, err = lode.NewLodeClient(cfg, storageConfig.path)
+		if err != nil {
+			return nil, fmt.Errorf("filesystem storage initialization failed: %w\n\nEnsure the directory exists and is writable: %s", err, storageConfig.path)
+		}
 	case "s3":
 		bucket, prefix := lode.ParseS3Path(storageConfig.path)
 		s3cfg := lode.S3Config{
@@ -359,12 +448,12 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 			Region: storageConfig.region,
 		}
 		client, err = lode.NewLodeS3Client(cfg, s3cfg)
+		if err != nil {
+			return nil, fmt.Errorf("S3 storage initialization failed: %w\n\nCheck AWS credentials and bucket permissions.", err)
+		}
 	default:
-		return nil, fmt.Errorf("unknown storage-backend: %s (must be fs or s3)", storageConfig.backend)
-	}
-
-	if err != nil {
-		return nil, err
+		// Should not reach here due to validateStorageConfig
+		return nil, fmt.Errorf("unknown storage-backend: %s", storageConfig.backend)
 	}
 
 	return lode.NewSink(cfg, client), nil

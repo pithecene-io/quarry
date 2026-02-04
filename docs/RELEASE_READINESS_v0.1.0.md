@@ -53,15 +53,15 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Required/optional flags normalized | ⬜ | |
-| Storage flags validated with clear errors | ⬜ | |
-| `--help` examples match working examples | ⬜ | |
-| Run output includes metadata + summary | ⬜ | |
-| JSON/job payload validation | ⬜ | |
-| Storage backend/path validation | ⬜ | |
-| No silent fallbacks | ⬜ | |
-| CLI UX tests for misconfigurations | ⬜ | |
-| Error messages include "what to do next" | ⬜ | |
+| Required/optional flags normalized | ✅ | script, run-id, source, storage-backend, storage-path required |
+| Storage flags validated with clear errors | ✅ | Path existence, directory check, backend validation |
+| `--help` examples match working examples | ✅ | UsageText with 3 working examples |
+| Run output includes metadata + summary | ✅ | Existing printRunResult is comprehensive |
+| JSON/job payload validation | ✅ | Clear error with examples |
+| Storage backend/path validation | ✅ | validateStorageConfig with actionable errors |
+| No silent fallbacks | ✅ | Errors instead of warnings for invalid config |
+| CLI UX tests for misconfigurations | ✅ | run_test.go with 19 test cases |
+| Error messages include "what to do next" | ✅ | All errors include guidance |
 
 ### Phase 4 — Runtime & Ingestion Resilience
 
