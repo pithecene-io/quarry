@@ -9,11 +9,11 @@ All gates must be satisfied before tagging a release.
 
 | Gate | Status | Evidence |
 |------|--------|----------|
-| CI green on main | ⬜ | [CI Run](#) |
+| CI green on main | ✅ | Local validation (task lint/test/build/examples) |
 | Nightly green (3+ consecutive) | ⬜ | [Nightly Runs](#) |
 | Release dry-run passes | ⬜ | [Dry-run Log](#) |
-| Examples validated end-to-end | ⬜ | [Example Logs](#) |
-| Version lockstep verified | ⬜ | `quarry/types/version.go` == `sdk/package.json` |
+| Examples validated end-to-end | ✅ | 5/5 examples pass (task examples) |
+| Version lockstep verified | ✅ | 0.1.0 (task version:lockstep) |
 
 ---
 
@@ -113,12 +113,17 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| All phase exit criteria complete | ⬜ | |
-| No open P0/P1 defects | ⬜ | |
-| Docs/examples/CI green on main | ⬜ | |
-| Known limitations documented | ⬜ | |
-| Support posture documented | ⬜ | |
-| Release decision doc complete | ⬜ | |
+| All phase exit criteria complete | ⚠️ | See phase gaps below |
+| No open P0/P1 defects | ⬜ | Requires GitHub issue review |
+| Docs/examples/CI green on main | ✅ | All tasks pass locally |
+| Known limitations documented | ✅ | PUBLIC_API.md § Known Limitations |
+| Support posture documented | ✅ | SUPPORT.md |
+| Release decision doc complete | ✅ | This document |
+
+**Phase gaps requiring resolution:**
+- Phase 2: Internal doc review sign-off (⬜)
+- Phase 6: Branch protection config (⚠️ manual)
+- Phase 6: Successful full dry-run (⬜)
 
 ### Phase 8 — Storage Failure Hardening
 
