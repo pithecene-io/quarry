@@ -135,24 +135,37 @@ All gates must be satisfied before tagging a release.
 | S3: bucket access denied tested | ✅ | TestLodeClient_S3AccessDenied |
 | S3: network timeout tested | ✅ | TestLodeClient_S3NetworkTimeout |
 | S3: throttling (429) tested | ✅ | TestLodeClient_S3Throttling |
-| Error messages include storage context | ✅ | TestLodeClient_ErrorContainsStorageContext |
+| Error messages include storage context | ✅ | TestLodeClient_StorageError_ContainsOperationAndPath |
 | Policy failure propagation verified | ✅ | TestLodeClient_ErrorPropagation_* |
 | No silent corruption paths | ✅ | TestLodeClient_NoSilentCorruption_* |
+| Typed error classification verified | ✅ | See Phase 10 (errors.Is/errors.As) |
 
 ### Phase 9 — Bundle Executor with Go Distribution
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Executor embedded in quarry binary | ⬜ | Go embed for Node executor |
-| Executor extraction to temp dir | ⬜ | Extract on first run |
-| Executor version validation | ⬜ | Embedded matches expected |
-| Fallback to PATH executor | ⬜ | If embedded extraction fails |
-| Cross-platform extraction tested | ⬜ | Linux, macOS, Windows |
-| Extraction permissions correct | ⬜ | Executable bit set |
-| Temp dir cleanup on exit | ⬜ | No orphaned extractors |
-| `--executor` override still works | ⬜ | Explicit path takes precedence |
-| Build reproduces embedded content | ⬜ | Deterministic embed |
-| Binary size impact documented | ⬜ | Size delta tracked |
+| Executor embedded in quarry binary | ✅ | Go `//go:embed` for Node executor bundle |
+| Executor extraction to temp dir | ✅ | Content-addressed temp path with version+checksum |
+| Executor version validation | ✅ | Embedded version from `types.Version` |
+| Fallback to PATH executor | ✅ | Falls back if extraction fails |
+| Cross-platform extraction tested | ⚠️ | Linux validated; macOS/Windows TBD |
+| Extraction permissions correct | ✅ | Executable bit set (0755) |
+| Temp dir cleanup on exit | ⚠️ | Cleanup function exists; not auto-called |
+| `--executor` override still works | ✅ | Explicit path takes precedence |
+| Build reproduces embedded content | ✅ | esbuild bundle deterministic |
+| Binary size impact documented | ✅ | ~28MB total (~87KB bundle) |
+
+### Phase 10 — Typed Storage Errors & Test Robustness
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Sentinel errors defined | ✅ | ErrPermissionDenied, ErrNotFound, ErrDiskFull, ErrTimeout, ErrThrottled, ErrAuth, ErrAccessDenied, ErrNetwork |
+| StorageError wrapper with context | ✅ | Kind, Op, Path, underlying Err |
+| Backend boundary wrapping complete | ✅ | init, write events, write chunks all wrapped |
+| Tests migrated to errors.Is/errors.As | ✅ | No string matching in primary assertions |
+| Factory error paths have strict assertions | ✅ | No silent-success paths on init errors |
+| Error chain preserves original cause | ✅ | errors.Unwrap traverses to underlying error |
+| Platform-aware test skips documented | ✅ | Root-user skip for permission tests |
 
 ---
 
@@ -185,4 +198,4 @@ All gates must be satisfied before tagging a release.
 
 ---
 
-*Last updated: 2026-02-03*
+*Last updated: 2026-02-04*

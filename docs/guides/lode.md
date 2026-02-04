@@ -83,10 +83,13 @@ Validation is a downstream consumer responsibility.
 - If the path is not writable, the first write operation will fail.
 
 **Error Handling:**
+- Storage errors are classified and wrapped with context (operation, path).
 - Disk full errors (`ENOSPC`) are surfaced as policy failures.
 - Permission errors (`EACCES`) are surfaced as policy failures.
+- Not-found errors (missing directories) are surfaced at initialization or write time.
 - Quarry does **not** retry failed writes; errors propagate immediately.
 - The ingestion policy determines whether partial data is preserved on failure.
+- Error messages include actionable context (what operation failed, where).
 
 ### S3 Backend (Experimental)
 
@@ -97,6 +100,14 @@ Validation is a downstream consumer responsibility.
   3. IAM instance role (EC2/ECS/Lambda)
 - Credential validation happens on the **first write attempt**, not at startup.
 - If credentials are invalid or expired, the first write fails with an auth error.
+
+**Error Handling:**
+- Storage errors are classified and wrapped with context (operation, path).
+- Authentication failures (invalid/expired credentials) are surfaced as policy failures.
+- Access denied errors (valid credentials but insufficient permissions) are surfaced as policy failures.
+- Throttling errors (429/SlowDown) are surfaced immediately (no automatic retry).
+- Network timeouts are surfaced as policy failures.
+- Error messages include actionable context (what operation failed, where).
 
 **Consistency Caveats:**
 - S3 provides **strong read-after-write consistency** for PUTs (since Dec 2020).
