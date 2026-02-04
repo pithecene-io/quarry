@@ -18,7 +18,7 @@
  * @module
  */
 import { createRequire } from 'node:module'
-import { resolve, dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import type { Writable } from 'node:stream'
 import {
   type CreateContextOptions,

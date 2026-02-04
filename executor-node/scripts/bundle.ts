@@ -1,4 +1,7 @@
 #!/usr/bin/env tsx
+import { readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 /**
  * Bundle the executor into a standalone ESM file for embedding in the Go binary.
  *
@@ -12,9 +15,6 @@
  * - Node built-ins
  */
 import * as esbuild from 'esbuild'
-import { readFileSync, writeFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
@@ -61,10 +61,7 @@ async function bundle() {
   })
 
   // Write metafile for analysis
-  writeFileSync(
-    join(root, 'dist', 'bundle', 'meta.json'),
-    JSON.stringify(result.metafile, null, 2)
-  )
+  writeFileSync(join(root, 'dist', 'bundle', 'meta.json'), JSON.stringify(result.metafile, null, 2))
 
   // Ensure bundle has exactly one shebang at the start for direct execution
   const bundlePath = join(root, 'dist', 'bundle', 'executor.mjs')
