@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -290,7 +291,7 @@ func TestFixture_EventSequence(t *testing.T) {
 	var events []*types.EventEnvelope
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

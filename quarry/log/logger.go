@@ -11,9 +11,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/justapithecus/quarry/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/justapithecus/quarry/types"
 )
 
 // Logger provides structured logging with run context.

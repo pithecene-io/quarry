@@ -20,9 +20,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/justapithecus/quarry/cli/tui"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/justapithecus/quarry/cli/tui"
 )
 
 // Format represents an output format.
@@ -143,24 +144,24 @@ func (r *Renderer) renderTable(data any) error {
 
 func (r *Renderer) renderSliceTable(v reflect.Value) error {
 	if v.Len() == 0 {
-		fmt.Fprintln(r.out, "(no results)")
+		_, _ = fmt.Fprintln(r.out, "(no results)")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(r.out, 0, 0, 2, ' ', 0)
-	defer w.Flush()
+	defer func() { _ = w.Flush() }()
 
 	// Get headers from first element
 	first := v.Index(0)
 	headers := r.getHeaders(first)
 
 	// Print header row
-	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	_, _ = fmt.Fprintln(w, strings.Join(headers, "\t"))
 
 	// Print data rows
 	for i := 0; i < v.Len(); i++ {
 		row := r.getRowValues(v.Index(i), headers)
-		fmt.Fprintln(w, strings.Join(row, "\t"))
+		_, _ = fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
 
 	return nil
@@ -168,7 +169,7 @@ func (r *Renderer) renderSliceTable(v reflect.Value) error {
 
 func (r *Renderer) renderStructTable(data any) error {
 	w := tabwriter.NewWriter(r.out, 0, 0, 2, ' ', 0)
-	defer w.Flush()
+	defer func() { _ = w.Flush() }()
 
 	v := reflect.ValueOf(data)
 	if v.Kind() == reflect.Ptr {
@@ -182,17 +183,17 @@ func (r *Renderer) renderStructTable(data any) error {
 			field := t.Field(i)
 			name := r.getFieldName(field)
 			val := r.formatValue(v.Field(i))
-			fmt.Fprintf(w, "%s:\t%s\n", name, val)
+			_, _ = fmt.Fprintf(w, "%s:\t%s\n", name, val)
 		}
 	case reflect.Map:
 		iter := v.MapRange()
 		for iter.Next() {
 			key := fmt.Sprintf("%v", iter.Key().Interface())
 			val := r.formatValue(iter.Value())
-			fmt.Fprintf(w, "%s:\t%s\n", key, val)
+			_, _ = fmt.Fprintf(w, "%s:\t%s\n", key, val)
 		}
 	default:
-		fmt.Fprintf(w, "%v\n", data)
+		_, _ = fmt.Fprintf(w, "%v\n", data)
 	}
 
 	return nil

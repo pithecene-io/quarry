@@ -7,7 +7,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func TestExitErrHandler_NilError(t *testing.T) {
+func TestExitErrHandler_NilError(_ *testing.T) {
 	// Should not panic or exit on nil error
 	exitErrHandler(nil, nil)
 }

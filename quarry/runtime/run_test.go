@@ -17,16 +17,16 @@ import (
 // mockExecutor is a test executor that produces configurable stdout.
 // It simulates a real executor by blocking Wait() until killed or released.
 type mockExecutor struct {
-	mu           sync.Mutex
-	stdout       *bytes.Buffer
-	started      bool
-	killed       bool
-	exitCode     int
-	startErr     error
-	waitErr      error         // error to return from Wait
-	killChan     chan struct{} // signals Wait to return when Kill is called
-	releaseChan  chan struct{} // signals Wait to return for normal completion
-	blockOnWait  bool          // if true, Wait blocks until kill or release
+	mu          sync.Mutex
+	stdout      *bytes.Buffer
+	started     bool
+	killed      bool
+	exitCode    int
+	startErr    error
+	waitErr     error         // error to return from Wait
+	killChan    chan struct{} // signals Wait to return when Kill is called
+	releaseChan chan struct{} // signals Wait to return for normal completion
+	blockOnWait bool          // if true, Wait blocks until kill or release
 }
 
 func newMockExecutor(stdout []byte, exitCode int) *mockExecutor {
@@ -205,7 +205,7 @@ func TestRunOrchestrator_FlushCalledOnStreamError(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestRunOrchestrator_FlushCalledOnPolicyError(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestRunOrchestrator_ExecutorKilledOnStreamError(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	_, err = orchestrator.Execute(context.Background())
+	_, err = orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestRunOrchestrator_ExecutorKilledOnPolicyError(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	_, err = orchestrator.Execute(context.Background())
+	_, err = orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestRunOrchestrator_SuccessfulRun(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestRunOrchestrator_FlushCalledOnExecutorWaitError(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestRunOrchestrator_ExitCodeConflictWithRunResult(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -621,7 +621,7 @@ func TestRunOrchestrator_ExitCodeCrashOverridesRunResult(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestRunOrchestrator_RunResultContextPreserved(t *testing.T) {
 		t.Fatalf("failed to create orchestrator: %v", err)
 	}
 
-	result, err := orchestrator.Execute(context.Background())
+	result, err := orchestrator.Execute(t.Context())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}

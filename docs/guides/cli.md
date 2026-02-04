@@ -11,8 +11,11 @@ Run a script (the only execution entrypoint):
 
 ```
 quarry run \
-  --script ./examples/demo.js \
+  --script ./examples/demo.ts \
   --run-id run-001 \
+  --source demo \
+  --storage-backend fs \
+  --storage-path ./quarry-data \
   --job '{"source":"demo"}'
 ```
 
@@ -90,6 +93,9 @@ Executes a single script run. This is the only command that performs work.
 Required flags:
 - `--script <path>`
 - `--run-id <id>`
+- `--source <id>`
+- `--storage-backend <fs|s3>`
+- `--storage-path <path>`
 
 Optional flags:
 - `--attempt <n>` (default: 1)
@@ -119,8 +125,11 @@ Example:
 
 ```
 quarry run \
-  --script ./examples/demo.js \
+  --script ./examples/demo.ts \
   --run-id run-001 \
+  --source demo \
+  --storage-backend fs \
+  --storage-path ./quarry-data \
   --policy strict \
   --job '{"source":"demo"}'
 ```
@@ -129,8 +138,11 @@ Proxy selection example:
 
 ```
 quarry run \
-  --script ./examples/demo.js \
+  --script ./examples/demo.ts \
   --run-id run-001 \
+  --source demo \
+  --storage-backend fs \
+  --storage-path ./quarry-data \
   --proxy-config ./proxies.json \
   --proxy-pool residential_sticky \
   --proxy-domain example.com \

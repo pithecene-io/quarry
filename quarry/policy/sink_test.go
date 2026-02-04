@@ -1,7 +1,6 @@
 package policy_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -17,7 +16,7 @@ func TestStubSink_WriteEvents(t *testing.T) {
 		{EventID: "e2", Type: types.EventTypeLog},
 	}
 
-	err := sink.WriteEvents(context.Background(), events)
+	err := sink.WriteEvents(t.Context(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +41,7 @@ func TestStubSink_WriteChunks(t *testing.T) {
 		{ArtifactID: "a1", Seq: 2, Data: []byte("data2"), IsLast: true},
 	}
 
-	err := sink.WriteChunks(context.Background(), chunks)
+	err := sink.WriteChunks(t.Context(), chunks)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,13 +60,13 @@ func TestStubSink_ErrorOnWrite(t *testing.T) {
 	expectedErr := errors.New("write failed")
 	sink.ErrorOnWrite = expectedErr
 
-	err := sink.WriteEvents(context.Background(), []*types.EventEnvelope{{EventID: "e1"}})
-	if err != expectedErr {
+	err := sink.WriteEvents(t.Context(), []*types.EventEnvelope{{EventID: "e1"}})
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 
-	err = sink.WriteChunks(context.Background(), []*types.ArtifactChunk{{ArtifactID: "a1"}})
-	if err != expectedErr {
+	err = sink.WriteChunks(t.Context(), []*types.ArtifactChunk{{ArtifactID: "a1"}})
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 }

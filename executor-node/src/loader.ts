@@ -108,7 +108,8 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
     throw new ScriptLoadError(scriptPath, 'cleanup hook is not a function')
   }
 
-  const validatedModule = mod as QuarryScriptModule<Job>
+  // Cast through unknown since we've validated the shape above
+  const validatedModule = mod as unknown as QuarryScriptModule<Job>
 
   return {
     script: validatedModule.default,

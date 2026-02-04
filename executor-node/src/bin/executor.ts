@@ -44,7 +44,12 @@ function parseProxy(input: Record<string, unknown>): ProxyEndpoint | undefined {
   if (typeof proxy.host !== 'string' || proxy.host === '') {
     throw new Error('proxy.host must be a non-empty string')
   }
-  if (typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) {
+  if (
+    typeof proxy.port !== 'number' ||
+    !Number.isInteger(proxy.port) ||
+    proxy.port < 1 ||
+    proxy.port > 65535
+  ) {
     throw new Error('proxy.port must be an integer between 1 and 65535')
   }
 

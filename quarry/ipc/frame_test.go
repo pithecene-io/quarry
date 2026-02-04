@@ -130,7 +130,7 @@ func TestFrameDecoder_MultipleEvents(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -377,7 +377,7 @@ func TestFrameDecoder_MixedEventsAndChunks(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -475,7 +475,7 @@ func TestFrameDecoder_PartialFrame(t *testing.T) {
 func TestFrameDecoder_OversizedFrame(t *testing.T) {
 	// Create a length prefix claiming a payload larger than MaxPayloadSize
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint32(MaxPayloadSize+1))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(MaxPayloadSize+1))
 
 	decoder := NewFrameDecoder(&buf)
 	_, err := decoder.ReadFrame()
@@ -507,7 +507,7 @@ func TestFrameDecoder_EmptyStream(t *testing.T) {
 	decoder := NewFrameDecoder(bytes.NewReader(nil))
 	_, err := decoder.ReadFrame()
 
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		t.Errorf("expected io.EOF, got: %v", err)
 	}
 }
@@ -891,7 +891,7 @@ func TestDecodeFrame_MixedWithRunResult(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

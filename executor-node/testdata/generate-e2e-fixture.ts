@@ -17,7 +17,7 @@
  * @module
  */
 import { spawn } from 'node:child_process'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

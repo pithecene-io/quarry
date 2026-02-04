@@ -1,0 +1,22 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.13/schema.json",
+  "extends": ["../biome.json"],
+  "vcs": {
+    "enabled": false
+  },
+  "files": {
+    "includes": ["src/**", "test/**", "scripts/**", "testdata/**"]
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/**", "testdata/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ]
+}

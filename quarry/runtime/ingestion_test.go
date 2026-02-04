@@ -51,7 +51,7 @@ func TestIngestionEngine_EnvelopeValidation_ContractVersionMismatch(t *testing.T
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for contract version mismatch")
 	}
@@ -83,7 +83,7 @@ func TestIngestionEngine_EnvelopeValidation_RunIDMismatch(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for run_id mismatch")
 	}
@@ -115,7 +115,7 @@ func TestIngestionEngine_EnvelopeValidation_AttemptMismatch(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for attempt mismatch")
 	}
@@ -159,7 +159,7 @@ func TestIngestionEngine_SequenceViolation(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for sequence violation")
 	}
@@ -181,7 +181,7 @@ func TestIngestionEngine_FrameDecodeError(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(bytes.NewReader(data), policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for frame decode error")
 	}
@@ -227,7 +227,7 @@ func TestIngestionEngine_PolicyFlushAfterError(t *testing.T) {
 	pol := newTrackingPolicy()
 
 	// Flush should set the flag
-	if err := pol.Flush(context.Background()); err != nil {
+	if err := pol.Flush(t.Context()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -264,7 +264,7 @@ func TestIngestionEngine_PolicyFailure(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(reader, failPolicy, NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected error for policy failure")
 	}
@@ -296,7 +296,7 @@ func TestIngestionEngine_ValidEvent(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestIngestionEngine_RunResult_Completed(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestIngestionEngine_RunResult_WithProxy(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -481,7 +481,7 @@ func TestIngestionEngine_RunResult_DuplicateIgnored(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -545,7 +545,7 @@ func TestIngestionEngine_RunResult_NotCountedInSeq(t *testing.T) {
 	logger := log.NewLogger(runMeta)
 	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
 
-	err := engine.Run(context.Background())
+	err := engine.Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

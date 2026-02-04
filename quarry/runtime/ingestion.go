@@ -406,8 +406,8 @@ func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
 
 	e.runResult = frame
 	e.logger.Debug("run_result frame received", map[string]any{
-		"status":     frame.Outcome.Status,
-		"has_proxy":  frame.ProxyUsed != nil,
+		"status":    frame.Outcome.Status,
+		"has_proxy": frame.ProxyUsed != nil,
 	})
 
 	return nil

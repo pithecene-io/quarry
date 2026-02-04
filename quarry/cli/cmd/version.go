@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/render"
 	"github.com/justapithecus/quarry/types"
-	"github.com/urfave/cli/v2"
 )
 
 // VersionResponse is the response for the version command.

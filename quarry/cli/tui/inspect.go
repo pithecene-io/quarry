@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/justapithecus/quarry/cli/reader"
 )
 
@@ -41,8 +42,7 @@ func (m InspectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, keys.Quit):
+		if key.Matches(msg, keys.Quit) {
 			m.quitting = true
 			return m, tea.Quit
 		}

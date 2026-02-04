@@ -13,6 +13,7 @@ package ipc
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -25,10 +26,10 @@ import (
 
 // testPaths holds resolved paths for E2E tests.
 type testPaths struct {
-	repoRoot     string
-	executorBin  string
-	fixtureDir   string
-	testdataDir  string
+	repoRoot    string
+	executorBin string
+	fixtureDir  string
+	testdataDir string
 }
 
 // resolveTestPaths finds the repository root and executor binary.
@@ -52,10 +53,10 @@ func resolveTestPaths(t *testing.T) testPaths {
 	testdataDir := filepath.Join(ipcDir, "testdata")
 
 	return testPaths{
-		repoRoot:     repoRoot,
-		executorBin:  executorBin,
-		fixtureDir:   fixtureDir,
-		testdataDir:  testdataDir,
+		repoRoot:    repoRoot,
+		executorBin: executorBin,
+		fixtureDir:  fixtureDir,
+		testdataDir: testdataDir,
 	}
 }
 
@@ -135,7 +136,8 @@ func TestE2E_WireHarness(t *testing.T) {
 	stdout, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
 		// Exit code 1 is ok (run_error), 2+ is crash
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -150,7 +152,7 @@ func TestE2E_WireHarness(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -193,7 +195,8 @@ func TestE2E_LiveDecode(t *testing.T) {
 
 	stdout, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -201,12 +204,12 @@ func TestE2E_LiveDecode(t *testing.T) {
 	// Decode all frames
 	decoder := NewFrameDecoder(bytes.NewReader(stdout))
 	var frames []any
-	var terminalSeenAt int = -1 // Index where terminal event was seen
+	terminalSeenAt := -1 // Index where terminal event was seen
 	var terminalType string
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -302,7 +305,8 @@ func TestE2E_FixtureDrift(t *testing.T) {
 
 	newFixture, err := spawnExecutor(t, paths, scriptPath, input)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() >= 2 {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("executor crashed (exit %d): %v", exitErr.ExitCode(), err)
 		}
 	}
@@ -335,33 +339,33 @@ func TestE2E_FixtureDrift(t *testing.T) {
 	}
 	for i := 0; i < minEvents; i++ {
 		existing := existingEvents[i]
-		new := newEvents[i]
+		current := newEvents[i]
 
 		// Compare type
-		if existing.Type != new.Type {
-			t.Errorf("event[%d] type drift: existing=%q, new=%q", i, existing.Type, new.Type)
+		if existing.Type != current.Type {
+			t.Errorf("event[%d] type drift: existing=%q, new=%q", i, existing.Type, current.Type)
 		}
 
 		// Compare seq
-		if existing.Seq != new.Seq {
-			t.Errorf("event[%d] seq drift: existing=%d, new=%d", i, existing.Seq, new.Seq)
+		if existing.Seq != current.Seq {
+			t.Errorf("event[%d] seq drift: existing=%d, new=%d", i, existing.Seq, current.Seq)
 		}
 
 		// Compare run_id
-		if existing.RunID != new.RunID {
-			t.Errorf("event[%d] run_id drift: existing=%q, new=%q", i, existing.RunID, new.RunID)
+		if existing.RunID != current.RunID {
+			t.Errorf("event[%d] run_id drift: existing=%q, new=%q", i, existing.RunID, current.RunID)
 		}
 
 		// Compare attempt
-		if existing.Attempt != new.Attempt {
-			t.Errorf("event[%d] attempt drift: existing=%d, new=%d", i, existing.Attempt, new.Attempt)
+		if existing.Attempt != current.Attempt {
+			t.Errorf("event[%d] attempt drift: existing=%d, new=%d", i, existing.Attempt, current.Attempt)
 		}
 
 		// Compare payload keys (not values, as some may be generated)
 		existingKeys := payloadKeys(existing.Payload)
-		newKeys := payloadKeys(new.Payload)
-		if !equalStringSlices(existingKeys, newKeys) {
-			t.Errorf("event[%d] payload keys drift: existing=%v, new=%v", i, existingKeys, newKeys)
+		currentKeys := payloadKeys(current.Payload)
+		if !equalStringSlices(existingKeys, currentKeys) {
+			t.Errorf("event[%d] payload keys drift: existing=%v, new=%v", i, existingKeys, currentKeys)
 		}
 	}
 
@@ -372,21 +376,21 @@ func TestE2E_FixtureDrift(t *testing.T) {
 	}
 	for i := 0; i < minChunks; i++ {
 		existing := existingChunks[i]
-		new := newChunks[i]
+		current := newChunks[i]
 
 		// Compare seq
-		if existing.Seq != new.Seq {
-			t.Errorf("chunk[%d] seq drift: existing=%d, new=%d", i, existing.Seq, new.Seq)
+		if existing.Seq != current.Seq {
+			t.Errorf("chunk[%d] seq drift: existing=%d, new=%d", i, existing.Seq, current.Seq)
 		}
 
 		// Compare is_last
-		if existing.IsLast != new.IsLast {
-			t.Errorf("chunk[%d] is_last drift: existing=%v, new=%v", i, existing.IsLast, new.IsLast)
+		if existing.IsLast != current.IsLast {
+			t.Errorf("chunk[%d] is_last drift: existing=%v, new=%v", i, existing.IsLast, current.IsLast)
 		}
 
 		// Compare data size
-		if len(existing.Data) != len(new.Data) {
-			t.Errorf("chunk[%d] data size drift: existing=%d, new=%d", i, len(existing.Data), len(new.Data))
+		if len(existing.Data) != len(current.Data) {
+			t.Errorf("chunk[%d] data size drift: existing=%d, new=%d", i, len(existing.Data), len(current.Data))
 		}
 	}
 
@@ -402,7 +406,7 @@ func parseFixture(t *testing.T, data []byte) ([]*types.EventEnvelope, []*types.A
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -461,7 +465,7 @@ func countFrames(t *testing.T, data []byte) int {
 	count := 0
 	for {
 		_, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

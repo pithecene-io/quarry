@@ -3,9 +3,10 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/justapithecus/quarry/cli/reader"
 	"github.com/justapithecus/quarry/cli/render"
-	"github.com/urfave/cli/v2"
 )
 
 // InspectCommand returns the inspect command with subcommands.

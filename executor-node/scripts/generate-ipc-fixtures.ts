@@ -9,7 +9,7 @@
  * Output: ../quarry/ipc/testdata/*.bin
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { encode as msgpackEncode } from '@msgpack/msgpack'
@@ -216,7 +216,7 @@ function generateEventSequence(): Buffer {
     }
   ]
 
-  const frames = events.map(e => encodeFrame(msgpackEncode(e)))
+  const frames = events.map((e) => encodeFrame(msgpackEncode(e)))
   return Buffer.concat(frames)
 }
 

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/justapithecus/lode/lode"
+
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -25,7 +26,7 @@ var ErrMissingArtifactID = fmt.Errorf("artifact commit rejected: missing or empt
 
 // LodeClient is a real Lode-backed implementation of Client.
 // Uses Lode's HiveLayout with partition keys: source/category/day/run_id/event_type.
-type LodeClient struct {
+type LodeClient struct { //nolint:revive // intentional naming for clarity
 	dataset lode.Dataset
 	config  Config
 
@@ -69,7 +70,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 // Enforces "chunks before commit" invariant: artifact commit events are rejected
 // if no chunks have been written for that artifact. After a successful commit,
 // the artifact's offset and chunksSeen state are reset.
-func (c *LodeClient) WriteEvents(ctx context.Context, dataset, runID string, events []*types.EventEnvelope) error {
+func (c *LodeClient) WriteEvents(ctx context.Context, _, _ string, events []*types.EventEnvelope) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -119,7 +120,7 @@ func (c *LodeClient) WriteEvents(ctx context.Context, dataset, runID string, eve
 // Offset is computed cumulatively across batches per artifact.
 // Marks artifacts as having chunks for the "chunks before commit" invariant.
 // State (offsets, chunksSeen) is only updated after successful write.
-func (c *LodeClient) WriteChunks(ctx context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error {
+func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*types.ArtifactChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}

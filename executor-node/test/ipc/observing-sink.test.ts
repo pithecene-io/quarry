@@ -180,7 +180,7 @@ describe('ObservingSink', () => {
 
     it('preserves first failure cause', async () => {
       const firstError = new Error('First failure')
-      const secondError = new Error('Second failure')
+      const _secondError = new Error('Second failure')
 
       mockSink.writeEventMock.mockRejectedValueOnce(firstError)
 

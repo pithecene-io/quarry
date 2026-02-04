@@ -135,7 +135,7 @@ func NewBufferedPolicy(sink Sink, config BufferedConfig) (*BufferedPolicy, error
 //   - If incoming event is non-droppable and no droppable events: return error (fail run)
 //
 // In TwoPhase mode, events added after a partial flush go to eventBufferNext.
-func (p *BufferedPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
+func (p *BufferedPolicy) IngestEvent(_ context.Context, envelope *types.EventEnvelope) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -187,7 +187,7 @@ func (p *BufferedPolicy) appendEvent(envelope *types.EventEnvelope, eventSize in
 // Returns error if chunk would exceed buffer limits (policy failure).
 // Requires MaxBufferBytes to be set; chunks cannot be bounded by event count alone.
 // In TwoPhase mode, chunks added after a partial flush go to chunkBufferNext.
-func (p *BufferedPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
+func (p *BufferedPolicy) IngestArtifactChunk(_ context.Context, chunk *types.ArtifactChunk) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -488,7 +488,6 @@ func (p *BufferedPolicy) hasRoomForBytes(size int64) bool {
 	}
 	return true
 }
-
 
 // dropOldestDroppable removes the oldest droppable event from the buffer.
 // Scans eventBuffer first, then eventBufferNext (TwoPhase mode).

@@ -14,6 +14,7 @@ Do not update for internal refactors.
 ## Root
 
 - `AGENTS.md` — development guardrails and agent constraints
+- `PUBLIC_API.md` — user-facing API and setup guide
 - `Taskfile.yaml` — task orchestration and developer workflows
 - `biome.json` — formatting and linting configuration
 - `pnpm-workspace.yaml` — monorepo layout

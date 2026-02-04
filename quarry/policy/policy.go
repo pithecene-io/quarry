@@ -119,13 +119,6 @@ func (r *statsRecorder) incEventsPersisted(n int64) {
 	r.mu.Unlock()
 }
 
-func (r *statsRecorder) incEventsDropped(eventType types.EventType) {
-	r.mu.Lock()
-	r.stats.EventsDropped++
-	r.stats.DroppedByType[eventType]++
-	r.mu.Unlock()
-}
-
 func (r *statsRecorder) incTotalChunks() {
 	r.mu.Lock()
 	r.stats.TotalChunks++
@@ -150,35 +143,11 @@ func (r *statsRecorder) incFlush() {
 	r.mu.Unlock()
 }
 
-func (r *statsRecorder) setBufferSize(bytes int64) {
-	r.mu.Lock()
-	r.stats.BufferSize = bytes
-	r.mu.Unlock()
-}
-
 func (r *statsRecorder) snapshot() Stats {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	s := r.stats
-	s.DroppedByType = make(map[types.EventType]int64, len(r.stats.DroppedByType))
-	for k, v := range r.stats.DroppedByType {
-		s.DroppedByType[k] = v
-	}
-	return s
-}
-
-// snapshotWithBufferSize returns a snapshot with an overridden BufferSize.
-// Used by BufferedPolicy to ensure BufferSize reflects the authoritative
-// buffer state. Caller should hold the buffer mutex when calling this method
-// to guarantee atomicity between buffer state and stats counters.
-// Lock order when used with BufferedPolicy: buffer mutex -> recorder mutex.
-func (r *statsRecorder) snapshotWithBufferSize(bufferSize int64) Stats {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	s := r.stats
-	s.BufferSize = bufferSize
 	s.DroppedByType = make(map[types.EventType]int64, len(r.stats.DroppedByType))
 	for k, v := range r.stats.DroppedByType {
 		s.DroppedByType[k] = v

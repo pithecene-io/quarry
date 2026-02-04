@@ -20,6 +20,14 @@ tasks:
     desc: Run all tests (Go + TS)
     deps: [go:test, ts:test]
 
+  examples:
+    desc: Validate examples are present
+    cmds:
+      - test -f examples/demo.ts
+      - test -f examples/static-html-list/script.ts
+      - test -f examples/toy-pagination/script.ts
+      - test -f examples/artifact-snapshot/script.ts
+
   typecheck:
     desc: Typecheck implementation (TS)
     deps: [ts:typecheck]
@@ -86,6 +94,7 @@ tasks:
   ts:test:
     desc: Run runtime tests (Vitest) for all TS packages
     aliases: [ts:t]
+    deps: [ts:build]
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run test
@@ -109,4 +118,3 @@ tasks:
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run format
-

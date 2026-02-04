@@ -15,6 +15,7 @@ package ipc
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -93,7 +94,7 @@ func TestE2EFixture_FrameCount(t *testing.T) {
 
 	for {
 		_, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -120,7 +121,7 @@ func TestE2EFixture_EventSequence(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -217,7 +218,7 @@ func TestE2EFixture_ArtifactChunks(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -287,7 +288,7 @@ func TestE2EFixture_RunMetadata(t *testing.T) {
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -329,11 +330,11 @@ func TestE2EFixture_SeqMonotonicity(t *testing.T) {
 
 	decoder := NewFrameDecoder(bytes.NewReader(data))
 
-	var prevSeq int64 = 0
+	var prevSeq int64
 
 	for {
 		payload, err := decoder.ReadFrame()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

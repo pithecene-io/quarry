@@ -7,6 +7,7 @@ import "fmt"
 // Note: socks5 is best-effort with Puppeteer.
 type ProxyProtocol string
 
+// Supported proxy protocols.
 const (
 	ProxyProtocolHTTP   ProxyProtocol = "http"
 	ProxyProtocolHTTPS  ProxyProtocol = "https"
@@ -16,6 +17,7 @@ const (
 // ProxyStrategy is the proxy selection strategy for pools.
 type ProxyStrategy string
 
+// Supported proxy selection strategies.
 const (
 	ProxyStrategyRoundRobin ProxyStrategy = "round_robin"
 	ProxyStrategyRandom     ProxyStrategy = "random"
@@ -25,6 +27,7 @@ const (
 // ProxyStickyScope determines what key is used for sticky assignment.
 type ProxyStickyScope string
 
+// Supported sticky scopes for proxy assignment.
 const (
 	ProxyStickyJob    ProxyStickyScope = "job"
 	ProxyStickyDomain ProxyStickyScope = "domain"

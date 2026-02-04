@@ -55,10 +55,7 @@ const LARGE_POOL_THRESHOLD = 100
  * - protocol is one of http|https|socks5
  * - username and password must be provided together if either is set
  */
-export function validateProxyEndpoint(
-  endpoint: ProxyEndpoint,
-  prefix = ''
-): ProxyValidationResult {
+export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): ProxyValidationResult {
   const errors: ProxyValidationError[] = []
   const warnings: ProxyValidationWarning[] = []
   const fieldPrefix = prefix ? `${prefix}.` : ''
@@ -180,7 +177,10 @@ export function validateProxyPool(pool: ProxyPool): ProxyValidationResult {
       })
     }
 
-    if (pool.sticky.ttlMs !== undefined && (typeof pool.sticky.ttlMs !== 'number' || pool.sticky.ttlMs <= 0)) {
+    if (
+      pool.sticky.ttlMs !== undefined &&
+      (typeof pool.sticky.ttlMs !== 'number' || pool.sticky.ttlMs <= 0)
+    ) {
       errors.push({
         field: 'sticky.ttlMs',
         message: 'Sticky TTL must be a positive number'
@@ -199,9 +199,7 @@ export function validateProxyPool(pool: ProxyPool): ProxyValidationResult {
  * Redact password from a proxy endpoint.
  * Returns a new object without the password field.
  */
-export function redactProxyEndpoint<T extends ProxyEndpoint>(
-  endpoint: T
-): Omit<T, 'password'> {
+export function redactProxyEndpoint<T extends ProxyEndpoint>(endpoint: T): Omit<T, 'password'> {
   const { password: _, ...redacted } = endpoint
   return redacted
 }

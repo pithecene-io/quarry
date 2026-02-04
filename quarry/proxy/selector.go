@@ -21,9 +21,9 @@ type Selector struct {
 
 // poolState holds runtime state for a single pool.
 type poolState struct {
-	pool         *types.ProxyPool
-	rrIndex      int64                    // round-robin counter
-	stickyMap    map[string]*stickyEntry  // sticky key -> entry
+	pool      *types.ProxyPool
+	rrIndex   int64                   // round-robin counter
+	stickyMap map[string]*stickyEntry // sticky key -> entry
 }
 
 // stickyEntry holds a sticky assignment with optional TTL.

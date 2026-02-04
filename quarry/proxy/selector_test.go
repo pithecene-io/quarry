@@ -332,7 +332,7 @@ func TestSelector_Commit_Sticky(t *testing.T) {
 	}
 
 	// Now commit - should store the entry
-	s.Select(SelectRequest{Pool: "test", JobID: "job-new", Commit: true})
+	_, _ = s.Select(SelectRequest{Pool: "test", JobID: "job-new", Commit: true})
 	stats, _ = s.Stats("test")
 	if stats.StickyEntries != 1 {
 		t.Errorf("StickyEntries after commit = %d, want 1", stats.StickyEntries)
@@ -365,8 +365,8 @@ func TestSelector_Stats(t *testing.T) {
 	}
 
 	// Make some selections (Commit: true to store sticky entries)
-	s.Select(SelectRequest{Pool: "test", JobID: "job-1", Commit: true})
-	s.Select(SelectRequest{Pool: "test", JobID: "job-2", Commit: true})
+	_, _ = s.Select(SelectRequest{Pool: "test", JobID: "job-1", Commit: true})
+	_, _ = s.Select(SelectRequest{Pool: "test", JobID: "job-2", Commit: true})
 
 	stats, err := s.Stats("test")
 	if err != nil {

@@ -1,7 +1,6 @@
 package lode
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -53,7 +52,7 @@ func TestSink_WriteEvents(t *testing.T) {
 		{Type: "log", RunID: "run-123", Seq: 2},
 	}
 
-	err := sink.WriteEvents(context.Background(), events)
+	err := sink.WriteEvents(t.Context(), events)
 	if err != nil {
 		t.Fatalf("WriteEvents failed: %v", err)
 	}
@@ -86,7 +85,7 @@ func TestSink_WriteChunks(t *testing.T) {
 		{ArtifactID: "art-1", Seq: 2, Data: []byte("world"), IsLast: true},
 	}
 
-	err := sink.WriteChunks(context.Background(), chunks)
+	err := sink.WriteChunks(t.Context(), chunks)
 	if err != nil {
 		t.Fatalf("WriteChunks failed: %v", err)
 	}

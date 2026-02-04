@@ -53,11 +53,11 @@ func NewExecutorManager(config *ExecutorConfig) *ExecutorManager {
 
 // executorInput is the JSON structure written to executor stdin.
 type executorInput struct {
-	RunID       string              `json:"run_id"`
-	Attempt     int                 `json:"attempt"`
-	JobID       *string             `json:"job_id,omitempty"`
-	ParentRunID *string             `json:"parent_run_id,omitempty"`
-	Job         any                 `json:"job"`
+	RunID       string               `json:"run_id"`
+	Attempt     int                  `json:"attempt"`
+	JobID       *string              `json:"job_id,omitempty"`
+	ParentRunID *string              `json:"parent_run_id,omitempty"`
+	Job         any                  `json:"job"`
 	Proxy       *types.ProxyEndpoint `json:"proxy,omitempty"`
 }
 
