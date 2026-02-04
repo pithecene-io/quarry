@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -693,7 +694,7 @@ func makePartialEventStream(runMeta *types.RunMeta, validEventCount int) []byte 
 	for i := 1; i <= validEventCount; i++ {
 		envelope := &types.EventEnvelope{
 			ContractVersion: types.ContractVersion,
-			EventID:         "evt-" + string(rune('0'+i)),
+			EventID:         fmt.Sprintf("evt-%d", i),
 			RunID:           runMeta.RunID,
 			Seq:             int64(i),
 			Type:            types.EventTypeItem,
@@ -779,9 +780,11 @@ func TestRunOrchestrator_ExecutorCrashMidStream(t *testing.T) {
 	}
 
 	// Verify event count reflects partial processing
-	// Note: exact count depends on when stream error was detected
-	if result.EventCount < 0 {
-		t.Errorf("expected non-negative event count, got %d", result.EventCount)
+	// We sent 3 valid events before the crash, so at least 3 should be ingested
+	const expectedMinEvents = 3
+	if result.EventCount < expectedMinEvents {
+		t.Errorf("expected at least %d events ingested before crash, got %d",
+			expectedMinEvents, result.EventCount)
 	}
 }
 
@@ -1174,13 +1177,11 @@ func TestRunOrchestrator_SinkWriteFailure_OnChunks(t *testing.T) {
 // No Silent Data Loss Tests
 // =============================================================================
 
-// eventCountingPolicy counts events and tracks drops.
+// eventCountingPolicy counts events for verification.
 type eventCountingPolicy struct {
 	policy.Policy
-	mu            sync.Mutex
+	mu             sync.Mutex
 	eventsIngested int
-	eventsDropped  int
-	errors        int
 }
 
 func newEventCountingPolicy() *eventCountingPolicy {
@@ -1216,7 +1217,7 @@ func TestRunOrchestrator_NoSilentDataLoss_AllEventsIngested(t *testing.T) {
 	for i := 1; i <= eventCount; i++ {
 		envelope := &types.EventEnvelope{
 			ContractVersion: types.ContractVersion,
-			EventID:         "evt-" + string(rune('0'+i)),
+			EventID:         fmt.Sprintf("evt-%d", i),
 			RunID:           runMeta.RunID,
 			Seq:             int64(i),
 			Type:            types.EventTypeItem,
