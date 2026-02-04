@@ -475,7 +475,7 @@ func TestFrameDecoder_PartialFrame(t *testing.T) {
 func TestFrameDecoder_OversizedFrame(t *testing.T) {
 	// Create a length prefix claiming a payload larger than MaxPayloadSize
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint32(MaxPayloadSize+1))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(MaxPayloadSize+1))
 
 	decoder := NewFrameDecoder(&buf)
 	_, err := decoder.ReadFrame()
