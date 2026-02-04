@@ -85,13 +85,13 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| FS: permissions/path validation | ⬜ | |
-| FS: disk-full/error behavior tests | ⬜ | |
-| S3: config validation tests | ⬜ | |
-| S3: auth failure handling | ⬜ | |
-| S3: consistency caveats documented | ⬜ | |
-| Checksum internal-only and off | ⬜ | |
-| Backpressure/retry behavior documented | ⬜ | Or explicit non-goals |
+| FS: permissions/path validation | ✅ | validateStorageConfig() in run.go |
+| FS: disk-full/error behavior tests | ✅ | TestSink_WriteEvents_DiskFullError, etc. |
+| S3: config validation tests | ✅ | TestS3Config_Validate (existing) |
+| S3: auth failure handling | ✅ | Documented in guides/lode.md |
+| S3: consistency caveats documented | ✅ | Documented in guides/lode.md |
+| Checksum internal-only and off | ✅ | checksumEnabled = false (client.go) |
+| Backpressure/retry behavior documented | ✅ | Explicit non-goals in guides/lode.md |
 
 ### Phase 6 — CI/Nightly/Release Reliability
 

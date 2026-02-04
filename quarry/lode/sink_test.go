@@ -1,6 +1,7 @@
 package lode
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -123,3 +124,153 @@ func TestSink_Close(t *testing.T) {
 		t.Error("client should be closed after Close()")
 	}
 }
+
+// =============================================================================
+// Phase 5: Storage Write Error Tests
+// =============================================================================
+
+// FailingClient simulates storage write failures (disk full, permission errors, etc.)
+type FailingClient struct {
+	EventWriteErr error
+	ChunkWriteErr error
+	CloseErr      error
+	// Track calls for verification
+	EventWriteCalls int
+	ChunkWriteCalls int
+	CloseCalls      int
+}
+
+func (c *FailingClient) WriteEvents(_ context.Context, _, _ string, _ []*types.EventEnvelope) error {
+	c.EventWriteCalls++
+	return c.EventWriteErr
+}
+
+func (c *FailingClient) WriteChunks(_ context.Context, _, _ string, _ []*types.ArtifactChunk) error {
+	c.ChunkWriteCalls++
+	return c.ChunkWriteErr
+}
+
+func (c *FailingClient) Close() error {
+	c.CloseCalls++
+	return c.CloseErr
+}
+
+var _ Client = (*FailingClient)(nil)
+
+func TestSink_WriteEvents_DiskFullError(t *testing.T) {
+	diskFullErr := &diskFullError{msg: "no space left on device"}
+	client := &FailingClient{EventWriteErr: diskFullErr}
+	sink := NewSink(Config{Dataset: "test", RunID: "run-1"}, client)
+
+	events := []*types.EventEnvelope{
+		{Type: "item", RunID: "run-1", Seq: 1},
+	}
+
+	err := sink.WriteEvents(t.Context(), events)
+	if err == nil {
+		t.Fatal("expected error for disk full, got nil")
+	}
+
+	// Error should propagate
+	if err != diskFullErr {
+		t.Errorf("expected disk full error, got: %v", err)
+	}
+
+	// Write should have been attempted
+	if client.EventWriteCalls != 1 {
+		t.Errorf("expected 1 write call, got %d", client.EventWriteCalls)
+	}
+}
+
+func TestSink_WriteChunks_DiskFullError(t *testing.T) {
+	diskFullErr := &diskFullError{msg: "no space left on device"}
+	client := &FailingClient{ChunkWriteErr: diskFullErr}
+	sink := NewSink(Config{Dataset: "test", RunID: "run-1"}, client)
+
+	chunks := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 1, Data: []byte("data")},
+	}
+
+	err := sink.WriteChunks(t.Context(), chunks)
+	if err == nil {
+		t.Fatal("expected error for disk full, got nil")
+	}
+
+	if err != diskFullErr {
+		t.Errorf("expected disk full error, got: %v", err)
+	}
+
+	if client.ChunkWriteCalls != 1 {
+		t.Errorf("expected 1 write call, got %d", client.ChunkWriteCalls)
+	}
+}
+
+func TestSink_WriteEvents_PermissionError(t *testing.T) {
+	permErr := &permissionError{msg: "permission denied"}
+	client := &FailingClient{EventWriteErr: permErr}
+	sink := NewSink(Config{Dataset: "test", RunID: "run-1"}, client)
+
+	events := []*types.EventEnvelope{
+		{Type: "item", RunID: "run-1", Seq: 1},
+	}
+
+	err := sink.WriteEvents(t.Context(), events)
+	if err == nil {
+		t.Fatal("expected error for permission denied, got nil")
+	}
+
+	if err != permErr {
+		t.Errorf("expected permission error, got: %v", err)
+	}
+}
+
+func TestSink_WriteChunks_PermissionError(t *testing.T) {
+	permErr := &permissionError{msg: "permission denied"}
+	client := &FailingClient{ChunkWriteErr: permErr}
+	sink := NewSink(Config{Dataset: "test", RunID: "run-1"}, client)
+
+	chunks := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 1, Data: []byte("data")},
+	}
+
+	err := sink.WriteChunks(t.Context(), chunks)
+	if err == nil {
+		t.Fatal("expected error for permission denied, got nil")
+	}
+
+	if err != permErr {
+		t.Errorf("expected permission error, got: %v", err)
+	}
+}
+
+func TestSink_Close_Error(t *testing.T) {
+	closeErr := &closeError{msg: "failed to close storage"}
+	client := &FailingClient{CloseErr: closeErr}
+	sink := NewSink(Config{Dataset: "test", RunID: "run-1"}, client)
+
+	err := sink.Close()
+	if err == nil {
+		t.Fatal("expected error on close, got nil")
+	}
+
+	if err != closeErr {
+		t.Errorf("expected close error, got: %v", err)
+	}
+
+	if client.CloseCalls != 1 {
+		t.Errorf("expected 1 close call, got %d", client.CloseCalls)
+	}
+}
+
+// Error types for simulating storage failures
+type diskFullError struct{ msg string }
+
+func (e *diskFullError) Error() string { return e.msg }
+
+type permissionError struct{ msg string }
+
+func (e *permissionError) Error() string { return e.msg }
+
+type closeError struct{ msg string }
+
+func (e *closeError) Error() string { return e.msg }
