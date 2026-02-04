@@ -42,8 +42,7 @@ mkdir -p ./quarry-data
   --run-id my-first-run \
   --source demo \
   --storage-backend fs \
-  --storage-path ./quarry-data \
-  --executor ./executor-node/dist/bin/executor.js
+  --storage-path ./quarry-data
 ```
 
 Expected output:
@@ -172,7 +171,12 @@ quarry run [options]
 | `--job <json>` | `{}` | Job payload as JSON |
 | `--category <name>` | `default` | Category for partitioning |
 | `--policy <strict\|buffered>` | `strict` | Ingestion policy |
-| `--executor <path>` | `quarry-executor` | Executor binary |
+
+**Advanced flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--executor <path>` | Override executor path (auto-resolved by default) |
 
 **Storage flags (S3):**
 
@@ -257,9 +261,13 @@ pnpm -C sdk run build
 
 ### "Executor not found"
 
-Ensure executor is built and path is correct:
+The executor is auto-resolved but must be built first:
 ```bash
 pnpm -C executor-node run build
+```
+
+If auto-resolution fails, specify the path manually:
+```bash
 ./quarry/quarry run --executor ./executor-node/dist/bin/executor.js ...
 ```
 

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -26,6 +28,11 @@ const (
 	exitPolicyFailure = 3
 )
 
+// exitConfigError is used for CLI/input validation failures.
+// These are pre-execution errors (not script failures).
+// Maps to exitExecutorCrash since they prevent execution.
+const exitConfigError = exitExecutorCrash
+
 // RunCommand returns the run command.
 // This is the only command that executes work per CONTRACT_CLI.md.
 func RunCommand() *cli.Command {
@@ -38,19 +45,23 @@ func RunCommand() *cli.Command {
 EXAMPLES:
   # Run a script with filesystem storage
   quarry run --script ./script.ts --run-id run-001 --source my-source \
-    --storage-backend fs --storage-path ./data \
-    --executor ./executor-node/dist/bin/executor.js
+    --storage-backend fs --storage-path ./data
 
   # Run with job payload
   quarry run --script ./script.ts --run-id run-002 --source my-source \
     --storage-backend fs --storage-path ./data \
-    --executor ./executor-node/dist/bin/executor.js \
     --job '{"url": "https://example.com"}'
 
   # Run with S3 storage
   quarry run --script ./script.ts --run-id run-003 --source my-source \
     --storage-backend s3 --storage-path my-bucket/prefix \
-    --storage-region us-east-1`,
+    --storage-region us-east-1
+
+ADVANCED:
+  # Override executor path (troubleshooting)
+  quarry run --script ./script.ts --run-id run-004 --source my-source \
+    --storage-backend fs --storage-path ./data \
+    --executor /custom/path/to/executor.js`,
 		Flags: []cli.Flag{
 			// Execution flags
 			&cli.StringFlag{
@@ -83,8 +94,7 @@ EXAMPLES:
 			},
 			&cli.StringFlag{
 				Name:  "executor",
-				Usage: "Path to executor binary",
-				Value: "quarry-executor",
+				Usage: "Path to executor binary (advanced: auto-resolved by default)",
 			},
 			&cli.BoolFlag{
 				Name:  "quiet",
@@ -217,7 +227,7 @@ The --job flag must contain valid JSON. Examples:
   --job '{"key": "value"}'
   --job '{"url": "https://example.com", "page": 1}'
 
-Received: %s`, err, jobStr), 1)
+Received: %s`, err, jobStr), exitConfigError)
 	}
 
 	// Build run metadata
@@ -239,7 +249,7 @@ Received: %s`, err, jobStr), 1)
 		region:  c.String("storage-region"),
 	}
 	if err := validateStorageConfig(storageConfig); err != nil {
-		return cli.Exit(err.Error(), 1)
+		return cli.Exit(err.Error(), exitConfigError)
 	}
 
 	// Build policy with storage sink
@@ -271,9 +281,15 @@ Received: %s`, err, jobStr), 1)
 		resolvedProxy = endpoint
 	}
 
+	// Resolve executor path
+	executorPath, err := resolveExecutor(c.String("executor"))
+	if err != nil {
+		return cli.Exit(err.Error(), exitConfigError)
+	}
+
 	// Create run config
 	config := &runtime.RunConfig{
-		ExecutorPath: c.String("executor"),
+		ExecutorPath: executorPath,
 		ScriptPath:   c.String("script"),
 		Job:          job,
 		RunMeta:      runMeta,
@@ -393,6 +409,63 @@ Valid options:
   fs   Filesystem storage (requires writable directory)
   s3   Amazon S3 storage (requires AWS credentials)`, config.backend)
 	}
+}
+
+// resolveExecutor finds the executor binary path.
+// Resolution order:
+//  1. Explicit --executor flag (if provided)
+//  2. Bundled path relative to quarry binary (../executor-node/dist/bin/executor.js)
+//  3. "quarry-executor" in PATH
+func resolveExecutor(explicit string) (string, error) {
+	// 1. Explicit override takes priority
+	if explicit != "" {
+		if _, err := os.Stat(explicit); err != nil {
+			return "", fmt.Errorf(`executor not found: %s
+
+The specified executor does not exist. Check the path and try again.`, explicit)
+		}
+		return explicit, nil
+	}
+
+	// 2. Try bundled path relative to this binary
+	// This handles development and installed layouts
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		// Try common bundled locations
+		bundledPaths := []string{
+			filepath.Join(execDir, "..", "executor-node", "dist", "bin", "executor.js"),
+			filepath.Join(execDir, "executor-node", "dist", "bin", "executor.js"),
+			filepath.Join(execDir, "executor.js"),
+		}
+		for _, p := range bundledPaths {
+			absPath, err := filepath.Abs(p)
+			if err != nil {
+				continue
+			}
+			if _, err := os.Stat(absPath); err == nil {
+				return absPath, nil
+			}
+		}
+	}
+
+	// 3. Try PATH lookup
+	if path, err := exec.LookPath("quarry-executor"); err == nil {
+		return path, nil
+	}
+
+	// Not found - provide actionable error
+	return "", fmt.Errorf(`executor not found
+
+Quarry could not locate the executor. To fix:
+
+  1. Build the executor:
+     pnpm -C executor-node run build
+
+  2. Or specify the path manually:
+     --executor ./executor-node/dist/bin/executor.js
+
+  3. Or add quarry-executor to your PATH`)
 }
 
 func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {

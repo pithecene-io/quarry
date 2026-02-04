@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -218,5 +220,92 @@ func TestPolicyErrorMessagesAreActionable(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResolveExecutor(t *testing.T) {
+	// Create a temp file to use as mock executor
+	tmpDir := t.TempDir()
+	mockExecutor := filepath.Join(tmpDir, "mock-executor.js")
+	if err := os.WriteFile(mockExecutor, []byte("// mock"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name        string
+		explicit    string
+		wantErr     bool
+		errContains string
+		wantPath    string
+	}{
+		{
+			name:     "explicit path found",
+			explicit: mockExecutor,
+			wantErr:  false,
+			wantPath: mockExecutor,
+		},
+		{
+			name:        "explicit path not found",
+			explicit:    "/nonexistent/executor.js",
+			wantErr:     true,
+			errContains: "executor not found",
+		},
+		{
+			name:        "no executor anywhere",
+			explicit:    "",
+			wantErr:     true,
+			errContains: "executor not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := resolveExecutor(tt.explicit)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if tt.wantPath != "" && path != tt.wantPath {
+					t.Errorf("got path %q, want %q", path, tt.wantPath)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveExecutorErrorIsActionable(t *testing.T) {
+	// Test that executor not found error includes actionable guidance
+	_, err := resolveExecutor("")
+	if err == nil {
+		t.Skip("executor found in environment, cannot test not-found error")
+	}
+
+	errMsg := err.Error()
+	mustContain := []string{
+		"executor not found",
+		"pnpm",        // build instruction
+		"--executor",  // manual override option
+	}
+
+	for _, must := range mustContain {
+		if !strings.Contains(errMsg, must) {
+			t.Errorf("error should contain %q for actionability\nGot: %s", must, errMsg)
+		}
+	}
+}
+
+func TestExitCodeConstants(t *testing.T) {
+	// Verify exit code semantics
+	if exitConfigError != exitExecutorCrash {
+		t.Error("exitConfigError should map to exitExecutorCrash (non-script error)")
+	}
+	if exitScriptError == exitConfigError {
+		t.Error("exitScriptError should differ from exitConfigError")
 	}
 }

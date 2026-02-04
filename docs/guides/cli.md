@@ -102,7 +102,6 @@ Optional flags:
 - `--job-id <id>`
 - `--parent-run-id <id>`
 - `--job <json>`
-- `--executor <path>` (default: `quarry-executor`)
 - `--quiet`
 - `--policy strict|buffered`
 - `--flush-mode at_least_once|chunks_first|two_phase`
@@ -114,6 +113,9 @@ Optional flags:
 - `--proxy-sticky-key <key>`
 - `--proxy-domain <domain>` (when sticky scope = domain)
 - `--proxy-origin <origin>` (when sticky scope = origin, format: scheme://host:port)
+
+Advanced flags:
+- `--executor <path>` (auto-resolved by default; override for troubleshooting)
 
 Exit codes (per CONTRACT_RUN.md):
 - `0`: success (run_complete)

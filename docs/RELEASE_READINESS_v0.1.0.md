@@ -55,13 +55,16 @@ All gates must be satisfied before tagging a release.
 |------|--------|-------|
 | Required/optional flags normalized | ✅ | script, run-id, source, storage-backend, storage-path required |
 | Storage flags validated with clear errors | ✅ | Path existence, directory check, backend validation |
-| `--help` examples match working examples | ✅ | UsageText with 3 working examples |
+| `--help` examples match working examples | ✅ | UsageText with 4 examples (3 canonical + 1 advanced) |
 | Run output includes metadata + summary | ✅ | Existing printRunResult is comprehensive |
 | JSON/job payload validation | ✅ | Clear error with examples |
 | Storage backend/path validation | ✅ | validateStorageConfig with actionable errors |
 | No silent fallbacks | ✅ | Errors instead of warnings for invalid config |
-| CLI UX tests for misconfigurations | ✅ | run_test.go with 19 test cases |
+| CLI UX tests for misconfigurations | ✅ | run_test.go with 25 test cases |
 | Error messages include "what to do next" | ✅ | All errors include guidance |
+| Exit codes semantic (config vs script) | ✅ | exitConfigError for CLI validation failures |
+| Executor auto-resolution | ✅ | --executor optional, bundled/PATH lookup |
+| Canonical examples no --executor | ✅ | Docs updated, advanced section for override |
 
 ### Phase 4 — Runtime & Ingestion Resilience
 
