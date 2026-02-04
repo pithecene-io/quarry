@@ -1,41 +1,47 @@
-name: "📦 Release"
+name: "🔬 Release Dry Run"
 
 on:
-  push:
-    tags: ["v*"]
-
-permissions:
-  contents: write
-  packages: write
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to simulate (e.g., v0.1.0)"
+        required: true
+        type: string
 
 jobs:
-  tag_check:
-    name: "🔎 Tag Check"
+  validate_version:
+    name: "🔎 Validate Version"
     runs-on: ubuntu-latest
     outputs:
       semver_match: ${{ steps.regex-match.outputs.match }}
     steps:
-      - name: "🔎 Match SemVer Tag"
+      - name: "🔎 Match SemVer Format"
         uses: actions-ecosystem/action-regex-match@v2
         id: regex-match
         with:
-          text: ${{ github.ref_name }}
+          text: ${{ inputs.version }}
           regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+      - name: "❌ Fail on Invalid Version"
+        if: ${{ steps.regex-match.outputs.match == '' }}
+        run: |
+          echo "::error::Invalid version format: ${{ inputs.version }}"
+          echo "Version must match semver format: vX.Y.Z (e.g., v0.1.0)"
+          exit 1
 
   version_lockstep:
     name: "🔒 Version Lockstep"
     runs-on: ubuntu-latest
-    needs: [tag_check]
-    if: ${{ needs.tag_check.outputs.semver_match != '' }}
+    needs: [validate_version]
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
-      - name: "🔒 Check Version Matches Tag"
+      - name: "🔒 Check Version Matches Input"
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          INPUT_VERSION="${{ inputs.version }}"
+          TAG_VERSION="${INPUT_VERSION#v}"
           GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
           SDK_VERSION=$(jq -r '.version' sdk/package.json)
-          echo "Tag version: $TAG_VERSION"
+          echo "Input version: $TAG_VERSION"
           echo "Go version: $GO_VERSION"
           echo "SDK version: $SDK_VERSION"
           if [ "$GO_VERSION" != "$SDK_VERSION" ]; then
@@ -43,7 +49,7 @@ jobs:
             exit 1
           fi
           if [ "$GO_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::Tag mismatch! Tag ($TAG_VERSION) != code version ($GO_VERSION)"
+            echo "::error::Version mismatch! Input ($TAG_VERSION) != code version ($GO_VERSION)"
             exit 1
           fi
           echo "✅ All versions match: $TAG_VERSION"
@@ -51,8 +57,7 @@ jobs:
   lint:
     name: "🧹 Lint"
     runs-on: ubuntu-latest
-    needs: [tag_check]
-    if: ${{ needs.tag_check.outputs.semver_match != '' }}
+    needs: [validate_version]
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
@@ -66,8 +71,7 @@ jobs:
   test:
     name: "🧪 Test"
     runs-on: ubuntu-latest
-    needs: [tag_check]
-    if: ${{ needs.tag_check.outputs.semver_match != '' }}
+    needs: [validate_version]
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
@@ -81,8 +85,7 @@ jobs:
   build:
     name: "🏗️ Build"
     runs-on: ubuntu-latest
-    needs: [tag_check]
-    if: ${{ needs.tag_check.outputs.semver_match != '' }}
+    needs: [validate_version]
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
@@ -110,10 +113,9 @@ jobs:
           QUARRY_NO_SANDBOX: "1"
 
   package:
-    name: "📦 Package"
+    name: "📦 Package (Dry Run)"
     runs-on: ubuntu-latest
     needs: [version_lockstep, lint, test, build, examples]
-    if: ${{ needs.version_lockstep.result == 'success' }}
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
@@ -122,7 +124,7 @@ jobs:
       - name: "📦 Package"
         run: |
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${{ inputs.version }}"
           git archive --format=tar.gz --output="dist/quarry-${VERSION}.tar.gz" HEAD
           sha256sum "dist/quarry-${VERSION}.tar.gz" > "dist/quarry-${VERSION}.tar.gz.sha256"
           cd sdk
@@ -131,52 +133,22 @@ jobs:
           cd ..
           mv "sdk/${SDK_TARBALL}" "dist/quarry-sdk-${VERSION}.tgz"
           sha256sum "dist/quarry-sdk-${VERSION}.tgz" > "dist/quarry-sdk-${VERSION}.tgz.sha256"
+      - name: "📋 Package Summary"
+        run: |
+          echo "## 📦 Dry Run Package Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size | SHA256 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          for f in dist/*.tar.gz dist/*.tgz; do
+            SIZE=$(du -h "$f" | cut -f1)
+            SHA=$(cat "${f}.sha256" | cut -d' ' -f1)
+            echo "| $(basename $f) | $SIZE | \`${SHA:0:16}...\` |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Dry run complete.** Ready to tag and release." >> $GITHUB_STEP_SUMMARY
       - name: "⬆️ Upload Artifacts"
         uses: actions/upload-artifact@v4
         with:
-          name: release-dist
+          name: dry-run-dist
           path: dist/
-
-  hold:
-    name: "⏸️ Release Approval"
-    runs-on: ubuntu-latest
-    needs: [package]
-    environment:
-      name: release
-    steps:
-      - name: "✅ Await Approval"
-        run: echo "Release approved; continuing."
-
-  release:
-    name: "🚀 GitHub Release"
-    runs-on: ubuntu-latest
-    needs: [hold]
-    steps:
-      - name: "⬇️ Download Artifacts"
-        uses: actions/download-artifact@v4
-        with:
-          name: release-dist
-          path: dist
-      - name: "🚀 Create Release"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          files: dist/*
-
-  publish_npm:
-    name: "📦 Publish SDK (GitHub Packages)"
-    runs-on: ubuntu-latest
-    needs: [hold]
-    steps:
-      - name: "📥 Checkout"
-        uses: actions/checkout@v4
-      - name: "🧰 Setup"
-        uses: jdx/mise-action@v2
-      - name: "📦 Publish"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npm config set registry https://npm.pkg.github.com
-          cd sdk
-          pnpm publish --access restricted --no-git-checks
+          retention-days: 7
