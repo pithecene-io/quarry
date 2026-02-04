@@ -67,7 +67,8 @@ Chunk records may include an MD5 checksum for integrity verification.
 - `checksum`: hex-encoded MD5 digest of chunk data
 - `checksum_algo`: always `"md5"` when checksum is present
 
-Checksum generation is optional and controlled by runtime configuration.
+**v0.1.0 Status:** Checksum generation is disabled by default and not
+user-configurable. The infrastructure exists for future enablement.
 Validation is a downstream consumer responsibility.
 
 ---

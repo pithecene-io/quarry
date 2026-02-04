@@ -86,7 +86,7 @@ All gates must be satisfied before tagging a release.
 | Item | Status | Notes |
 |------|--------|-------|
 | FS: permissions/path validation | ✅ | validateStorageConfig() in run.go |
-| FS: disk-full/error behavior tests | ✅ | TestSink_WriteEvents_DiskFullError, etc. |
+| FS: write error propagation tested | ✅ | Sink propagates client errors (TestSink_*Error) |
 | S3: config validation tests | ✅ | TestS3Config_Validate (existing) |
 | S3: auth failure handling | ✅ | Documented in guides/lode.md |
 | S3: consistency caveats documented | ✅ | Documented in guides/lode.md |
