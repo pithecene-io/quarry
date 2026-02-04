@@ -289,16 +289,31 @@ func (e *IngestionEngine) handleArtifactCommit(envelope *types.EventEnvelope) er
 		return fmt.Errorf("artifact event missing artifact_id")
 	}
 
-	// size_bytes may come as float64 from JSON/msgpack
+	// size_bytes may come as various integer types from msgpack encoding
+	// msgpack uses the smallest encoding that fits the value
 	var sizeBytes int64
 	switch v := envelope.Payload["size_bytes"].(type) {
 	case int64:
 		sizeBytes = v
 	case int:
 		sizeBytes = int64(v)
-	case float64:
+	case int8:
+		sizeBytes = int64(v)
+	case int16:
+		sizeBytes = int64(v)
+	case int32:
+		sizeBytes = int64(v)
+	case uint:
+		sizeBytes = int64(v)
+	case uint8:
+		sizeBytes = int64(v)
+	case uint16:
+		sizeBytes = int64(v)
+	case uint32:
 		sizeBytes = int64(v)
 	case uint64:
+		sizeBytes = int64(v)
+	case float64:
 		sizeBytes = int64(v)
 	default:
 		return fmt.Errorf("artifact event has invalid size_bytes type: %T", envelope.Payload["size_bytes"])
