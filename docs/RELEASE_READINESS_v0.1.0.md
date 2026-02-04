@@ -78,7 +78,7 @@ All gates must be satisfied before tagging a release.
 | Outcome mapping verified per failure | ✅ | TestOutcomeMapping_ExitCodes, _DetermineOutcome |
 | Buffered policy ordering invariants | ✅ | TestBufferedPolicy_EventsWrittenInSequenceOrder (existing) |
 | Chunk/commit invariants upheld | ✅ | TestBufferedPolicy_AllEventsWrittenTogether (existing) |
-| Partial flush + new events matrix | ✅ | TwoPhase_NewEventsAfterEventFailure (existing) |
+| Partial flush + new events scenarios | ✅ | TwoPhase_NewEvents/Chunks_AfterEventFailure (existing) |
 | No silent data-loss paths | ✅ | TestRunOrchestrator_NoSilentDataLoss_* |
 
 ### Phase 5 — Storage Backend Hardening
