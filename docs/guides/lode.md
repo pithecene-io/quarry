@@ -69,3 +69,77 @@ Chunk records may include an MD5 checksum for integrity verification.
 
 Checksum generation is optional and controlled by runtime configuration.
 Validation is a downstream consumer responsibility.
+
+---
+
+## Storage Backend Behaviors
+
+### Filesystem (FS) Backend
+
+**Path Validation:**
+- The `--storage-path` must exist and be a directory before `quarry run` is called.
+- Path validation happens at CLI startup, before executor launch.
+- If the path is not writable, the first write operation will fail.
+
+**Error Handling:**
+- Disk full errors (`ENOSPC`) are surfaced as policy failures.
+- Permission errors (`EACCES`) are surfaced as policy failures.
+- Quarry does **not** retry failed writes; errors propagate immediately.
+- The ingestion policy determines whether partial data is preserved on failure.
+
+### S3 Backend (Experimental)
+
+**Authentication:**
+- S3 uses the AWS SDK default credential chain:
+  1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+  2. Shared credentials file (`~/.aws/credentials`)
+  3. IAM instance role (EC2/ECS/Lambda)
+- Credential validation happens on the **first write attempt**, not at startup.
+- If credentials are invalid or expired, the first write fails with an auth error.
+
+**Consistency Caveats:**
+- S3 provides **strong read-after-write consistency** for PUTs (since Dec 2020).
+- However, Quarry does **not** guarantee transactional semantics across multiple writes.
+- If a run fails mid-stream, partial data may exist in S3.
+- Orphaned chunks (written before a failed commit) are **not** automatically cleaned up.
+- Consider enabling S3 lifecycle policies to expire orphaned data.
+
+**Required IAM Permissions:**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "s3:PutObject",
+    "s3:GetObject",
+    "s3:ListBucket"
+  ],
+  "Resource": [
+    "arn:aws:s3:::bucket-name",
+    "arn:aws:s3:::bucket-name/*"
+  ]
+}
+```
+
+---
+
+## Non-Goals (v0.1.0)
+
+The following behaviors are explicitly **out of scope** for v0.1.0:
+
+**No Automatic Retries:**
+- Quarry does not retry failed storage writes.
+- If a write fails, the error propagates to the policy and run outcome.
+- Callers are responsible for implementing retry logic at the job/orchestration level.
+
+**No Backpressure:**
+- Quarry does not implement backpressure for slow storage backends.
+- Events are written as fast as the policy allows.
+- For high-throughput scenarios, use buffered policy with appropriate limits.
+
+**No Deduplication:**
+- Duplicate detection is a downstream consumer responsibility.
+- If a run is retried, it may produce duplicate events with different run IDs.
+
+**No Garbage Collection:**
+- Orphaned artifact chunks are not automatically cleaned up.
+- S3 lifecycle policies or manual cleanup are recommended.
