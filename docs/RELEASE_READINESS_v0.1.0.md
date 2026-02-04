@@ -11,7 +11,7 @@ All gates must be satisfied before tagging a release.
 |------|--------|----------|
 | CI green on main | ✅ | Local validation (task lint/test/build/examples) |
 | Nightly green (3+ consecutive) | ⬜ | [Nightly Runs](#) |
-| Release dry-run passes | ⬜ | [Dry-run Log](#) |
+| Release dry-run passes | ✅ | v0.1.0 dry-run passed |
 | Examples validated end-to-end | ✅ | 5/5 examples pass (task examples) |
 | Version lockstep verified | ✅ | 0.1.0 (task version:lockstep) |
 
@@ -107,14 +107,14 @@ All gates must be satisfied before tagging a release.
 | Release: dry-run workflow added | ✅ | release-dry-run.yml with full validation |
 | Release: missing checks block release | ⚠️ | Branch protection config needed (manual) |
 | Release: pre-publish validation | ✅ | lint/test/build/examples before package |
-| Successful full dry-run completed | ⬜ | |
+| Successful full dry-run completed | ✅ | v0.1.0 dry-run passed |
 
 ### Phase 7 — Go/No-Go Review
 
 | Item | Status | Notes |
 |------|--------|-------|
 | All phase exit criteria complete | ⚠️ | See phase gaps below |
-| No open P0/P1 defects | ⬜ | Requires GitHub issue review |
+| No open P0/P1 defects | ✅ | Confirmed zero open issues |
 | Docs/examples/CI green on main | ✅ | All tasks pass locally |
 | Known limitations documented | ✅ | PUBLIC_API.md § Known Limitations |
 | Support posture documented | ✅ | SUPPORT.md |
@@ -123,7 +123,6 @@ All gates must be satisfied before tagging a release.
 **Phase gaps requiring resolution:**
 - Phase 2: Internal doc review sign-off (⬜)
 - Phase 6: Branch protection config (⚠️ manual)
-- Phase 6: Successful full dry-run (⬜)
 
 ### Phase 8 — Storage Failure Hardening
 
