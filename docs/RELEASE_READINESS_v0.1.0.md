@@ -70,16 +70,16 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Sink write failure (before chunks) tested | ⬜ | |
-| Sink write failure (after chunks) tested | ⬜ | |
-| Executor crash mid-stream tested | ⬜ | |
-| Malformed frame tested | ⬜ | |
-| Policy flush failure tested | ⬜ | |
-| Outcome mapping verified per failure | ⬜ | |
-| Buffered policy ordering invariants | ⬜ | |
-| Chunk/commit invariants upheld | ⬜ | |
-| Partial flush + new events matrix | ⬜ | |
-| No silent data-loss paths | ⬜ | |
+| Sink write failure (before chunks) tested | ✅ | TestRunOrchestrator_SinkWriteFailure_BeforeChunks |
+| Sink write failure (after chunks) tested | ✅ | TestRunOrchestrator_SinkWriteFailure_OnChunks |
+| Executor crash mid-stream tested | ✅ | TestRunOrchestrator_ExecutorCrashMidStream, _TruncatedFrame |
+| Malformed frame tested | ✅ | TestIngestionEngine_FrameDecodeError (existing) |
+| Policy flush failure tested | ✅ | TestRunOrchestrator_PolicyFlushFailure_OutcomeMapping |
+| Outcome mapping verified per failure | ✅ | TestOutcomeMapping_ExitCodes, _DetermineOutcome |
+| Buffered policy ordering invariants | ✅ | TestBufferedPolicy_EventsWrittenInSequenceOrder (existing) |
+| Chunk/commit invariants upheld | ✅ | TestBufferedPolicy_AllEventsWrittenTogether (existing) |
+| Partial flush + new events matrix | ✅ | TwoPhase_NewEventsAfterEventFailure (existing) |
+| No silent data-loss paths | ✅ | TestRunOrchestrator_NoSilentDataLoss_* |
 
 ### Phase 5 — Storage Backend Hardening
 

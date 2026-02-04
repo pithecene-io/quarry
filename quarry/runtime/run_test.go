@@ -679,3 +679,648 @@ func TestRunOrchestrator_RunResultContextPreserved(t *testing.T) {
 		t.Errorf("expected message %q, got %q", msg, result.Outcome.Message)
 	}
 }
+
+// =============================================================================
+// Phase 4: Runtime & Ingestion Resilience Tests
+// =============================================================================
+
+// makePartialEventStream creates a stream with valid events followed by invalid data.
+// This simulates executor crash mid-stream.
+func makePartialEventStream(runMeta *types.RunMeta, validEventCount int) []byte {
+	var buf bytes.Buffer
+
+	// Write valid events
+	for i := 1; i <= validEventCount; i++ {
+		envelope := &types.EventEnvelope{
+			ContractVersion: types.ContractVersion,
+			EventID:         "evt-" + string(rune('0'+i)),
+			RunID:           runMeta.RunID,
+			Seq:             int64(i),
+			Type:            types.EventTypeItem,
+			Ts:              "2024-01-01T00:00:00Z",
+			Payload:         map[string]any{"item_type": "test", "data": map[string]any{"i": i}},
+			Attempt:         runMeta.Attempt,
+		}
+		buf.Write(encodeTestEventFrame(envelope))
+	}
+
+	// Append truncated/invalid data (simulating crash mid-frame)
+	buf.Write([]byte{0x00, 0x00, 0x00, 0x10}) // Length prefix for 16 bytes
+	buf.Write([]byte{0xFF, 0xFE})              // Only 2 bytes instead of 16
+
+	return buf.Bytes()
+}
+
+// makeEventStreamWithTruncatedLength creates a stream with a length prefix but EOF before payload.
+func makeEventStreamWithTruncatedLength(runMeta *types.RunMeta) []byte {
+	var buf bytes.Buffer
+
+	// Valid event first
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           runMeta.RunID,
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         runMeta.Attempt,
+	}
+	buf.Write(encodeTestEventFrame(envelope))
+
+	// Truncated frame: length says 100 bytes but stream ends
+	buf.Write([]byte{0x00, 0x00, 0x00, 0x64}) // Length prefix for 100 bytes
+	// No payload - EOF
+
+	return buf.Bytes()
+}
+
+func TestRunOrchestrator_ExecutorCrashMidStream(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-crash-midstream",
+		Attempt: 1,
+	}
+
+	// Create executor that produces 3 valid events then crashes (invalid data)
+	eventData := makePartialEventStream(runMeta, 3)
+	mockExec := newMockExecutor(eventData, 2) // Exit code 2 = crash
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify outcome is executor crash
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+
+	// Verify flush was still called (best effort)
+	if !trackingPol.WasFlushed() {
+		t.Error("expected policy Flush to be called even after mid-stream crash")
+	}
+
+	// Verify event count reflects partial processing
+	// Note: exact count depends on when stream error was detected
+	if result.EventCount < 0 {
+		t.Errorf("expected non-negative event count, got %d", result.EventCount)
+	}
+}
+
+func TestRunOrchestrator_ExecutorCrashTruncatedFrame(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-crash-truncated",
+		Attempt: 1,
+	}
+
+	// Create executor that produces valid event then truncated frame (simulates sudden death)
+	eventData := makeEventStreamWithTruncatedLength(runMeta)
+	mockExec := newMockExecutor(eventData, 2)
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify outcome is executor crash (stream error from truncated frame)
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+
+	// Verify flush was called
+	if !trackingPol.WasFlushed() {
+		t.Error("expected policy Flush to be called on truncated frame")
+	}
+}
+
+func TestRunOrchestrator_PolicyFlushFailure_OutcomeMapping(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-flush-fail-outcome",
+		Attempt: 1,
+	}
+
+	// Create executor that produces valid complete stream
+	eventData := makeValidEventStream(runMeta)
+	mockExec := newMockExecutor(eventData, 0)
+
+	// Create policy that succeeds on ingestion but fails on flush
+	flushFailPol := newFlushTrackingPolicy()
+	flushFailPol.flushErr = io.ErrUnexpectedEOF
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       flushFailPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Flush failure should result in policy failure outcome
+	if result.Outcome.Status != types.OutcomePolicyFailure {
+		t.Errorf("expected OutcomePolicyFailure, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+}
+
+func TestRunOrchestrator_ExecutorStartFailure(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-start-fail",
+		Attempt: 1,
+	}
+
+	// Create executor that fails on Start
+	mockExec := newMockExecutor(nil, 0)
+	mockExec.startErr = io.ErrUnexpectedEOF
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Executor start failure should be executor crash
+	if result.Outcome.Status != types.OutcomeExecutorCrash {
+		t.Errorf("expected OutcomeExecutorCrash, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+
+	// Flush should still be called (best effort)
+	if !trackingPol.WasFlushed() {
+		t.Error("expected policy Flush to be called even on executor start failure")
+	}
+}
+
+// =============================================================================
+// Outcome Mapping Verification Tests
+// =============================================================================
+
+func TestOutcomeMapping_ExitCodes(t *testing.T) {
+	tests := []struct {
+		name           string
+		exitCode       int
+		expectedStatus types.OutcomeStatus
+	}{
+		{"exit 0 with terminal", ExitCodeCompleted, types.OutcomeSuccess},
+		{"exit 1 script error", ExitCodeError, types.OutcomeScriptError},
+		{"exit 2 crash", ExitCodeCrash, types.OutcomeExecutorCrash},
+		{"exit 3 invalid input", ExitCodeInvalidInput, types.OutcomeExecutorCrash},
+		{"exit 127 unknown", 127, types.OutcomeExecutorCrash},
+		{"exit 255 unknown", 255, types.OutcomeExecutorCrash},
+		{"exit -1 signal", -1, types.OutcomeExecutorCrash},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := outcomeFromExitCode(tt.exitCode)
+			if got != tt.expectedStatus {
+				t.Errorf("outcomeFromExitCode(%d) = %s, want %s", tt.exitCode, got, tt.expectedStatus)
+			}
+		})
+	}
+}
+
+func TestOutcomeMapping_DetermineOutcome(t *testing.T) {
+	tests := []struct {
+		name           string
+		exitCode       int
+		hasTerminal    bool
+		terminalType   types.EventType
+		expectedStatus types.OutcomeStatus
+	}{
+		{
+			name:           "exit 0 with run_complete",
+			exitCode:       ExitCodeCompleted,
+			hasTerminal:    true,
+			terminalType:   types.EventTypeRunComplete,
+			expectedStatus: types.OutcomeSuccess,
+		},
+		{
+			name:           "exit 0 without terminal (anomaly)",
+			exitCode:       ExitCodeCompleted,
+			hasTerminal:    false,
+			terminalType:   "",
+			expectedStatus: types.OutcomeExecutorCrash,
+		},
+		{
+			name:           "exit 1 with run_error",
+			exitCode:       ExitCodeError,
+			hasTerminal:    true,
+			terminalType:   types.EventTypeRunError,
+			expectedStatus: types.OutcomeScriptError,
+		},
+		{
+			name:           "exit 1 without terminal (anomaly)",
+			exitCode:       ExitCodeError,
+			hasTerminal:    false,
+			terminalType:   "",
+			expectedStatus: types.OutcomeExecutorCrash,
+		},
+		{
+			name:           "exit 2 crash",
+			exitCode:       ExitCodeCrash,
+			hasTerminal:    false,
+			terminalType:   "",
+			expectedStatus: types.OutcomeExecutorCrash,
+		},
+		{
+			name:           "exit 3 invalid input",
+			exitCode:       ExitCodeInvalidInput,
+			hasTerminal:    false,
+			terminalType:   "",
+			expectedStatus: types.OutcomeExecutorCrash,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var terminal *types.EventEnvelope
+			if tt.hasTerminal {
+				terminal = &types.EventEnvelope{Type: tt.terminalType}
+			}
+
+			outcome := DetermineOutcome(tt.exitCode, tt.hasTerminal, terminal)
+			if outcome.Status != tt.expectedStatus {
+				t.Errorf("DetermineOutcome(%d, %v, %v) = %s, want %s",
+					tt.exitCode, tt.hasTerminal, tt.terminalType, outcome.Status, tt.expectedStatus)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Sink Write Failure Tests (Orchestrator Level)
+// =============================================================================
+
+// sinkFailingPolicy fails writes to the underlying sink.
+type sinkFailingPolicy struct {
+	*flushTrackingPolicy
+	failOnEvent bool
+	failOnChunk bool
+	writeErr    error
+}
+
+func newSinkFailingPolicy(failOnEvent, failOnChunk bool, writeErr error) *sinkFailingPolicy {
+	return &sinkFailingPolicy{
+		flushTrackingPolicy: newFlushTrackingPolicy(),
+		failOnEvent:         failOnEvent,
+		failOnChunk:         failOnChunk,
+		writeErr:            writeErr,
+	}
+}
+
+func (p *sinkFailingPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
+	if p.failOnEvent {
+		return &policyError{msg: "sink write failed: " + p.writeErr.Error()}
+	}
+	return p.flushTrackingPolicy.IngestEvent(ctx, envelope)
+}
+
+func (p *sinkFailingPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
+	if p.failOnChunk {
+		return &policyError{msg: "chunk write failed: " + p.writeErr.Error()}
+	}
+	return p.flushTrackingPolicy.IngestArtifactChunk(ctx, chunk)
+}
+
+func TestRunOrchestrator_SinkWriteFailure_BeforeChunks(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-sink-fail-event",
+		Attempt: 1,
+	}
+
+	// Create executor that produces a valid event
+	eventData := makeValidEventStream(runMeta)
+	mockExec := newMockExecutor(eventData, 0)
+
+	// Policy that fails on event write (before any chunks)
+	sinkFailPol := newSinkFailingPolicy(true, false, io.ErrShortWrite)
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       sinkFailPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Sink write failure during event ingestion should be policy failure
+	if result.Outcome.Status != types.OutcomePolicyFailure {
+		t.Errorf("expected OutcomePolicyFailure, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+}
+
+// makeEventStreamWithArtifactChunk creates a stream with an artifact chunk frame.
+func makeEventStreamWithArtifactChunk(runMeta *types.RunMeta) []byte {
+	var buf bytes.Buffer
+
+	// Item event first
+	itemEnvelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           runMeta.RunID,
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         runMeta.Attempt,
+	}
+	buf.Write(encodeTestEventFrame(itemEnvelope))
+
+	// Artifact chunk frame
+	chunk := &types.ArtifactChunkFrame{
+		Type:       "artifact_chunk",
+		ArtifactID: "art-1",
+		Seq:        1,
+		Data:       []byte("test data"),
+		IsLast:     true,
+	}
+	chunkPayload, _ := msgpack.Marshal(chunk)
+	buf.Write(encodeTestFrame(chunkPayload))
+
+	// run_complete event
+	completeEnvelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           runMeta.RunID,
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         runMeta.Attempt,
+	}
+	buf.Write(encodeTestEventFrame(completeEnvelope))
+
+	return buf.Bytes()
+}
+
+func TestRunOrchestrator_SinkWriteFailure_OnChunks(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-sink-fail-chunk",
+		Attempt: 1,
+	}
+
+	// Create executor that produces event + artifact chunk
+	eventData := makeEventStreamWithArtifactChunk(runMeta)
+	mockExec := newMockExecutor(eventData, 0)
+
+	// Policy that fails on chunk write (after events succeed)
+	sinkFailPol := newSinkFailingPolicy(false, true, io.ErrShortWrite)
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       sinkFailPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Chunk write failure should be policy failure
+	if result.Outcome.Status != types.OutcomePolicyFailure {
+		t.Errorf("expected OutcomePolicyFailure, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+}
+
+// =============================================================================
+// No Silent Data Loss Tests
+// =============================================================================
+
+// eventCountingPolicy counts events and tracks drops.
+type eventCountingPolicy struct {
+	policy.Policy
+	mu            sync.Mutex
+	eventsIngested int
+	eventsDropped  int
+	errors        int
+}
+
+func newEventCountingPolicy() *eventCountingPolicy {
+	return &eventCountingPolicy{
+		Policy: policy.NewNoopPolicy(),
+	}
+}
+
+func (p *eventCountingPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.eventsIngested++
+	return p.Policy.IngestEvent(ctx, envelope)
+}
+
+func (p *eventCountingPolicy) Stats() policy.Stats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	stats := p.Policy.Stats()
+	stats.TotalEvents = int64(p.eventsIngested)
+	return stats
+}
+
+func TestRunOrchestrator_NoSilentDataLoss_AllEventsIngested(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-no-silent-loss",
+		Attempt: 1,
+	}
+
+	// Create stream with multiple events
+	var buf bytes.Buffer
+	eventCount := 5
+	for i := 1; i <= eventCount; i++ {
+		envelope := &types.EventEnvelope{
+			ContractVersion: types.ContractVersion,
+			EventID:         "evt-" + string(rune('0'+i)),
+			RunID:           runMeta.RunID,
+			Seq:             int64(i),
+			Type:            types.EventTypeItem,
+			Ts:              "2024-01-01T00:00:00Z",
+			Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+			Attempt:         runMeta.Attempt,
+		}
+		buf.Write(encodeTestEventFrame(envelope))
+	}
+	// Terminal event
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-terminal",
+		RunID:           runMeta.RunID,
+		Seq:             int64(eventCount + 1),
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         runMeta.Attempt,
+	}
+	buf.Write(encodeTestEventFrame(terminal))
+
+	mockExec := newMockExecutor(buf.Bytes(), 0)
+
+	countingPol := newEventCountingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       countingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify success
+	if result.Outcome.Status != types.OutcomeSuccess {
+		t.Errorf("expected OutcomeSuccess, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+
+	// Verify all events were ingested (no silent drops)
+	expectedTotal := int64(eventCount + 1) // items + terminal
+	stats := countingPol.Stats()
+	if stats.TotalEvents != expectedTotal {
+		t.Errorf("expected %d events ingested, got %d (silent data loss detected)",
+			expectedTotal, stats.TotalEvents)
+	}
+
+	// Verify event count in result matches
+	if result.EventCount != expectedTotal {
+		t.Errorf("result.EventCount=%d, expected %d", result.EventCount, expectedTotal)
+	}
+}
+
+func TestRunOrchestrator_NoSilentDataLoss_ErrorSurfaced(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-error-surfaced",
+		Attempt: 1,
+	}
+
+	// Create stream with one event then invalid data
+	eventData := makePartialEventStream(runMeta, 1)
+	mockExec := newMockExecutor(eventData, 2)
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       policy.NewNoopPolicy(),
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Error must be surfaced in outcome - not silently ignored
+	if result.Outcome.Status == types.OutcomeSuccess {
+		t.Error("expected non-success outcome when stream has errors (no silent failure)")
+	}
+
+	// Outcome message should indicate the problem
+	if result.Outcome.Message == "" {
+		t.Error("outcome message should describe the failure (not empty)")
+	}
+}
