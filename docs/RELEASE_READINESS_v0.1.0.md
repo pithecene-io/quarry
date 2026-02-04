@@ -129,16 +129,16 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| FS: directory creation failure tested | ⬜ | Real mkdir failures (permissions, path) |
-| FS: file write failure tested | ⬜ | Real write failures (disk full, quota) |
-| FS: atomic write semantics validated | ⬜ | Partial write detection |
-| S3: auth failure tested | ⬜ | Invalid/expired credentials |
-| S3: bucket access denied tested | ⬜ | Missing permissions |
-| S3: network timeout tested | ⬜ | Transient network failures |
-| S3: throttling (429) tested | ⬜ | Rate limit handling |
-| Error messages include storage context | ⬜ | Path/bucket in errors |
-| Policy failure propagation verified | ⬜ | Storage errors → run outcome |
-| No silent corruption paths | ⬜ | All partial writes detectable |
+| FS: directory creation failure tested | ✅ | TestLodeClient_FSDirectoryCreationFailure_* |
+| FS: file write failure tested | ✅ | TestLodeClient_WriteFailure_DiskFull/PermissionDenied |
+| FS: atomic write semantics validated | ✅ | TestLodeClient_PartialWriteDetection_* |
+| S3: auth failure tested | ✅ | TestLodeClient_S3AuthFailure |
+| S3: bucket access denied tested | ✅ | TestLodeClient_S3AccessDenied |
+| S3: network timeout tested | ✅ | TestLodeClient_S3NetworkTimeout |
+| S3: throttling (429) tested | ✅ | TestLodeClient_S3Throttling |
+| Error messages include storage context | ✅ | TestLodeClient_ErrorContainsStorageContext |
+| Policy failure propagation verified | ✅ | TestLodeClient_ErrorPropagation_* |
+| No silent corruption paths | ✅ | TestLodeClient_NoSilentCorruption_* |
 
 ### Phase 9 — Bundle Executor with Go Distribution
 
