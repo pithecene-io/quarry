@@ -35,6 +35,18 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["scripts/**", "testdata/**", "executor-node/scripts/**", "executor-node/testdata/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "jsxQuoteStyle": "single",
