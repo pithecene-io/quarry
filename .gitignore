@@ -23,3 +23,9 @@ pnpm-debug.log*
 # Vitest
 __coverage__/
 
+# Example run output
+.example-runs/
+
+# Go build output
+quarry/quarry
+

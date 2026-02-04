@@ -25,12 +25,20 @@ tasks:
     deps: [go:test:race, ts:test]
 
   examples:
-    desc: Validate examples are present
+    desc: Run and validate all examples
+    deps: [go:build, ts:build]
+    cmds:
+      - pnpm exec tsx scripts/run-examples.ts
+
+  examples:check:
+    desc: Validate example files exist (fast check)
     cmds:
       - test -f examples/demo.ts
       - test -f examples/static-html-list/script.ts
       - test -f examples/toy-pagination/script.ts
       - test -f examples/artifact-snapshot/script.ts
+      - test -f examples/intentional-failure/script.ts
+      - test -f examples/manifest.json
 
   typecheck:
     desc: Typecheck implementation (TS)

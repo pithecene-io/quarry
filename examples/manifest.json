@@ -1,0 +1,66 @@
+{
+  "$schema": "./manifest.schema.json",
+  "examples": [
+    {
+      "name": "demo",
+      "script": "demo.ts",
+      "description": "Minimal item emission",
+      "expected": {
+        "events": {
+          "item": 1
+        },
+        "terminal": "run_complete"
+      }
+    },
+    {
+      "name": "static-html-list",
+      "script": "static-html-list/script.ts",
+      "description": "Parses local HTML fixture and emits items",
+      "expected": {
+        "events": {
+          "item": 3
+        },
+        "terminal": "run_complete"
+      }
+    },
+    {
+      "name": "toy-pagination",
+      "script": "toy-pagination/script.ts",
+      "description": "Paginates across two local fixtures",
+      "expected": {
+        "events": {
+          "item": 6,
+          "checkpoint": 2
+        },
+        "terminal": "run_complete"
+      }
+    },
+    {
+      "name": "artifact-snapshot",
+      "script": "artifact-snapshot/script.ts",
+      "description": "Renders local fixture and emits screenshot artifact",
+      "expected": {
+        "events": {
+          "artifact": 1
+        },
+        "artifacts": [
+          {
+            "name": "snapshot.png",
+            "content_type": "image/png",
+            "min_size": 1000
+          }
+        ],
+        "terminal": "run_complete"
+      }
+    },
+    {
+      "name": "intentional-failure",
+      "script": "intentional-failure/script.ts",
+      "description": "Intentional script error for testing failure paths",
+      "expected": {
+        "terminal": "run_error",
+        "exit_code": 1
+      }
+    }
+  ]
+}
