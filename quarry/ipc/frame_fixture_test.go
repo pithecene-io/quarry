@@ -330,7 +330,7 @@ func TestE2EFixture_SeqMonotonicity(t *testing.T) {
 
 	decoder := NewFrameDecoder(bytes.NewReader(data))
 
-	var prevSeq int64 = 0
+	var prevSeq int64
 
 	for {
 		payload, err := decoder.ReadFrame()

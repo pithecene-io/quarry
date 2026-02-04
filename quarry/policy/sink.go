@@ -72,7 +72,7 @@ func NewStubSink() *StubSink {
 }
 
 // WriteEvents records the events without persisting.
-func (s *StubSink) WriteEvents(ctx context.Context, events []*types.EventEnvelope) error {
+func (s *StubSink) WriteEvents(_ context.Context, events []*types.EventEnvelope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (s *StubSink) WriteEvents(ctx context.Context, events []*types.EventEnvelop
 }
 
 // WriteChunks records the chunks without persisting.
-func (s *StubSink) WriteChunks(ctx context.Context, chunks []*types.ArtifactChunk) error {
+func (s *StubSink) WriteChunks(_ context.Context, chunks []*types.ArtifactChunk) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

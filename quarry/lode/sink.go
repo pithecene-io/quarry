@@ -109,7 +109,7 @@ func NewStubClient() *StubClient {
 }
 
 // WriteEvents implements Client.
-func (c *StubClient) WriteEvents(ctx context.Context, dataset, runID string, events []*types.EventEnvelope) error {
+func (c *StubClient) WriteEvents(_ context.Context, dataset, runID string, events []*types.EventEnvelope) error {
 	c.Events = append(c.Events, StubEventRecord{
 		Dataset: dataset,
 		RunID:   runID,
@@ -119,7 +119,7 @@ func (c *StubClient) WriteEvents(ctx context.Context, dataset, runID string, eve
 }
 
 // WriteChunks implements Client.
-func (c *StubClient) WriteChunks(ctx context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error {
+func (c *StubClient) WriteChunks(_ context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error {
 	c.Chunks = append(c.Chunks, StubChunkRecord{
 		Dataset: dataset,
 		RunID:   runID,

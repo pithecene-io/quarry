@@ -42,8 +42,7 @@ func (m StatsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, keys.Quit):
+		if key.Matches(msg, keys.Quit) {
 			m.quitting = true
 			return m, tea.Quit
 		}

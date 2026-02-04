@@ -4,8 +4,6 @@ import { describe, expect, it } from 'vitest'
 import {
   type ArtifactChunkFrame,
   ChunkValidationError,
-  type RunResultFrame,
-  type RunResultOutcome,
   calculateChunks,
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
@@ -16,7 +14,9 @@ import {
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
   MAX_FRAME_SIZE,
-  MAX_PAYLOAD_SIZE
+  MAX_PAYLOAD_SIZE,
+  type RunResultFrame,
+  type RunResultOutcome
 } from '../../src/ipc/frame.js'
 
 /**

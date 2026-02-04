@@ -36,7 +36,7 @@ func TestTUIReadOnlyFlags_IncludesTUI(t *testing.T) {
 	}
 }
 
-func TestIsStderrTTY(t *testing.T) {
+func TestIsStderrTTY(_ *testing.T) {
 	// This test documents the function exists and can be called.
 	// Actual TTY behavior depends on runtime environment.
 	_ = isStderrTTY()
