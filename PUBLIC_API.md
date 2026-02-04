@@ -1,106 +1,342 @@
-# Quarry PUBLIC API (User Guide)
+# Quarry Public API
 
-This document explains the public surface for Quarry users: how to set up
-projects, write scripts, and run jobs. Normative behavior is defined by
-contracts under `docs/contracts/`.
+User-facing guide for Quarry v0.1.0.
+Normative behavior is defined by contracts under `docs/contracts/`.
+
+---
+
+## Prerequisites
+
+| Tool | Version | Source |
+|------|---------|--------|
+| Go | 1.25.6 | `quarry/go.mod` |
+| Node.js | 23+ or 22.6+ | Native TS support (see note) |
+| pnpm | 10.28.2 | `package.json#packageManager` |
+
+**Node.js version note:** Quarry scripts are TypeScript and use Node's native
+type-stripping. Node 23+ enables this by default. Node 22.6–22.x requires
+`--experimental-strip-types` flag (set via `NODE_OPTIONS`).
+
+Quarry is **TypeScript-first** and **ESM-only**.
 
 ---
 
 ## Quick Start
 
-Run a script:
+### 1. Clone and Build
 
+```bash
+git clone https://github.com/justapithecus/quarry.git
+cd quarry
+pnpm install
+task build
 ```
-quarry run \
+
+### 2. Run an Example
+
+```bash
+mkdir -p ./quarry-data
+
+./quarry/quarry run \
   --script ./examples/demo.ts \
-  --run-id run-001 \
+  --run-id my-first-run \
   --source demo \
   --storage-backend fs \
   --storage-path ./quarry-data \
-  --job '{"source":"demo"}'
+  --executor ./executor-node/dist/bin/executor.js
+```
+
+Expected output:
+```
+run_id=my-first-run, attempt=1, outcome=success, duration=...
 ```
 
 ---
 
-## Project Setup
+## Script Authoring
 
-Quarry scripts are TypeScript and must export a default async function.
-The function receives a `QuarryContext` and emits output via `emit.*`.
+### Export Shape
 
-Minimal script shape:
+Scripts **must** export a default async function:
 
+```typescript
+import type { QuarryContext } from "@justapithecus/quarry-sdk";
+
+export default async function run(ctx: QuarryContext): Promise<void> {
+  // Your extraction logic here
+}
 ```
+
+This is the **only** supported entry point shape.
+
+### Context Object
+
+The `QuarryContext` provides:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `job` | `unknown` | Job payload (parsed from `--job` JSON) |
+| `run` | `RunMeta` | Run metadata (run_id, attempt, job_id, etc.) |
+| `page` | `Page` | Puppeteer page instance |
+| `browser` | `Browser` | Puppeteer browser instance |
+| `browserContext` | `BrowserContext` | Puppeteer browser context |
+| `emit` | `EmitAPI` | Output emission interface |
+
+### Terminal Behavior
+
+A script terminates in one of these ways:
+
+1. **Normal return** — Executor emits `run_complete` automatically
+2. **Throw error** — Executor emits `run_error` automatically
+3. **Explicit `emit.runComplete()`** — Script signals success
+4. **Explicit `emit.runError()`** — Script signals failure
+
+After a terminal event, further emit calls are undefined behavior.
+
+---
+
+## Emit API
+
+`emit.*` is the **sole output mechanism** for scripts.
+
+### Primary Methods
+
+```typescript
+// Emit structured data (primary output)
+await ctx.emit.item({
+  item_type: "product",
+  data: { name: "Widget", price: 9.99 }
+});
+
+// Emit binary artifact (screenshot, PDF, etc.)
+const artifactId = await ctx.emit.artifact({
+  name: "screenshot.png",
+  content_type: "image/png",
+  data: buffer  // Buffer or Uint8Array
+});
+
+// Emit progress checkpoint
+await ctx.emit.checkpoint({
+  checkpoint_id: "page-2",
+  note: "Completed page 2 of 10"
+});
+```
+
+### Logging
+
+```typescript
+await ctx.emit.debug("Debug message", { field: "value" });
+await ctx.emit.info("Info message");
+await ctx.emit.warn("Warning message");
+await ctx.emit.error("Error message");
+```
+
+### Advisory Methods (Not Guaranteed)
+
+```typescript
+// Suggest enqueueing additional work
+await ctx.emit.enqueue({
+  target: "detail-page",
+  params: { url: "https://example.com/item/123" }
+});
+
+// Suggest proxy rotation
+await ctx.emit.rotateProxy({ reason: "rate limited" });
+```
+
+---
+
+## CLI Reference
+
+### Run Command
+
+```bash
+quarry run [options]
+```
+
+**Required flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--script <path>` | Path to TypeScript script |
+| `--run-id <id>` | Unique run identifier |
+| `--source <name>` | Source identifier for partitioning |
+| `--storage-backend <fs\|s3>` | Storage backend |
+| `--storage-path <path>` | Storage location |
+
+**Optional flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--attempt <n>` | 1 | Attempt number |
+| `--job <json>` | `{}` | Job payload as JSON |
+| `--category <name>` | `default` | Category for partitioning |
+| `--policy <strict\|buffered>` | `strict` | Ingestion policy |
+| `--executor <path>` | `quarry-executor` | Executor binary |
+
+**Storage flags (S3):**
+
+| Flag | Description |
+|------|-------------|
+| `--storage-region <region>` | AWS region (uses default chain if omitted) |
+
+### Inspect Command
+
+```bash
+quarry inspect run <run-id>     # Inspect a specific run
+quarry inspect job <job-id>     # Inspect a specific job
+```
+
+### Stats Command
+
+```bash
+quarry stats runs               # Run statistics
+quarry stats jobs               # Job statistics
+```
+
+---
+
+## Examples
+
+All examples use local fixtures (no external network calls).
+
+| Example | Description | Events |
+|---------|-------------|--------|
+| `examples/demo.ts` | Minimal item emission | 1 item |
+| `examples/static-html-list/` | Parse HTML fixture | 3 items |
+| `examples/toy-pagination/` | Multi-page pagination | 6 items |
+| `examples/artifact-snapshot/` | Screenshot artifact | 1 artifact |
+| `examples/intentional-failure/` | Error handling test | 1 item + error |
+
+Run all examples:
+```bash
+task examples
+```
+
+### Example: Minimal Item Emission
+
+```typescript
+// examples/demo.ts
 import type { QuarryContext } from "@justapithecus/quarry-sdk";
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.emit.item({
-    item_type: "example",
-    data: { hello: "world" }
+    item_type: "demo",
+    data: { message: "hello from quarry" }
+  });
+}
+```
+
+### Example: Screenshot Artifact
+
+```typescript
+// examples/artifact-snapshot/script.ts
+import type { QuarryContext } from "@justapithecus/quarry-sdk";
+
+export default async function run(ctx: QuarryContext): Promise<void> {
+  await ctx.page.setContent("<h1>Hello</h1>");
+  const data = await ctx.page.screenshot({ type: "png" });
+  await ctx.emit.artifact({
+    name: "snapshot.png",
+    content_type: "image/png",
+    data
   });
 }
 ```
 
 ---
 
-## Storage Configuration (Quarry-level)
+## Troubleshooting
 
-Storage is a Quarry concern. Lode is internal and not user-configured.
+### "Module not found" for SDK
 
-Required flags:
-- `--storage-backend` (`fs` or `s3`)
-- `--storage-path` (fs: directory, s3: bucket/prefix)
+Ensure SDK is built:
+```bash
+pnpm -C sdk run build
+```
 
-Optional:
-- `--storage-region` (s3 only, uses default AWS chain if omitted)
+### "Executor not found"
 
----
+Ensure executor is built and path is correct:
+```bash
+pnpm -C executor-node run build
+./quarry/quarry run --executor ./executor-node/dist/bin/executor.js ...
+```
 
-## Run Identity
+### Chrome/Puppeteer sandbox errors (CI)
 
-Required:
-- `--run-id <id>`
+Set environment variable:
+```bash
+QUARRY_NO_SANDBOX=1 quarry run ...
+```
 
-Optional:
-- `--attempt <n>` (default: 1)
-- `--job-id <id>`
-- `--parent-run-id <id>`
+### "Contract version mismatch"
 
-Lineage and retry rules follow `CONTRACT_RUN.md`.
+SDK and runtime versions must match. Rebuild both:
+```bash
+task build
+```
 
----
+### Storage path errors
 
-## Emit API (Script Output)
-
-`emit.*` is the sole output mechanism:
-- `emit.item` — primary structured output
-- `emit.artifact` — binary artifacts (screenshots, files)
-- `emit.checkpoint` — progress markers
-- `emit.log` — structured logs
-- `emit.runError` / `emit.runComplete` — terminal events
-
-Event ordering is preserved per run.
+- **FS backend**: Path must be a writable directory
+- **S3 backend**: Format is `bucket/prefix`, credentials via AWS default chain
 
 ---
 
-## Artifacts (Chunking and Commit)
+## Known Limitations (v0.1.0)
 
-Artifacts are written as chunks and committed by an `artifact` event.
-Chunks are written before the commit record. Orphaned chunks are possible
-on failure and are acceptable.
-
----
-
-## Examples
-
-Examples live under `examples/`:
-- `examples/demo.ts` — minimal item emission
-- `examples/static-html-list/` — parse static HTML list
-- `examples/toy-pagination/` — pagination over fixtures
-- `examples/artifact-snapshot/` — screenshot artifact
+1. **Single executor type**: Only Node.js executor supported
+2. **No built-in retries**: Retry logic is caller's responsibility
+3. **No streaming reads**: Artifacts must fit in memory
+4. **S3 is experimental**: Requires explicit opt-in, eventual consistency
+5. **No job scheduling**: Quarry is an execution runtime, not a scheduler
+6. **Puppeteer required**: All scripts run in a browser context
 
 ---
 
-## Support Notes
+## Storage Configuration
 
-Quarry is TypeScript-first and ESM-only. Scripts should be `.ts` and use
-`export default async function`.
+Storage is a **Quarry-level** concern. The underlying Lode subsystem is internal.
+
+### Filesystem Backend
+
+```bash
+--storage-backend fs \
+--storage-path /var/quarry/data
+```
+
+Data is stored in Hive-partitioned layout:
+```
+/var/quarry/data/
+  source=my-source/
+    category=default/
+      day=2026-02-03/
+        run_id=run-001/
+          event_type=item/
+            data.jsonl
+```
+
+### S3 Backend (Experimental)
+
+```bash
+--storage-backend s3 \
+--storage-path my-bucket/quarry-data \
+--storage-region us-east-1
+```
+
+Uses AWS default credential chain. IAM permissions required:
+- `s3:PutObject`
+- `s3:GetObject`
+- `s3:ListBucket`
+
+---
+
+## Version Information
+
+```bash
+quarry version
+# 0.1.0 (commit: ...)
+```
+
+SDK and runtime versions must match (lockstep versioning).

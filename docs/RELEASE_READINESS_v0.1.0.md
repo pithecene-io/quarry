@@ -23,31 +23,31 @@ All gates must be satisfied before tagging a release.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Single supported script format decided | ⬜ | JS or TS runtime |
-| All examples executable as documented | ⬜ | |
-| Per-example success assertions added | ⬜ | Event counts/types/artifacts |
-| Negative example (failure path) added | ⬜ | |
-| No external websites; local fixtures only | ⬜ | |
-| Artifact example validates chunk+commit | ⬜ | |
-| Deterministic outputs (stable order) | ⬜ | |
-| `task examples` executes, not just checks | ⬜ | |
-| Example run logs in CI artifacts | ⬜ | |
+| Single supported script format decided | ✅ | TypeScript (.ts) via Node native type-stripping |
+| All examples executable as documented | ✅ | 5/5 pass |
+| Per-example success assertions added | ✅ | manifest.json with expected outcomes |
+| Negative example (failure path) added | ✅ | intentional-failure/ |
+| No external websites; local fixtures only | ✅ | All use local HTML fixtures |
+| Artifact example validates chunk+commit | ✅ | artifact-snapshot passes |
+| Deterministic outputs (stable order) | ✅ | Event counts stable |
+| `task examples` executes, not just checks | ✅ | Runs full suite |
+| Example run logs in CI artifacts | ✅ | upload-artifact in ci.yml |
 
 ### Phase 2 — Public API Documentation
 
 | Item | Status | Notes |
 |------|--------|-------|
-| PUBLIC_API.md rewritten for first-run clarity | ⬜ | |
-| Prerequisites with exact versions | ⬜ | From repo pins |
-| Minimal setup documented | ⬜ | |
-| One canonical run command | ⬜ | |
-| Troubleshooting section | ⬜ | |
-| No Lode internals exposed | ⬜ | Quarry-level terms only |
-| Script authoring contract section | ⬜ | Export shape, hooks, terminal behavior |
-| Known limitations section | ⬜ | |
-| Doc snippets from tested examples | ⬜ | |
-| Every command has CI counterpart | ⬜ | |
-| Internal doc review sign-off | ⬜ | |
+| PUBLIC_API.md rewritten for first-run clarity | ✅ | Complete rewrite |
+| Prerequisites with exact versions | ✅ | Go 1.25.6 (exact), Node 23+ (minimum), pnpm 10.28.2 (exact) |
+| Minimal setup documented | ✅ | Clone, build, run example |
+| One canonical run command | ✅ | `quarry run` with required flags |
+| Troubleshooting section | ✅ | 5 common issues |
+| No Lode internals exposed | ✅ | Quarry-level storage terms only |
+| Script authoring contract section | ✅ | Export shape, context, terminal behavior |
+| Known limitations section | ✅ | 6 limitations documented |
+| Doc snippets from tested examples | ✅ | demo.ts and artifact-snapshot |
+| Every command has CI counterpart | ⚠️ | Core tasks covered; inspect/stats not exercised |
+| Internal doc review sign-off | ⬜ | Pending review |
 
 ### Phase 3 — CLI Ergonomics
 

@@ -76,7 +76,7 @@ tasks:
     aliases: [go:b]
     dir: quarry
     cmds:
-      - go build ./...
+      - go build -o quarry ./cmd/quarry
 
   go:lint:
     desc: Lint Go module
