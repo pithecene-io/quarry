@@ -343,6 +343,16 @@ Uses AWS default credential chain. IAM permissions required:
 
 ---
 
+## Downstream Integration
+
+Quarry is an extraction runtime, not a full pipeline. For triggering downstream
+processing after runs complete, see [docs/guides/integration.md](docs/guides/integration.md).
+
+**Recommended pattern**: Event-bus-driven triggers after storage commit.
+**Fallback pattern**: Polling-based triggers with idempotent checkpoints.
+
+---
+
 ## Version Information
 
 ```bash
