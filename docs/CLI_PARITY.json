@@ -1,0 +1,397 @@
+{
+  "$schema": "./cli-parity-schema.json",
+  "version": "0.2.0",
+  "description": "CLI flag/config parity artifact. Machine-checkable source of truth for CLI flags.",
+  "commands": {
+    "run": {
+      "description": "Execute a script run (the only execution entrypoint)",
+      "flags": {
+        "script": {
+          "type": "string",
+          "required": true,
+          "description": "Path to script file"
+        },
+        "run-id": {
+          "type": "string",
+          "required": true,
+          "description": "Run ID"
+        },
+        "attempt": {
+          "type": "int",
+          "required": false,
+          "default": 1,
+          "description": "Attempt number (starts at 1)"
+        },
+        "job-id": {
+          "type": "string",
+          "required": false,
+          "description": "Job ID (optional)"
+        },
+        "parent-run-id": {
+          "type": "string",
+          "required": false,
+          "description": "Parent run ID (required for retries)"
+        },
+        "job": {
+          "type": "string",
+          "required": false,
+          "default": "{}",
+          "description": "Job payload as inline JSON object (mutually exclusive with --job-json)",
+          "validation": "Must be a top-level JSON object. Arrays, primitives, and null are rejected.",
+          "exclusiveWith": ["job-json"]
+        },
+        "job-json": {
+          "type": "string",
+          "required": false,
+          "description": "Path to JSON file containing job payload object (mutually exclusive with --job)",
+          "validation": "File must contain a top-level JSON object. Arrays, primitives, and null are rejected.",
+          "exclusiveWith": ["job"]
+        },
+        "executor": {
+          "type": "string",
+          "required": false,
+          "description": "Path to executor binary (advanced: auto-resolved by default)"
+        },
+        "quiet": {
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Suppress result output"
+        },
+        "source": {
+          "type": "string",
+          "required": true,
+          "description": "Source identifier for partitioning (required)"
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "default": "default",
+          "description": "Category identifier for partitioning"
+        },
+        "policy": {
+          "type": "string",
+          "required": false,
+          "default": "strict",
+          "description": "Ingestion policy: strict or buffered",
+          "validation": "Must be one of: strict, buffered"
+        },
+        "flush-mode": {
+          "type": "string",
+          "required": false,
+          "default": "at_least_once",
+          "description": "Flush mode for buffered policy: at_least_once, chunks_first, two_phase",
+          "validation": "Must be one of: at_least_once, chunks_first, two_phase",
+          "dependsOn": ["policy=buffered"]
+        },
+        "buffer-events": {
+          "type": "int",
+          "required": false,
+          "default": 0,
+          "description": "Max buffered events (buffered policy)",
+          "dependsOn": ["policy=buffered"]
+        },
+        "buffer-bytes": {
+          "type": "int64",
+          "required": false,
+          "default": 0,
+          "description": "Max buffer size in bytes (buffered policy)",
+          "dependsOn": ["policy=buffered"]
+        },
+        "proxy-config": {
+          "type": "string",
+          "required": false,
+          "description": "Path to proxy pools config file (JSON)",
+          "dependsOn": ["proxy-pool"]
+        },
+        "proxy-pool": {
+          "type": "string",
+          "required": false,
+          "description": "Pool name to select proxy from"
+        },
+        "proxy-strategy": {
+          "type": "string",
+          "required": false,
+          "description": "Strategy override: round_robin, random, or sticky",
+          "validation": "Must be one of: round_robin, random, sticky"
+        },
+        "proxy-sticky-key": {
+          "type": "string",
+          "required": false,
+          "description": "Sticky key override for proxy selection"
+        },
+        "proxy-domain": {
+          "type": "string",
+          "required": false,
+          "description": "Domain for sticky scope derivation (when scope=domain)"
+        },
+        "proxy-origin": {
+          "type": "string",
+          "required": false,
+          "description": "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)"
+        },
+        "storage-backend": {
+          "type": "string",
+          "required": true,
+          "description": "Storage backend: fs (filesystem) or s3 (Amazon S3)",
+          "validation": "Must be one of: fs, s3"
+        },
+        "storage-path": {
+          "type": "string",
+          "required": true,
+          "description": "Storage path (fs: writable directory, s3: bucket/prefix)"
+        },
+        "storage-region": {
+          "type": "string",
+          "required": false,
+          "description": "AWS region for S3 backend (uses default credential chain if omitted)"
+        }
+      }
+    },
+    "inspect": {
+      "description": "Deep view of a single entity",
+      "flags": {
+        "format": {
+          "type": "string",
+          "aliases": ["f"],
+          "required": false,
+          "description": "Output format: json, table, yaml"
+        },
+        "no-color": {
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Disable colored output (table format only)"
+        },
+        "tui": {
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Enable interactive TUI mode",
+          "notes": "Supported for inspect commands"
+        }
+      }
+    },
+    "stats": {
+      "description": "Aggregated facts derived from the read path",
+      "flags": {
+        "format": {
+          "type": "string",
+          "aliases": ["f"],
+          "required": false,
+          "description": "Output format: json, table, yaml"
+        },
+        "no-color": {
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Disable colored output (table format only)"
+        },
+        "tui": {
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Enable interactive TUI mode",
+          "notes": "Supported for stats commands"
+        }
+      }
+    },
+    "list": {
+      "description": "Thin enumerations (not inspect-level detail)",
+      "subcommands": {
+        "runs": {
+          "flags": {
+            "state": {
+              "type": "string",
+              "required": false,
+              "description": "Filter by state: running, failed, succeeded",
+              "validation": "Must be one of: running, failed, succeeded"
+            },
+            "limit": {
+              "type": "int",
+              "required": false,
+              "default": 0,
+              "description": "Maximum number of runs to return (0 = no limit)"
+            },
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for list commands - returns error"
+            }
+          }
+        },
+        "jobs": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for list commands - returns error"
+            }
+          }
+        },
+        "pools": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for list commands - returns error"
+            }
+          }
+        },
+        "executors": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for list commands - returns error"
+            }
+          }
+        }
+      }
+    },
+    "debug": {
+      "description": "Diagnostic tools (resolve proxy, ipc)",
+      "subcommands": {
+        "resolve proxy": {
+          "flags": {
+            "commit": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Commit the resolution (advance rotation counters)"
+            },
+            "proxy-config": {
+              "type": "string",
+              "required": true,
+              "description": "Path to proxy pools config file (JSON)"
+            },
+            "strategy": {
+              "type": "string",
+              "required": false,
+              "description": "Strategy override: round_robin, random, or sticky",
+              "validation": "Must be one of: round_robin, random, sticky"
+            },
+            "sticky-key": {
+              "type": "string",
+              "required": false,
+              "description": "Sticky key for proxy selection"
+            },
+            "job-id": {
+              "type": "string",
+              "required": false,
+              "description": "Job ID for sticky scope derivation"
+            },
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for debug commands - returns error"
+            }
+          }
+        },
+        "ipc": {
+          "flags": {
+            "verbose": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Include payload details"
+            },
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "default": false,
+              "description": "Enable interactive TUI mode",
+              "notes": "Not supported for debug commands - returns error"
+            }
+          }
+        }
+      }
+    },
+    "version": {
+      "description": "Reports the canonical project version (lockstep across all components)",
+      "flags": {}
+    }
+  }
+}

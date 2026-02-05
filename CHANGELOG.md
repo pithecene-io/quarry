@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CLI**: `--job-json <path>` flag to load job payload from file (alternative to inline `--job`)
 - **Docs**: Downstream integration guide with event-bus and polling patterns
+- **CI**: CLI/config parity checker validates flag documentation against implementation
 
 ### Changed
 

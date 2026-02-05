@@ -101,6 +101,12 @@ tasks:
     cmds:
       - go test ./...
 
+  cli:parity:
+    desc: Validate CLI/config parity artifact
+    dir: quarry
+    cmds:
+      - go test ./cli/cmd -run Parity -v
+
   go:test:race:
     desc: Test Go module with race detector
     aliases: [go:tr]

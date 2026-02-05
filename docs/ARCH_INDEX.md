@@ -23,6 +23,8 @@ Do not update for internal refactors.
 
 ## docs/
 
+- `CLI_PARITY.json` — CLI flag/config parity artifact (machine-checkable)
+
 ### docs/guides/
 
 User-facing guides (informational).
