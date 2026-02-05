@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CLI**: `--job` description clarified as "inline JSON" to distinguish from `--job-json`
 - **CLI**: Job payload (`--job` and `--job-json`) now **requires** a top-level JSON object; arrays, primitives, and null are rejected with actionable error messages
+- **CLI**: Normalized help text for job, storage, and policy flags for consistency
 
 ---
 
