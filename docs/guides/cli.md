@@ -101,8 +101,8 @@ Optional flags:
 - `--attempt <n>` (default: 1)
 - `--job-id <id>`
 - `--parent-run-id <id>`
-- `--job <json>` (inline JSON payload)
-- `--job-json <path>` (load payload from file; mutually exclusive with `--job`)
+- `--job <json>` (inline JSON object; mutually exclusive with `--job-json`)
+- `--job-json <path>` (load JSON object from file; mutually exclusive with `--job`)
 - `--quiet`
 - `--policy strict|buffered`
 - `--flush-mode at_least_once|chunks_first|two_phase`
@@ -151,6 +151,31 @@ quarry run \
   --proxy-domain example.com \
   --job '{"source":"demo"}'
 ```
+
+#### Job Payload Contract
+
+The job payload (`--job` or `--job-json`) **must** be a top-level JSON object.
+
+**Valid:**
+```bash
+--job '{}'
+--job '{"url": "https://example.com"}'
+--job-json ./config.json  # file contains {"key": "value"}
+```
+
+**Invalid (rejected with error):**
+```bash
+--job '[]'           # array
+--job '"string"'     # primitive
+--job '123'          # primitive
+--job 'null'         # null
+```
+
+The flags are mutually exclusive:
+- Use `--job` for inline JSON objects
+- Use `--job-json` to load from a file
+- Using both is an error
+- If neither is specified, defaults to `{}`
 
 ### `inspect`
 
