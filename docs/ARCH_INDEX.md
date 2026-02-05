@@ -35,6 +35,7 @@ User-facing guides (informational).
 - `guides/lode.md` — user-facing storage expectations
 - `guides/cli.md` — user-facing CLI overview
 - `guides/proxy.md` — user-facing proxy guide
+- `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
 
 ### docs/contracts/
 
