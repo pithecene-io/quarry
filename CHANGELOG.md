@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI**: CLI/config parity checker validates flag documentation against implementation
 - **CI**: Strict parity gate blocks merge on CLI documentation drift
 - **Examples**: Integration pattern examples (SNS, handler, filesystem polling, S3 polling)
+- **Docs**: v0.2.0 release readiness checklist
 
 ### Changed
 
