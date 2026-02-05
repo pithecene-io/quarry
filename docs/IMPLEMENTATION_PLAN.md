@@ -1,7 +1,9 @@
-# Quarry — Implementation Plan (Updated with Phase 0.5)
+# Quarry — Implementation Plan (Contract-First, Status-Tracked)
 
 This plan reflects Quarry’s clarified architecture and introduces an explicit **contract-freezing phase**
 to prevent drift between SDK, executor, runtime, ingestion policies, and Lode.
+Completed items are checked off. Unchecked items are planned or unverified.
+Status statements refer to released behavior where possible.
 
 Quarry’s core principle:
 
@@ -10,6 +12,11 @@ Quarry’s core principle:
 > Lode defines structure.**
 
 Scripts and executors remain **policy-agnostic**.
+
+## Current Status (as of v0.2.2)
+- Latest release: v0.2.2 (see CHANGELOG.md).
+- Unreleased section: empty.
+- Next decision: define v0.3.0 scope and Lode upgrade path.
 
 ---
 
@@ -46,8 +53,8 @@ Establish development discipline before any architectural commitments harden.
 
 ### Mini-milestones
 - [x] Repo structure committed
-- [ ] Taskfile targets exist (even if stubbed)
-- [ ] Guardrails reviewed and accepted
+- [x] Taskfile targets exist (even if stubbed)
+- [x] Guardrails reviewed and accepted
 
 ---
 
@@ -146,9 +153,9 @@ Defines:
 - Request/response shapes for inspect/stats/list/debug
 
 ### Exit criteria
-- All five contract documents exist
-- SDK, executor, runtime, and policy work can proceed independently
-- Any ambiguity is resolved by pointing to a contract doc
+- [x] All five contract documents exist
+- [x] SDK, executor, runtime, and policy work can proceed independently
+- [x] Any ambiguity is resolved by pointing to a contract doc
 
 ---
 
@@ -165,9 +172,9 @@ Define the stable authoring surface for extraction scripts.
 - Minimal SDK README with example
 
 ### Mini-milestones
-- [ ] Context exposes real Puppeteer objects
-- [ ] `emit.*` is the sole output mechanism
-- [ ] No ingestion or durability concepts leak into the SDK
+- [x] Context exposes real Puppeteer objects
+- [x] `emit.*` is the sole output mechanism
+- [x] No ingestion or durability concepts leak into the SDK
 
 ---
 
@@ -184,9 +191,9 @@ Execute scripts without distortion and stream events immediately.
 - Proxy application utilities (launch args + auth)
 
 ### Mini-milestones
-- [ ] Events streamed incrementally and in order
-- [ ] Large artifacts supported via chunking
-- [ ] Executor has zero knowledge of ingestion policy
+- [x] Events streamed incrementally and in order
+- [x] Large artifacts supported via chunking
+- [x] Executor has zero knowledge of ingestion policy
 
 ---
 
@@ -203,9 +210,9 @@ Supervise execution and route events to an ingestion policy.
 - Proxy selection + rotation state in runtime
 
 ### Mini-milestones
-- [ ] One job runs end-to-end
-- [ ] Executor crashes detected and recorded
-- [ ] Runtime delegates ingestion exclusively to policy layer
+- [x] One job runs end-to-end
+- [x] Executor crashes detected and recorded
+- [x] Runtime delegates ingestion exclusively to policy layer
 
 ---
 
@@ -227,9 +234,9 @@ Make tradeoffs explicit and swappable.
 - Explicit, observable drops allowed
 
 ### Mini-milestones
-- [ ] Common `IngestionPolicy` interface
-- [ ] Policies selectable per run
-- [ ] Drops and buffering visible in stats/logs
+- [x] Common `IngestionPolicy` interface
+- [x] Policies selectable per run
+- [x] Drops and buffering visible in stats/logs
 
 ---
 
@@ -278,22 +285,20 @@ Quarry is ready to expand when:
 
 ---
 
-## Future Work — Lode v0.3.0 Checksum Adoption (Internal-Only)
+## Post-v0.2.2 Roadmap (Planned)
 
-### Goal
-Adopt Lode's native checksum support while keeping checksums invisible to users.
-This is internal-only; no CLI or config surface is added.
+### Track A — Lode Upgrade and Checksums
+- [ ] Confirm Lode target version (v0.4.x, currently v0.4.1 per upstream)
+- [ ] Update Lode dependency and compatibility notes
+- [ ] Switch to Lode-native checksum metadata
+- [ ] Maintain read compatibility for legacy checksum fields
+- [ ] Add migration tests for mixed legacy and native checksum data
+- [ ] No user-facing checksum flags or configuration
 
-### Plan
-- Update Lode dependency when v0.3.0 is available.
-- Switch to Lode-native checksum metadata and stop emitting custom checksum fields.
-- Maintain read compatibility for existing records that include custom checksum fields.
-- Add migration tests for mixed legacy and new data.
-
-### Acceptance Criteria
-- No user-facing checksum flags or configuration.
-- Quarry writes remain valid across Lode v0.2.x and v0.3.x.
-- Mixed data (custom checksum fields + native checksums) reads without errors.
+### Track B — Release Discipline
+- [ ] Define v0.3.0 scope and acceptance criteria
+- [ ] Keep release readiness checklist active until superseded
+- [ ] Decide if dogfooding is required for v0.3.0
 
 ---
 
