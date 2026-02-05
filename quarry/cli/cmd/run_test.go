@@ -298,40 +298,22 @@ func TestParseJobPayload(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		m, ok := job.(map[string]any)
-		if !ok {
-			t.Fatalf("expected map[string]any, got %T", job)
-		}
-		if len(m) != 0 {
-			t.Errorf("expected empty map, got %v", m)
+		if len(job) != 0 {
+			t.Errorf("expected empty map, got %v", job)
 		}
 	})
 
-	t.Run("inline JSON parsed", func(t *testing.T) {
+	t.Run("inline object accepted", func(t *testing.T) {
 		job, err := parseJobPayload(`{"url": "https://example.com", "page": 1}`, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		m, ok := job.(map[string]any)
-		if !ok {
-			t.Fatalf("expected map[string]any, got %T", job)
-		}
-		if m["url"] != "https://example.com" {
-			t.Errorf("expected url=https://example.com, got %v", m["url"])
+		if job["url"] != "https://example.com" {
+			t.Errorf("expected url=https://example.com, got %v", job["url"])
 		}
 	})
 
-	t.Run("invalid inline JSON error", func(t *testing.T) {
-		_, err := parseJobPayload(`{invalid}`, "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "invalid --job JSON") {
-			t.Errorf("error should mention invalid --job JSON, got: %v", err)
-		}
-	})
-
-	t.Run("file JSON parsed", func(t *testing.T) {
+	t.Run("file object accepted", func(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "job.json")
 		if err := os.WriteFile(tmpFile, []byte(`{"target": "test"}`), 0644); err != nil {
 			t.Fatal(err)
@@ -341,12 +323,133 @@ func TestParseJobPayload(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		m, ok := job.(map[string]any)
-		if !ok {
-			t.Fatalf("expected map[string]any, got %T", job)
+		if job["target"] != "test" {
+			t.Errorf("expected target=test, got %v", job["target"])
 		}
-		if m["target"] != "test" {
-			t.Errorf("expected target=test, got %v", m["target"])
+	})
+
+	t.Run("inline array rejected", func(t *testing.T) {
+		_, err := parseJobPayload(`[1, 2, 3]`, "")
+		if err == nil {
+			t.Fatal("expected error for array payload")
+		}
+		if !strings.Contains(err.Error(), "must be a JSON object") {
+			t.Errorf("error should mention 'must be a JSON object', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "array") {
+			t.Errorf("error should mention 'array', got: %v", err)
+		}
+	})
+
+	t.Run("file array rejected", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "array.json")
+		if err := os.WriteFile(tmpFile, []byte(`["item1", "item2"]`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload("", tmpFile)
+		if err == nil {
+			t.Fatal("expected error for array payload")
+		}
+		if !strings.Contains(err.Error(), "must contain a JSON object") {
+			t.Errorf("error should mention 'must contain a JSON object', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "array") {
+			t.Errorf("error should mention 'array', got: %v", err)
+		}
+	})
+
+	t.Run("inline primitive string rejected", func(t *testing.T) {
+		_, err := parseJobPayload(`"just a string"`, "")
+		if err == nil {
+			t.Fatal("expected error for primitive payload")
+		}
+		if !strings.Contains(err.Error(), "must be a JSON object") {
+			t.Errorf("error should mention 'must be a JSON object', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "string") {
+			t.Errorf("error should mention 'string', got: %v", err)
+		}
+	})
+
+	t.Run("inline primitive number rejected", func(t *testing.T) {
+		_, err := parseJobPayload(`42`, "")
+		if err == nil {
+			t.Fatal("expected error for primitive payload")
+		}
+		if !strings.Contains(err.Error(), "must be a JSON object") {
+			t.Errorf("error should mention 'must be a JSON object', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "number") {
+			t.Errorf("error should mention 'number', got: %v", err)
+		}
+	})
+
+	t.Run("file primitive rejected", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "primitive.json")
+		if err := os.WriteFile(tmpFile, []byte(`"hello"`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload("", tmpFile)
+		if err == nil {
+			t.Fatal("expected error for primitive payload")
+		}
+		if !strings.Contains(err.Error(), "must contain a JSON object") {
+			t.Errorf("error should mention 'must contain a JSON object', got: %v", err)
+		}
+	})
+
+	t.Run("inline null rejected", func(t *testing.T) {
+		_, err := parseJobPayload(`null`, "")
+		if err == nil {
+			t.Fatal("expected error for null payload")
+		}
+		if !strings.Contains(err.Error(), "must be a JSON object") {
+			t.Errorf("error should mention 'must be a JSON object', got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "null") {
+			t.Errorf("error should mention 'null', got: %v", err)
+		}
+	})
+
+	t.Run("file null rejected", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "null.json")
+		if err := os.WriteFile(tmpFile, []byte(`null`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload("", tmpFile)
+		if err == nil {
+			t.Fatal("expected error for null payload")
+		}
+		if !strings.Contains(err.Error(), "must contain a JSON object") {
+			t.Errorf("error should mention 'must contain a JSON object', got: %v", err)
+		}
+	})
+
+	t.Run("malformed inline JSON rejected", func(t *testing.T) {
+		_, err := parseJobPayload(`{invalid}`, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "malformed --job JSON") {
+			t.Errorf("error should mention 'malformed --job JSON', got: %v", err)
+		}
+	})
+
+	t.Run("malformed file JSON rejected", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "bad.json")
+		if err := os.WriteFile(tmpFile, []byte(`{not valid json}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := parseJobPayload("", tmpFile)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "malformed JSON in job file") {
+			t.Errorf("error should mention 'malformed JSON in job file', got: %v", err)
 		}
 	})
 
@@ -360,22 +463,7 @@ func TestParseJobPayload(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid file JSON error", func(t *testing.T) {
-		tmpFile := filepath.Join(t.TempDir(), "bad.json")
-		if err := os.WriteFile(tmpFile, []byte(`{not valid json}`), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		_, err := parseJobPayload("", tmpFile)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "invalid JSON in job file") {
-			t.Errorf("error should mention 'invalid JSON in job file', got: %v", err)
-		}
-	})
-
-	t.Run("both flags error", func(t *testing.T) {
+	t.Run("both flags set rejected", func(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "job.json")
 		if err := os.WriteFile(tmpFile, []byte(`{}`), 0644); err != nil {
 			t.Fatal(err)
@@ -414,11 +502,25 @@ func TestParseJobPayloadErrorsAreActionable(t *testing.T) {
 			description: "should suggest checking file existence",
 		},
 		{
-			name:        "invalid inline shows examples",
+			name:        "malformed inline shows examples",
 			jobInline:   `{broken`,
 			jobFile:     "",
 			mustContain: []string{"--job '{}'", `{"key": "value"}`},
 			description: "should show valid JSON examples",
+		},
+		{
+			name:        "array inline shows object requirement",
+			jobInline:   `[]`,
+			jobFile:     "",
+			mustContain: []string{"must be a JSON object", "array", "not an array"},
+			description: "should explain object-only requirement",
+		},
+		{
+			name:        "null inline shows object requirement",
+			jobInline:   `null`,
+			jobFile:     "",
+			mustContain: []string{"must be a JSON object", "null"},
+			description: "should explain object-only requirement for null",
 		},
 	}
 
@@ -433,6 +535,29 @@ func TestParseJobPayloadErrorsAreActionable(t *testing.T) {
 				if !strings.Contains(errMsg, must) {
 					t.Errorf("%s: error should contain %q\nGot: %s", tt.description, must, errMsg)
 				}
+			}
+		})
+	}
+}
+
+func TestDescribeJSONType(t *testing.T) {
+	tests := []struct {
+		input    any
+		contains string
+	}{
+		{nil, "null"},
+		{map[string]any{}, "object"},
+		{[]any{1, 2}, "array"},
+		{"hello", "string"},
+		{float64(42), "number"},
+		{true, "boolean"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contains, func(t *testing.T) {
+			result := describeJSONType(tt.input)
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("describeJSONType(%v) = %q, should contain %q", tt.input, result, tt.contains)
 			}
 		})
 	}
