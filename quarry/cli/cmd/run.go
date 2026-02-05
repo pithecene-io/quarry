@@ -410,7 +410,9 @@ Valid options:
 
 // parseJobPayload parses job payload from --job (inline) or --job-json (file).
 // Using both flags is an explicit error. If neither is specified, returns empty object.
-func parseJobPayload(jobInline, jobFile string) (any, error) {
+// The payload must be a top-level JSON object. Arrays, primitives, and null are
+// rejected with actionable error messages.
+func parseJobPayload(jobInline, jobFile string) (map[string]any, error) {
 	hasInline := jobInline != ""
 	hasFile := jobFile != ""
 
@@ -436,21 +438,40 @@ Ensure the file exists:
 			return nil, fmt.Errorf("cannot read job file %q: %v", jobFile, err)
 		}
 
-		var job any
-		if err := json.Unmarshal(data, &job); err != nil {
-			return nil, fmt.Errorf(`invalid JSON in job file %s: %v
+		var raw any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, fmt.Errorf(`malformed JSON in job file %s: %v
 
 The file must contain valid JSON. Example:
   {"url": "https://example.com", "page": 1}`, jobFile, err)
+		}
+
+		job, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(`job file %s must contain a JSON object
+
+The payload must be a top-level JSON object (not an array, string, number, or null).
+
+Valid:
+  {}
+  {"url": "https://example.com"}
+
+Invalid:
+  []            (array)
+  "string"      (primitive)
+  123           (primitive)
+  null          (null)
+
+Received: %s`, jobFile, describeJSONType(raw))
 		}
 		return job, nil
 	}
 
 	// Parse inline JSON
 	if hasInline {
-		var job any
-		if err := json.Unmarshal([]byte(jobInline), &job); err != nil {
-			return nil, fmt.Errorf(`invalid --job JSON: %v
+		var raw any
+		if err := json.Unmarshal([]byte(jobInline), &raw); err != nil {
+			return nil, fmt.Errorf(`malformed --job JSON: %v
 
 The --job flag must contain valid JSON. Examples:
   --job '{}'
@@ -459,11 +480,50 @@ The --job flag must contain valid JSON. Examples:
 
 Received: %s`, err, jobInline)
 		}
+
+		job, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(`--job must be a JSON object
+
+The payload must be a top-level JSON object (not an array, string, number, or null).
+
+Valid:
+  --job '{}'
+  --job '{"url": "https://example.com"}'
+
+Invalid:
+  --job '[]'            (array)
+  --job '"string"'      (primitive)
+  --job '123'           (primitive)
+  --job 'null'          (null)
+
+Received: %s`, describeJSONType(raw))
+		}
 		return job, nil
 	}
 
 	// Neither specified: empty object
 	return map[string]any{}, nil
+}
+
+// describeJSONType returns a human-readable description of a JSON value's type.
+func describeJSONType(v any) string {
+	switch v := v.(type) {
+	case nil:
+		return "null"
+	case map[string]any:
+		return "object"
+	case []any:
+		return fmt.Sprintf("array (length %d)", len(v))
+	case string:
+		return fmt.Sprintf("string (%q)", v)
+	case float64:
+		return fmt.Sprintf("number (%v)", v)
+	case bool:
+		return fmt.Sprintf("boolean (%v)", v)
+	default:
+		return fmt.Sprintf("unknown (%T)", v)
+	}
 }
 
 // resolveExecutor finds the executor binary path.
