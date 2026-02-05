@@ -10,7 +10,8 @@ tasks:
 
   build:
     desc: Build all packages (Go + TS)
-    deps: [go:build, ts:build]
+    # Note: ts:build is transitive via go:build → executor:bundle → ts:build
+    deps: [go:build]
 
   lint:
     desc: Lint all packages (Go + TS)
@@ -26,7 +27,8 @@ tasks:
 
   examples:
     desc: Run and validate all examples
-    deps: [go:build, ts:build]
+    # Note: ts:build is transitive via go:build → executor:bundle → ts:build
+    deps: [go:build]
     cmds:
       - pnpm exec tsx scripts/run-examples.ts
 
