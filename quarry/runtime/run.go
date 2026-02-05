@@ -164,45 +164,26 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		ingestionDone <- ingestion.Run(ctx)
 	}()
 
-	// Wait for executor in goroutine
-	type execResultPair struct {
-		result *ExecutorResult
-		err    error
-	}
-	executorDone := make(chan execResultPair, 1)
-	go func() {
-		result, err := executor.Wait()
-		executorDone <- execResultPair{result, err}
-	}()
-
-	// Wait for both, but kill executor on any ingestion error (policy or stream)
-	var execResult *ExecutorResult
-	var execErr error
+	// Wait for ingestion to complete FIRST
+	// IMPORTANT: We must wait for ingestion before calling executor.Wait() because
+	// Go's exec.Cmd.Wait() closes StdoutPipe, which would cause ingestion reads to
+	// fail with "file already closed" even if data is still in the pipe buffer.
 	var ingErr error
-	executorFinished := false
-	ingestionFinished := false
+	ingErr = <-ingestionDone
 
-	for !executorFinished || !ingestionFinished {
-		select {
-		case pair := <-executorDone:
-			execResult = pair.result
-			execErr = pair.err
-			executorFinished = true
-		case err := <-ingestionDone:
-			ingErr = err
-			ingestionFinished = true
-
-			// On ANY ingestion error (policy, stream, or canceled), kill executor immediately
-			// This prevents the executor from continuing to emit after we've decided to terminate
-			if err != nil && !executorFinished {
-				r.logger.Warn("killing executor due to ingestion error", map[string]any{
-					"error":     err.Error(),
-					"is_policy": IsPolicyError(err),
-				})
-				_ = executor.Kill()
-			}
-		}
+	// On ANY ingestion error (policy, stream, or canceled), kill executor immediately
+	// This prevents the executor from continuing to emit after we've decided to terminate
+	if ingErr != nil {
+		r.logger.Warn("killing executor due to ingestion error", map[string]any{
+			"error":     ingErr.Error(),
+			"is_policy": IsPolicyError(ingErr),
+		})
+		_ = executor.Kill()
 	}
+
+	// NOW call Wait() to reap the child process
+	// This is safe because ingestion has already read all data from the pipe
+	execResult, execErr := executor.Wait()
 
 	// Always attempt policy flush (best effort) on all termination paths
 	// Per CONTRACT_POLICY.md: "Buffered events must be flushed on run_complete, run_error, runtime termination (best effort)"

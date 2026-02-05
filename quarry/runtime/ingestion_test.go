@@ -559,3 +559,110 @@ func TestIngestionEngine_RunResult_NotCountedInSeq(t *testing.T) {
 		t.Error("expected run_result to be captured")
 	}
 }
+
+// pipeCloseReader simulates a pipe that returns data, then returns a pipe close error
+// (not io.EOF) - mimicking the race condition when executor exits quickly
+type pipeCloseReader struct {
+	data    []byte
+	offset  int
+	errOnce bool
+}
+
+func (r *pipeCloseReader) Read(p []byte) (n int, err error) {
+	if r.offset >= len(r.data) {
+		if !r.errOnce {
+			r.errOnce = true
+			// Return an error that is NOT io.EOF, simulating pipe closure
+			return 0, errors.New("read |0: file already closed")
+		}
+		return 0, errors.New("read |0: file already closed")
+	}
+	n = copy(p, r.data[r.offset:])
+	r.offset += n
+	return n, nil
+}
+
+// TestIngestionEngine_PipeCloseAfterTerminal verifies that pipe closure errors
+// after a terminal event are treated as acceptable completion, not crashes.
+// This tests the fix for issue #56 (IPC race condition).
+func TestIngestionEngine_PipeCloseAfterTerminal(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	// Create a terminal event
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+
+	data := encodeEventFrame(envelope)
+
+	// Use pipeCloseReader that returns "file already closed" instead of EOF
+	reader := &pipeCloseReader{data: data}
+
+	logger := log.NewLogger(runMeta)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
+
+	err := engine.Run(t.Context())
+
+	// Should NOT error - pipe closure after terminal is acceptable
+	if err != nil {
+		t.Fatalf("expected no error after pipe close following terminal, got: %v", err)
+	}
+
+	// Terminal event should be recorded
+	terminal, hasTerminal := engine.GetTerminalEvent()
+	if !hasTerminal {
+		t.Error("expected terminal event to be recorded")
+	}
+	if terminal.Type != types.EventTypeRunComplete {
+		t.Errorf("expected run_complete, got %s", terminal.Type)
+	}
+}
+
+// TestIngestionEngine_PipeCloseBeforeTerminal verifies that pipe closure errors
+// BEFORE a terminal event are still treated as stream errors (executor crash).
+func TestIngestionEngine_PipeCloseBeforeTerminal(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	// Create a non-terminal event (item)
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+
+	data := encodeEventFrame(envelope)
+
+	// Use pipeCloseReader that returns "file already closed" instead of EOF
+	reader := &pipeCloseReader{data: data}
+
+	logger := log.NewLogger(runMeta)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta)
+
+	err := engine.Run(t.Context())
+
+	// SHOULD error - pipe closure before terminal is a stream error
+	if err == nil {
+		t.Fatal("expected error for pipe close before terminal")
+	}
+	if !IsStreamError(err) {
+		t.Errorf("expected stream error, got: %v", err)
+	}
+}
