@@ -168,8 +168,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	// IMPORTANT: We must wait for ingestion before calling executor.Wait() because
 	// Go's exec.Cmd.Wait() closes StdoutPipe, which would cause ingestion reads to
 	// fail with "file already closed" even if data is still in the pipe buffer.
-	var ingErr error
-	ingErr = <-ingestionDone
+	ingErr := <-ingestionDone
 
 	// On ANY ingestion error (policy, stream, or canceled), kill executor immediately
 	// This prevents the executor from continuing to emit after we've decided to terminate
