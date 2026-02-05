@@ -130,7 +130,18 @@ func (e *IngestionEngine) Run(ctx context.Context) error {
 				return nil
 			}
 
-			// All frame errors are stream errors (executor crash outcome)
+			// If terminal event was already received and persisted,
+			// treat pipe closure errors as acceptable completion.
+			// Per CONTRACT_IPC.md: outcome is determined by terminal event,
+			// and pipe closure after terminal is normal executor exit behavior.
+			if e.terminalSeen {
+				e.logger.Debug("pipe closed after terminal event (expected)", map[string]any{
+					"error": err.Error(),
+				})
+				return nil
+			}
+
+			// Frame errors before terminal are stream errors (executor crash outcome)
 			e.logger.Error("frame error", map[string]any{
 				"error": err.Error(),
 			})

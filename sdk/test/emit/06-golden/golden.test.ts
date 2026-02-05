@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
+import { CONTRACT_VERSION } from '../../../src/types/events'
 import type { CheckpointId, EventEnvelope } from '../../../src/types/events'
 import { createDeterministicRunMeta, FakeSink } from '../_harness'
 
@@ -84,11 +85,11 @@ describe('golden wire format - simple run', () => {
     }
   })
 
-  it('verifies contract_version is frozen', async () => {
+  it('verifies contract_version matches source constant', async () => {
     const emit = createEmitAPI(run, sink)
     await emit.item({ item_type: 'test', data: {} })
 
-    expect(sink.envelopes[0].contract_version).toBe('0.1.0')
+    expect(sink.envelopes[0].contract_version).toBe(CONTRACT_VERSION)
   })
 
   it('verifies run_id wiring from RunMeta', async () => {

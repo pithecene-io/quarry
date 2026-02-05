@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.1.0
+// Quarry Executor Bundle v0.2.0
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: pnpm run bundle
 
@@ -1740,11 +1740,11 @@ var require_dist = __commonJS({
 
 // src/executor.ts
 import { createRequire } from "node:module";
-import { resolve as resolve2, dirname } from "node:path";
+import { dirname, resolve as resolve2 } from "node:path";
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
-var CONTRACT_VERSION = "0.1.0";
+var CONTRACT_VERSION = "0.2.0";
 var TerminalEventError = class extends Error {
   constructor() {
     super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
