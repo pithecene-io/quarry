@@ -36,7 +36,7 @@ Quarry run completes
         ↓
 Storage commit (Lode)
         ↓
-Event published to bus (SNS, Kafka, etc.)
+Event published to bus
         ↓
 Downstream consumer receives event
         ↓
@@ -93,7 +93,14 @@ Include enough information for consumers to:
 
 4. **Dead letter queue**: Route failed events to a DLQ for manual inspection.
 
-### Example: AWS SNS + SQS
+### Provider Examples (Optional)
+
+The patterns above are provider-agnostic. This section shows concrete examples
+for common event bus implementations. These are **non-prescriptive**; use
+whatever infrastructure fits your environment.
+
+<details>
+<summary>AWS SNS + SQS</summary>
 
 ```bash
 # After successful run, publish to SNS
@@ -104,7 +111,10 @@ aws sns publish \
 
 Downstream Lambda or ECS task subscribes to SQS queue backed by the SNS topic.
 
-### Example: Kafka
+</details>
+
+<details>
+<summary>Kafka</summary>
 
 ```bash
 # Publish to Kafka topic
@@ -113,6 +123,20 @@ echo '{"run_id":"run-001","source":"my-source","outcome":"success"}' | \
 ```
 
 Downstream consumer group processes messages with automatic offset management.
+
+</details>
+
+<details>
+<summary>Redis Pub/Sub</summary>
+
+```bash
+# Publish to Redis channel
+redis-cli PUBLISH quarry-runs '{"run_id":"run-001","source":"my-source","outcome":"success"}'
+```
+
+Subscribers receive messages in real-time; no persistence guarantees.
+
+</details>
 
 ---
 
@@ -180,23 +204,27 @@ find "$STORAGE_PATH" -name "event_type=run_complete" -newer "$CHECKPOINT_FILE" \
 date -u +%Y-%m-%dT%H:%M:%SZ > "$CHECKPOINT_FILE"
 ```
 
-### Example: S3 Polling with Listing
+### Example: Object Storage Polling
 
-```python
-import boto3
-from datetime import datetime, timedelta
+For object storage backends (S3, GCS, etc.), list objects by prefix and filter
+by modification time:
 
-s3 = boto3.client('s3')
-bucket = 'my-bucket'
-prefix = 'source=my-source/'
+```bash
+#!/bin/bash
+# Generic object storage polling (adapt for your CLI/SDK)
 
-# List objects modified in the last hour
-response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+BUCKET="my-bucket"
+PREFIX="source=my-source/"
+LAST_TS=$(cat "$CHECKPOINT_FILE" 2>/dev/null || echo "1970-01-01T00:00:00Z")
 
-for obj in response.get('Contents', []):
-    if obj['LastModified'] > datetime.now() - timedelta(hours=1):
-        # Process this run
-        process_run(obj['Key'])
+# List and filter by modification time
+# (Replace with your storage CLI: aws s3, gsutil, etc.)
+list_objects "$BUCKET" "$PREFIX" --after "$LAST_TS" | while read -r key; do
+    process_run "$key"
+done
+
+# Update checkpoint
+date -u +%Y-%m-%dT%H:%M:%SZ > "$CHECKPOINT_FILE"
 ```
 
 ---
@@ -226,9 +254,10 @@ partial reads.
 
 ### Assuming immediate availability
 
-After `quarry run` exits, data may not be immediately visible to consumers
-due to storage replication delays (especially with S3). Add a small delay
-or use strong consistency guarantees.
+After `quarry run` exits, data visibility depends on the storage backend's
+consistency model. Consumers must respect the visibility boundary defined in
+`CONTRACT_RUN.md` and implement idempotent processing to handle edge cases
+where data appears after the run signal.
 
 ### Processing without idempotency
 
