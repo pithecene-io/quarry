@@ -1,13 +1,27 @@
-# Support Posture — Quarry v0.1.0
+# Support Posture — Quarry v0.2.0
 
-This document defines support expectations for Quarry v0.1.0.
+This document defines support expectations for Quarry v0.2.0.
 
 ---
 
 ## Maturity Level
 
-**v0.1.0 is an initial release.** APIs and behaviors may change in subsequent
+**v0.2.0 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
+
+---
+
+## Known Issues
+
+### IPC Race Condition ([#56](https://github.com/justapithecus/quarry/issues/56))
+
+**Symptom**: Fast-completing scripts may intermittently report `executor_crash` outcome with exit code 2, despite successful completion.
+
+**Impact**: Exit code and outcome classification may be wrong. **Data persistence is unaffected** - all emitted events are persisted correctly.
+
+**Workaround**: Verify the presence of `run_complete` event in storage rather than relying solely on exit code for success/failure detection.
+
+**Fix Target**: v0.2.1
 
 ---
 
@@ -117,12 +131,12 @@ Quarry uses lockstep versioning:
 Check versions:
 ```bash
 quarry version
-# 0.1.0 (commit: ...)
+# 0.2.0 (commit: ...)
 ```
 
 ---
 
 ## No Warranty
 
-Quarry v0.1.0 is provided "as is" without warranty of any kind.
+Quarry v0.2.0 is provided "as is" without warranty of any kind.
 See LICENSE for details.
