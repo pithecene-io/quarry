@@ -1,7 +1,10 @@
 {
   "name": "@justapithecus/quarry-sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
