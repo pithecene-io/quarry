@@ -25,6 +25,20 @@ jobs:
           fi
           echo "✅ Versions match: $GO_VERSION"
 
+  cli-parity:
+    name: "📋 CLI Parity"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🧰 Setup"
+        uses: jdx/mise-action@v2
+      - name: "📋 Check CLI Parity"
+        run: |
+          cd quarry
+          go test ./cli/cmd -run Parity -v
+          echo "✅ CLI parity artifact is in sync"
+
   lint:
     name: "🧹 Lint"
     runs-on: ubuntu-latest
