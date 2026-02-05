@@ -36,6 +36,13 @@ jobs:
       - name: "📋 Check CLI Parity"
         run: |
           cd quarry
+          # Guard: ensure at least one parity test exists (prevents false-pass)
+          PARITY_TESTS=$(go test ./cli/cmd -list 'TestCLIParity' 2>/dev/null | grep -c 'TestCLIParity' || true)
+          if [ "$PARITY_TESTS" -eq 0 ]; then
+            echo "::error::No TestCLIParity* tests found - strict parity gate requires at least one"
+            exit 1
+          fi
+          echo "Found $PARITY_TESTS parity tests"
           go test ./cli/cmd -run Parity -v
           echo "✅ CLI parity artifact is in sync"
 
