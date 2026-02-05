@@ -14,7 +14,7 @@
  */
 
 // Event payload structure (matches event-bus-sns.sh output)
-interface RunCompletedEvent {
+type RunCompletedEvent = {
   event_type: "run_completed";
   run_id: string;
   source: string;
@@ -22,7 +22,7 @@ interface RunCompletedEvent {
   outcome: "success" | "error";
   storage_path: string;
   timestamp: string;
-}
+};
 
 // Simulated processed runs store (use a real database in production)
 const processedRuns = new Set<string>();
