@@ -95,11 +95,11 @@ ADVANCED:
 			},
 			&cli.StringFlag{
 				Name:  "job",
-				Usage: "Job payload as inline JSON",
+				Usage: "Job payload as inline JSON object (mutually exclusive with --job-json)",
 			},
 			&cli.StringFlag{
 				Name:  "job-json",
-				Usage: "Path to JSON file containing job payload",
+				Usage: "Path to JSON file containing job payload object (mutually exclusive with --job)",
 			},
 			&cli.StringFlag{
 				Name:  "executor",
@@ -169,17 +169,17 @@ ADVANCED:
 			// Storage flags
 			&cli.StringFlag{
 				Name:     "storage-backend",
-				Usage:    "Storage backend: fs or s3",
+				Usage:    "Storage backend: fs (filesystem) or s3 (Amazon S3)",
 				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "storage-path",
-				Usage:    "Storage path (fs: directory, s3: bucket/prefix)",
+				Usage:    "Storage path (fs: writable directory, s3: bucket/prefix)",
 				Required: true,
 			},
 			&cli.StringFlag{
 				Name:  "storage-region",
-				Usage: "AWS region for S3 backend (optional, uses default chain)",
+				Usage: "AWS region for S3 backend (uses default credential chain if omitted)",
 			},
 		},
 		Action: runAction,
