@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+---
+
+## [0.2.1] - 2026-02-05
+
+### Fixed
+
+- **IPC**: Fixed race condition where fast-completing scripts intermittently reported `executor_crash` outcome despite successful completion ([#56](https://github.com/justapithecus/quarry/issues/56)). Root cause was Go's `exec.Cmd.Wait()` closing stdout pipe before ingestion completed reading all data.
+
+---
+
+## [0.2.0] - 2026-02-05
+
 ### Added
 
 - **CLI**: `--job-json <path>` flag to load job payload from file (alternative to inline `--job`)
@@ -16,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI**: CLI/config parity checker validates flag documentation against implementation
 - **CI**: Strict parity gate blocks merge on CLI documentation drift
 - **Examples**: Integration pattern examples (SNS, handler, filesystem polling, S3 polling)
-- **Docs**: v0.2.0 release readiness checklist
 
 ### Changed
 
@@ -27,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known Issues
 
-- **IPC race condition** ([#56](https://github.com/justapithecus/quarry/issues/56)): Fast-completing scripts may intermittently report `executor_crash` outcome despite successful completion. **Data is not affected** - all events are persisted correctly. Only the exit code and outcome classification are wrong. Workaround: verify `run_complete` event presence rather than relying solely on exit code. Fix targeted for v0.2.1.
+- **IPC race condition** ([#56](https://github.com/justapithecus/quarry/issues/56)): Fast-completing scripts may intermittently report `executor_crash` outcome despite successful completion. **Fixed in v0.2.1.**
 
 ---
 
@@ -95,4 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.2.1]: https://github.com/justapithecus/quarry/releases/tag/v0.2.1
+[0.2.0]: https://github.com/justapithecus/quarry/releases/tag/v0.2.0
 [0.1.0]: https://github.com/justapithecus/quarry/releases/tag/v0.1.0

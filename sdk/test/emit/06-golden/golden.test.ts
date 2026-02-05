@@ -15,8 +15,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI } from '../../../src/emit-impl'
-import { CONTRACT_VERSION } from '../../../src/types/events'
 import type { CheckpointId, EventEnvelope } from '../../../src/types/events'
+import { CONTRACT_VERSION } from '../../../src/types/events'
 import { createDeterministicRunMeta, FakeSink } from '../_harness'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
