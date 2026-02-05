@@ -221,6 +221,12 @@ Run all examples:
 task examples
 ```
 
+### Integration Pattern Examples
+
+See `examples/integration-patterns/` for downstream ETL trigger examples:
+- Event-bus pattern (SNS/SQS, handler)
+- Polling pattern (filesystem, S3)
+
 ### Example: Minimal Item Emission
 
 ```typescript
