@@ -119,6 +119,16 @@ func TestCLIParityRunCommand(t *testing.T) {
 		if actualRequired != parityFlag.Required {
 			t.Errorf("flag --%s: parity says required=%v but actual is %v", flagName, parityFlag.Required, actualRequired)
 		}
+
+		// Validate default value
+		actualDefault := getFlagDefault(actualFlag)
+		if parityFlag.Default != nil {
+			if actualDefault != parityFlag.Default {
+				t.Errorf("flag --%s: parity says default=%v but actual is %v", flagName, parityFlag.Default, actualDefault)
+			}
+		} else if actualDefault != nil {
+			t.Errorf("flag --%s: parity has no default but actual default is %v", flagName, actualDefault)
+		}
 	}
 
 	// Check all actual flags exist in parity artifact
@@ -228,6 +238,102 @@ func TestCLIParityDebugCommand(t *testing.T) {
 	}
 }
 
+// TestCLIParityInspectCommand validates the inspect command flags against the parity artifact.
+func TestCLIParityInspectCommand(t *testing.T) {
+	artifact := loadParityArtifact(t)
+	inspectCmd := InspectCommand()
+
+	parityInspect, ok := artifact.Commands["inspect"]
+	if !ok {
+		t.Fatal("parity artifact missing 'inspect' command")
+	}
+
+	// Inspect has subcommands, not top-level flags
+	for _, subCmd := range inspectCmd.Subcommands {
+		subName := subCmd.Name
+		paritySubCmd, ok := parityInspect.Subcommands[subName]
+		if !ok {
+			t.Errorf("CLI has inspect subcommand %q but it is not in parity artifact", subName)
+			continue
+		}
+
+		actualFlags := extractFlags(subCmd)
+
+		for flagName := range paritySubCmd.Flags {
+			if _, exists := actualFlags[flagName]; !exists {
+				t.Errorf("parity declares flag --%s for 'inspect %s' but it does not exist", flagName, subName)
+			}
+		}
+
+		for flagName := range actualFlags {
+			if _, exists := paritySubCmd.Flags[flagName]; !exists {
+				t.Errorf("CLI 'inspect %s' has flag --%s but it is not in parity artifact", subName, flagName)
+			}
+		}
+	}
+}
+
+// TestCLIParityStatsCommand validates the stats command flags against the parity artifact.
+func TestCLIParityStatsCommand(t *testing.T) {
+	artifact := loadParityArtifact(t)
+	statsCmd := StatsCommand()
+
+	parityStats, ok := artifact.Commands["stats"]
+	if !ok {
+		t.Fatal("parity artifact missing 'stats' command")
+	}
+
+	// Stats has subcommands, not top-level flags
+	for _, subCmd := range statsCmd.Subcommands {
+		subName := subCmd.Name
+		paritySubCmd, ok := parityStats.Subcommands[subName]
+		if !ok {
+			t.Errorf("CLI has stats subcommand %q but it is not in parity artifact", subName)
+			continue
+		}
+
+		actualFlags := extractFlags(subCmd)
+
+		for flagName := range paritySubCmd.Flags {
+			if _, exists := actualFlags[flagName]; !exists {
+				t.Errorf("parity declares flag --%s for 'stats %s' but it does not exist", flagName, subName)
+			}
+		}
+
+		for flagName := range actualFlags {
+			if _, exists := paritySubCmd.Flags[flagName]; !exists {
+				t.Errorf("CLI 'stats %s' has flag --%s but it is not in parity artifact", subName, flagName)
+			}
+		}
+	}
+}
+
+// TestCLIParityVersionCommand validates the version command flags against the parity artifact.
+func TestCLIParityVersionCommand(t *testing.T) {
+	artifact := loadParityArtifact(t)
+	versionCmd := VersionCommand("", "test-commit")
+	actualFlags := extractFlags(versionCmd)
+
+	parityVersion, ok := artifact.Commands["version"]
+	if !ok {
+		t.Fatal("parity artifact missing 'version' command")
+	}
+
+	// Check all parity flags exist in actual CLI
+	for flagName := range parityVersion.Flags {
+		if _, exists := actualFlags[flagName]; !exists {
+			t.Errorf("parity artifact declares flag --%s for 'version' but it does not exist", flagName)
+		}
+	}
+
+	// Check all actual flags exist in parity
+	for flagName := range actualFlags {
+		if _, exists := parityVersion.Flags[flagName]; !exists {
+			t.Errorf("CLI 'version' has flag --%s but it is not in parity artifact", flagName)
+		}
+	}
+}
+
 // TestCLIParityJobPayloadContract validates the job payload contract is correctly documented.
 func TestCLIParityJobPayloadContract(t *testing.T) {
 	artifact := loadParityArtifact(t)
@@ -299,5 +405,34 @@ func isFlagRequired(f cli.Flag) bool {
 		return tf.Required
 	default:
 		return false
+	}
+}
+
+// getFlagDefault returns the default value for a cli.Flag.
+// Returns nil if no default is set (empty string/zero value).
+func getFlagDefault(f cli.Flag) any {
+	switch tf := f.(type) {
+	case *cli.StringFlag:
+		if tf.Value == "" {
+			return nil
+		}
+		return tf.Value
+	case *cli.IntFlag:
+		if tf.Value == 0 {
+			return nil
+		}
+		return float64(tf.Value) // JSON numbers are float64
+	case *cli.Int64Flag:
+		if tf.Value == 0 {
+			return nil
+		}
+		return float64(tf.Value)
+	case *cli.BoolFlag:
+		if !tf.Value {
+			return nil
+		}
+		return tf.Value
+	default:
+		return nil
 	}
 }

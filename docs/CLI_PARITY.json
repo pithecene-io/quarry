@@ -35,7 +35,6 @@
         "job": {
           "type": "string",
           "required": false,
-          "default": "{}",
           "description": "Job payload as inline JSON object (mutually exclusive with --job-json)",
           "validation": "Must be a top-level JSON object. Arrays, primitives, and null are rejected.",
           "exclusiveWith": ["job-json"]
@@ -55,7 +54,6 @@
         "quiet": {
           "type": "bool",
           "required": false,
-          "default": false,
           "description": "Suppress result output"
         },
         "source": {
@@ -87,14 +85,12 @@
         "buffer-events": {
           "type": "int",
           "required": false,
-          "default": 0,
           "description": "Max buffered events (buffered policy)",
           "dependsOn": ["policy=buffered"]
         },
         "buffer-bytes": {
           "type": "int64",
           "required": false,
-          "default": 0,
           "description": "Max buffer size in bytes (buffered policy)",
           "dependsOn": ["policy=buffered"]
         },
@@ -150,49 +146,211 @@
     },
     "inspect": {
       "description": "Deep view of a single entity",
-      "flags": {
-        "format": {
-          "type": "string",
-          "aliases": ["f"],
-          "required": false,
-          "description": "Output format: json, table, yaml"
+      "subcommands": {
+        "run": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         },
-        "no-color": {
-          "type": "bool",
-          "required": false,
-          "default": false,
-          "description": "Disable colored output (table format only)"
+        "job": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         },
-        "tui": {
-          "type": "bool",
-          "required": false,
-          "default": false,
-          "description": "Enable interactive TUI mode",
-          "notes": "Supported for inspect commands"
+        "task": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
+        },
+        "proxy": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
+        },
+        "executor": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         }
       }
     },
     "stats": {
       "description": "Aggregated facts derived from the read path",
-      "flags": {
-        "format": {
-          "type": "string",
-          "aliases": ["f"],
-          "required": false,
-          "description": "Output format: json, table, yaml"
+      "subcommands": {
+        "runs": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         },
-        "no-color": {
-          "type": "bool",
-          "required": false,
-          "default": false,
-          "description": "Disable colored output (table format only)"
+        "jobs": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         },
-        "tui": {
-          "type": "bool",
-          "required": false,
-          "default": false,
-          "description": "Enable interactive TUI mode",
-          "notes": "Supported for stats commands"
+        "tasks": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
+        },
+        "proxies": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
+        },
+        "executors": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         }
       }
     },
@@ -391,7 +549,25 @@
     },
     "version": {
       "description": "Reports the canonical project version (lockstep across all components)",
-      "flags": {}
+      "flags": {
+        "format": {
+          "type": "string",
+          "aliases": ["f"],
+          "required": false,
+          "description": "Output format: json, table, yaml"
+        },
+        "no-color": {
+          "type": "bool",
+          "required": false,
+          "description": "Disable colored output (table format only)"
+        },
+        "tui": {
+          "type": "bool",
+          "required": false,
+          "description": "Enable interactive TUI mode",
+          "notes": "Not supported for version command - returns error"
+        }
+      }
     }
   }
 }
