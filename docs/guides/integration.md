@@ -34,7 +34,7 @@ publishes a run completion signal.
 ```
 Quarry run completes
         ↓
-Storage commit (Lode)
+Storage commit (configured backend)
         ↓
 Event published to bus
         ↓
