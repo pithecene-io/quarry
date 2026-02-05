@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI**: Normalized help text for job, storage, and policy flags for consistency
 - **Docs**: CLI parity artifact (`docs/CLI_PARITY.json`) added as machine-checkable source of truth
 
+### Known Issues
+
+- **IPC race condition** ([#56](https://github.com/justapithecus/quarry/issues/56)): Fast-completing scripts may intermittently report `executor_crash` outcome despite successful completion. **Data is not affected** - all events are persisted correctly. Only the exit code and outcome classification are wrong. Workaround: verify `run_complete` event presence rather than relying solely on exit code. Fix targeted for v0.2.1.
+
 ---
 
 ## [0.1.0] - 2026-02-04
