@@ -13,6 +13,14 @@ _No unreleased changes._
 
 ---
 
+## [0.2.2] - 2026-02-05
+
+### Fixed
+
+- **CI**: Fixed GitHub Packages publish auth failure (ENEEDAUTH) in release workflow. Root cause was missing `actions/setup-node` with registry configuration. Fix adds `packages: write` permission, proper registry-url setup, and `publishConfig` in SDK package.json.
+
+---
+
 ## [0.2.1] - 2026-02-05
 
 ### Fixed
@@ -108,6 +116,7 @@ _No unreleased changes._
 
 ---
 
+[0.2.2]: https://github.com/justapithecus/quarry/releases/tag/v0.2.2
 [0.2.1]: https://github.com/justapithecus/quarry/releases/tag/v0.2.1
 [0.2.0]: https://github.com/justapithecus/quarry/releases/tag/v0.2.0
 [0.1.0]: https://github.com/justapithecus/quarry/releases/tag/v0.1.0
