@@ -23,8 +23,6 @@ Do not update for internal refactors.
 
 ## docs/
 
-- `RELEASE_READINESS_v0.2.0.md` — v0.2.0 release gates and checklist
-
 ### docs/guides/
 
 User-facing guides (informational).
