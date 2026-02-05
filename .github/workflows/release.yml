@@ -177,11 +177,27 @@ jobs:
       - name: "🧰 Setup Node for GitHub Packages"
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24.13.0"  # Matches mise.toml pin
           registry-url: "https://npm.pkg.github.com"
           scope: "@justapithecus"
-      - name: "📦 Install pnpm"
-        run: npm install -g pnpm
+      - name: "📦 Setup pnpm via Corepack"
+        run: |
+          EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
+          echo "🔧 Preparing pnpm@${EXPECTED_PNPM} via Corepack"
+          corepack enable
+          corepack prepare "pnpm@${EXPECTED_PNPM}" --activate
+      - name: "🔍 Verify Toolchain Pinning"
+        run: |
+          echo "🔧 Node version: $(node --version)"
+          ACTUAL_PNPM=$(pnpm --version)
+          EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
+          echo "🔧 pnpm version (actual): $ACTUAL_PNPM"
+          echo "🔧 pnpm version (pinned): $EXPECTED_PNPM"
+          if [ "$ACTUAL_PNPM" != "$EXPECTED_PNPM" ]; then
+            echo "::error::pnpm version mismatch! Actual ($ACTUAL_PNPM) != Pinned ($EXPECTED_PNPM)"
+            exit 1
+          fi
+          echo "✅ pnpm version matches pin"
       - name: "🔍 Publish Diagnostics"
         working-directory: sdk
         run: |

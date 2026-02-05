@@ -18,6 +18,7 @@ _No unreleased changes._
 ### Fixed
 
 - **CI**: Fixed GitHub Packages publish auth failure (ENEEDAUTH) in release workflow. Root cause was missing `actions/setup-node` with registry configuration. Fix adds `packages: write` permission, proper registry-url setup, and `publishConfig` in SDK package.json.
+- **CI**: Enforced pinned pnpm via Corepack in publish workflow. Replaced global `npm install -g pnpm` with Corepack-based setup that reads `packageManager` from root package.json. Added version verification step that fails fast on mismatch.
 
 ---
 
