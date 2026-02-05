@@ -285,20 +285,39 @@ Quarry is ready to expand when:
 
 ---
 
-## Post-v0.2.2 Roadmap (Planned)
+## v0.3.0 Roadmap — ETL Ingress Hardening
 
-### Track A — Lode Upgrade and Checksums
-- [ ] Confirm Lode target version (v0.4.x, currently v0.4.1 per upstream)
-- [ ] Update Lode dependency and compatibility notes
-- [ ] Switch to Lode-native checksum metadata
-- [ ] Maintain read compatibility for legacy checksum fields
-- [ ] Add migration tests for mixed legacy and native checksum data
-- [ ] No user-facing checksum flags or configuration
+### Goal
+Treat Quarry as the first ingress of an ETL pipeline and harden the operational surface
+before adding event bus integrations.
 
-### Track B — Release Discipline
-- [ ] Define v0.3.0 scope and acceptance criteria
-- [ ] Keep release readiness checklist active until superseded
-- [ ] Decide if dogfooding is required for v0.3.0
+### Deliverables
+- Lode upgrade to v0.4.1 with compatibility notes
+- CLI/Stats/Metrics hardening for run visibility and ingestion effects
+- Dogfooding focused on usability and integration stress testing
+- Clear v0.3.0 release readiness checklist and acceptance criteria
+
+### Mini-milestones
+- [ ] Lode dependency updated and validated against CONTRACT_LODE.md
+- [ ] CLI stats output includes policy effects and run outcome clarity
+- [ ] Metrics coverage for run lifecycle, ingestion drops, and executor failures
+- [ ] Dogfooding feedback captured and turned into concrete follow-ups
+
+---
+
+## Post-v0.3.0 — Event Bus Integrations (Staggered)
+
+Order of support:
+- Temporal.io
+- NATS
+- Kafka
+- Rabbit
+- SNS/SQS
+
+Principles:
+- Integrations must not change contracts.
+- Event envelope remains stable across adapters.
+- CLI/Stats/Metrics hardening is a prerequisite for each new adapter.
 
 ---
 
