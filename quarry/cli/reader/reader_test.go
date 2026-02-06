@@ -77,6 +77,64 @@ func TestStatsRunsResponse(t *testing.T) {
 	}
 }
 
+// TestStatsMetricsResponse verifies metrics snapshot response shape.
+func TestStatsMetricsResponse(t *testing.T) {
+	resp := StatsMetrics()
+
+	if resp == nil {
+		t.Fatal("StatsMetrics() returned nil")
+	}
+
+	// All counters must be non-negative
+	if resp.RunsStarted < 0 {
+		t.Errorf("RunsStarted = %d, should be >= 0", resp.RunsStarted)
+	}
+	if resp.RunsCompleted < 0 {
+		t.Errorf("RunsCompleted = %d, should be >= 0", resp.RunsCompleted)
+	}
+	if resp.RunsFailed < 0 {
+		t.Errorf("RunsFailed = %d, should be >= 0", resp.RunsFailed)
+	}
+	if resp.RunsCrashed < 0 {
+		t.Errorf("RunsCrashed = %d, should be >= 0", resp.RunsCrashed)
+	}
+	if resp.EventsReceived < 0 {
+		t.Errorf("EventsReceived = %d, should be >= 0", resp.EventsReceived)
+	}
+	if resp.EventsPersisted < 0 {
+		t.Errorf("EventsPersisted = %d, should be >= 0", resp.EventsPersisted)
+	}
+	if resp.EventsDropped < 0 {
+		t.Errorf("EventsDropped = %d, should be >= 0", resp.EventsDropped)
+	}
+	if resp.ExecutorLaunchSuccess < 0 {
+		t.Errorf("ExecutorLaunchSuccess = %d, should be >= 0", resp.ExecutorLaunchSuccess)
+	}
+	if resp.ExecutorLaunchFailure < 0 {
+		t.Errorf("ExecutorLaunchFailure = %d, should be >= 0", resp.ExecutorLaunchFailure)
+	}
+	if resp.ExecutorCrash < 0 {
+		t.Errorf("ExecutorCrash = %d, should be >= 0", resp.ExecutorCrash)
+	}
+	if resp.IPCDecodeErrors < 0 {
+		t.Errorf("IPCDecodeErrors = %d, should be >= 0", resp.IPCDecodeErrors)
+	}
+	if resp.LodeWriteSuccess < 0 {
+		t.Errorf("LodeWriteSuccess = %d, should be >= 0", resp.LodeWriteSuccess)
+	}
+	if resp.LodeWriteFailure < 0 {
+		t.Errorf("LodeWriteFailure = %d, should be >= 0", resp.LodeWriteFailure)
+	}
+	if resp.LodeWriteRetry < 0 {
+		t.Errorf("LodeWriteRetry = %d, should be >= 0", resp.LodeWriteRetry)
+	}
+
+	// DroppedByType must not be nil (stub returns populated map)
+	if resp.DroppedByType == nil {
+		t.Error("DroppedByType should not be nil")
+	}
+}
+
 // TestListRunsNoLimit verifies that limit=0 returns all results.
 func TestListRunsNoLimit(t *testing.T) {
 	opts := ListRunsOptions{Limit: 0}

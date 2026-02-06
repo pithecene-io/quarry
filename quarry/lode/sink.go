@@ -8,6 +8,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/types"
 )
@@ -51,6 +52,10 @@ type Client interface {
 	// Must preserve ordering within the batch.
 	WriteChunks(ctx context.Context, dataset, runID string, chunks []*types.ArtifactChunk) error
 
+	// WriteMetrics writes a metrics snapshot to Lode.
+	// Written to event_type=metrics partition with record_kind=metrics.
+	WriteMetrics(ctx context.Context, snap metrics.Snapshot, completedAt time.Time) error
+
 	// Close releases client resources.
 	Close() error
 }
@@ -84,9 +89,10 @@ var _ policy.Sink = (*Sink)(nil)
 // StubClient is a test client that accepts writes without persisting.
 // Use for integration testing before real Lode is available.
 type StubClient struct {
-	Events []StubEventRecord
-	Chunks []StubChunkRecord
-	Closed bool
+	Events  []StubEventRecord
+	Chunks  []StubChunkRecord
+	Metrics []StubMetricsRecord
+	Closed  bool
 }
 
 // StubEventRecord is a recorded event write for testing.
@@ -101,6 +107,12 @@ type StubChunkRecord struct {
 	Dataset string
 	RunID   string
 	Chunks  []*types.ArtifactChunk
+}
+
+// StubMetricsRecord is a recorded metrics write for testing.
+type StubMetricsRecord struct {
+	Snapshot    metrics.Snapshot
+	CompletedAt time.Time
 }
 
 // NewStubClient creates a new stub client.
@@ -124,6 +136,15 @@ func (c *StubClient) WriteChunks(_ context.Context, dataset, runID string, chunk
 		Dataset: dataset,
 		RunID:   runID,
 		Chunks:  chunks,
+	})
+	return nil
+}
+
+// WriteMetrics implements Client.
+func (c *StubClient) WriteMetrics(_ context.Context, snap metrics.Snapshot, completedAt time.Time) error {
+	c.Metrics = append(c.Metrics, StubMetricsRecord{
+		Snapshot:    snap,
+		CompletedAt: completedAt,
 	})
 	return nil
 }

@@ -130,6 +130,40 @@ type ListExecutorItem struct {
 	State      string `json:"state"`
 }
 
+// MetricsSnapshot per CONTRACT_METRICS.md and CONTRACT_CLI.md.
+// Field names use _total suffix to match CONTRACT_METRICS naming.
+type MetricsSnapshot struct {
+	// Run lifecycle
+	RunsStarted   int64 `json:"runs_started_total"`
+	RunsCompleted int64 `json:"runs_completed_total"`
+	RunsFailed    int64 `json:"runs_failed_total"`
+	RunsCrashed   int64 `json:"runs_crashed_total"`
+
+	// Ingestion
+	EventsReceived  int64            `json:"events_received_total"`
+	EventsPersisted int64            `json:"events_persisted_total"`
+	EventsDropped   int64            `json:"events_dropped_total"`
+	DroppedByType   map[string]int64 `json:"dropped_by_type,omitempty"`
+
+	// Executor
+	ExecutorLaunchSuccess int64 `json:"executor_launch_success_total"`
+	ExecutorLaunchFailure int64 `json:"executor_launch_failure_total"`
+	ExecutorCrash         int64 `json:"executor_crash_total"`
+	IPCDecodeErrors       int64 `json:"ipc_decode_errors_total"`
+
+	// Lode / Storage
+	LodeWriteSuccess int64 `json:"lode_write_success_total"`
+	LodeWriteFailure int64 `json:"lode_write_failure_total"`
+	LodeWriteRetry   int64 `json:"lode_write_retry_total"`
+
+	// Dimensions per CONTRACT_METRICS.md
+	Policy         string `json:"policy"`
+	Executor       string `json:"executor"`
+	StorageBackend string `json:"storage_backend"`
+	RunID          string `json:"run_id"`
+	JobID          string `json:"job_id,omitempty"`
+}
+
 // ListRunsOptions for filtering list runs.
 type ListRunsOptions struct {
 	State string

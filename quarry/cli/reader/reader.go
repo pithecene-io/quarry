@@ -67,6 +67,12 @@ func StatsExecutors() *ExecutorStats {
 	return defaultReader.StatsExecutors()
 }
 
+// StatsMetrics returns contract metrics snapshot.
+// Delegates to the package-level reader.
+func StatsMetrics() *MetricsSnapshot {
+	return defaultReader.StatsMetrics()
+}
+
 // ListRuns returns a list of runs with optional filtering.
 // Delegates to the package-level reader.
 func ListRuns(opts ListRunsOptions) []ListRunItem {

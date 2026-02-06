@@ -89,6 +89,17 @@ Optional dimensions:
   (see CONTRACT_LODE.md) to support stats reads across processes.
 - No exporter is required for v0.3.0; exposure via CLI is mandatory.
 
+### Data Source Progression
+
+During 0.x, stats commands may return stub data when a Lode-backed reader
+is not yet implemented. This is a transitional allowance, not a permanent state.
+
+Requirements by milestone:
+- **v0.3.0**: Write path (metrics persisted to Lode). Read path stub-backed.
+  CLI output uses correct response shapes and metric names.
+- **Post-v0.3.0**: Read path wired to Lode. `stats metrics` returns real
+  persisted data. Stub reader retained only for testing.
+
 ---
 
 ## Invariants
