@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/proxy"
 	"github.com/justapithecus/quarry/runtime"
@@ -253,10 +255,24 @@ func runAction(c *cli.Context) error {
 		return cli.Exit(err.Error(), exitConfigError)
 	}
 
+	// Resolve executor path (needed for metrics dimension before policy build)
+	executorPath, err := resolveExecutor(c.String("executor"))
+	if err != nil {
+		return cli.Exit(err.Error(), exitConfigError)
+	}
+
+	// Create metrics collector per CONTRACT_METRICS.md
+	var jobID string
+	if runMeta.JobID != nil {
+		jobID = *runMeta.JobID
+	}
+	// Use basename for stable executor identity (avoids high-cardinality from absolute paths)
+	collector := metrics.NewCollector(choice.name, filepath.Base(executorPath), storageConfig.backend, runMeta.RunID, jobID)
+
 	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, err := buildPolicy(choice, storageConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime)
+	pol, err := buildPolicy(choice, storageConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime, collector)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -282,12 +298,6 @@ func runAction(c *cli.Context) error {
 		resolvedProxy = endpoint
 	}
 
-	// Resolve executor path
-	executorPath, err := resolveExecutor(c.String("executor"))
-	if err != nil {
-		return cli.Exit(err.Error(), exitConfigError)
-	}
-
 	// Create run config
 	config := &runtime.RunConfig{
 		ExecutorPath: executorPath,
@@ -298,6 +308,7 @@ func runAction(c *cli.Context) error {
 		Proxy:        resolvedProxy,
 		Source:       c.String("source"),
 		Category:     c.String("category"),
+		Collector:    collector,
 	}
 
 	// Create orchestrator
@@ -327,6 +338,7 @@ func runAction(c *cli.Context) error {
 	// Print result
 	if !c.Bool("quiet") {
 		printRunResult(result, choice, duration)
+		printMetrics(collector.Snapshot())
 	}
 
 	return cli.Exit("", outcomeToExitCode(result.Outcome.Status))
@@ -591,9 +603,9 @@ Quarry could not locate the executor. To fix:
   3. Or add quarry-executor to your PATH`)
 }
 
-func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Policy, error) {
+func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, error) {
 	// Build storage sink
-	sink, err := buildStorageSink(storageConfig, source, category, runID, startTime)
+	sink, err := buildStorageSink(storageConfig, source, category, runID, startTime, collector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
@@ -617,7 +629,8 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, source, categ
 
 // buildStorageSink creates a Lode storage sink based on CLI configuration.
 // Storage backend and path are required - no silent fallback to stub.
-func buildStorageSink(storageConfig storageChoice, source, category, runID string, startTime time.Time) (policy.Sink, error) {
+// If collector is non-nil, wraps the sink with metrics instrumentation.
+func buildStorageSink(storageConfig storageChoice, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Sink, error) {
 	// Build Lode config with partition keys
 	cfg := lode.Config{
 		Dataset:  "quarry",
@@ -652,7 +665,11 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 		return nil, fmt.Errorf("unknown storage-backend: %s", storageConfig.backend)
 	}
 
-	return lode.NewSink(cfg, client), nil
+	sink := lode.NewSink(cfg, client)
+	if collector != nil {
+		return lode.NewInstrumentedSink(sink, collector), nil
+	}
+	return sink, nil
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {
@@ -826,4 +843,50 @@ func printRunResult(result *runtime.RunResult, choice policyChoice, duration tim
 		fmt.Printf("\n=== Executor Stderr ===\n")
 		fmt.Printf("%s", result.StderrOutput)
 	}
+}
+
+// printMetrics prints the CONTRACT_METRICS.md metrics surface via CLI.
+// Uses contract metric names for stable, machine-parseable output.
+func printMetrics(snap metrics.Snapshot) {
+	fmt.Printf("\n=== Metrics (CONTRACT_METRICS) ===\n")
+
+	// Run lifecycle
+	fmt.Printf("runs_started_total:              %d\n", snap.RunsStarted)
+	fmt.Printf("runs_completed_total:            %d\n", snap.RunsCompleted)
+	fmt.Printf("runs_failed_total:               %d\n", snap.RunsFailed)
+	fmt.Printf("runs_crashed_total:              %d\n", snap.RunsCrashed)
+
+	// Ingestion policy
+	fmt.Printf("events_received_total:           %d\n", snap.EventsReceived)
+	fmt.Printf("events_persisted_total:          %d\n", snap.EventsPersisted)
+	fmt.Printf("events_dropped_total:            %d\n", snap.EventsDropped)
+	// Deterministic output order for dropped-by-type breakdown
+	droppedTypes := sortedKeys(snap.DroppedByType)
+	for _, eventType := range droppedTypes {
+		fmt.Printf("  events_dropped{type=%s}:      %d\n", eventType, snap.DroppedByType[eventType])
+	}
+
+	// Executor
+	fmt.Printf("executor_launch_success_total:   %d\n", snap.ExecutorLaunchSuccess)
+	fmt.Printf("executor_launch_failure_total:   %d\n", snap.ExecutorLaunchFailure)
+	fmt.Printf("executor_crash_total:            %d\n", snap.ExecutorCrash)
+	fmt.Printf("ipc_decode_errors_total:         %d\n", snap.IPCDecodeErrors)
+
+	// Lode / Storage (per-call granularity)
+	fmt.Printf("lode_write_success_total:        %d\n", snap.LodeWriteSuccess)
+	fmt.Printf("lode_write_failure_total:        %d\n", snap.LodeWriteFailure)
+	fmt.Printf("lode_write_retry_total:          %d (not implemented)\n", snap.LodeWriteRetry)
+
+	// Dimensions
+	fmt.Printf("\n  policy=%s executor=%s storage_backend=%s\n", snap.Policy, snap.Executor, snap.StorageBackend)
+}
+
+// sortedKeys returns map keys in sorted order for deterministic output.
+func sortedKeys(m map[string]int64) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/justapithecus/quarry/ipc"
 	"github.com/justapithecus/quarry/log"
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/types"
 )
@@ -81,6 +82,7 @@ type IngestionEngine struct {
 	artifacts     *ArtifactManager
 	logger        *log.Logger
 	runMeta       *types.RunMeta // for envelope validation
+	collector     *metrics.Collector
 	currentSeq    int64
 	terminalSeen  bool
 	terminalEvent *types.EventEnvelope
@@ -94,6 +96,7 @@ func NewIngestionEngine(
 	artifacts *ArtifactManager,
 	logger *log.Logger,
 	runMeta *types.RunMeta,
+	collector *metrics.Collector,
 ) *IngestionEngine {
 	return &IngestionEngine{
 		decoder:    ipc.NewFrameDecoder(reader),
@@ -101,6 +104,7 @@ func NewIngestionEngine(
 		artifacts:  artifacts,
 		logger:     logger,
 		runMeta:    runMeta,
+		collector:  collector,
 		currentSeq: 0,
 	}
 }
@@ -145,6 +149,7 @@ func (e *IngestionEngine) Run(ctx context.Context) error {
 			e.logger.Error("frame error", map[string]any{
 				"error": err.Error(),
 			})
+			e.collector.IncExecutorCrash()
 			return &IngestionError{
 				Kind: IngestionErrorStream,
 				Err:  fmt.Errorf("frame error: %w", err),
@@ -153,6 +158,12 @@ func (e *IngestionEngine) Run(ctx context.Context) error {
 
 		// Decode and process frame
 		if err := e.processFrame(ctx, payload); err != nil {
+			// Count all stream errors as executor crashes — decode failures,
+			// envelope validation, sequence violations all indicate executor
+			// misbehavior and produce crash outcomes.
+			if IsStreamError(err) {
+				e.collector.IncExecutorCrash()
+			}
 			return err
 		}
 	}
@@ -166,6 +177,10 @@ func (e *IngestionEngine) processFrame(ctx context.Context, payload []byte) erro
 		e.logger.Error("frame decode error", map[string]any{
 			"error": err.Error(),
 		})
+		// ipc_decode_errors counts the failure type; executor_crash is counted
+		// separately at the stream-error return site in Run(). Both incrementing
+		// for the same event is intentional — different dimensions.
+		e.collector.IncIPCDecodeErrors()
 		// Decode errors are stream errors (executor crash outcome)
 		return &IngestionError{
 			Kind: IngestionErrorStream,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/justapithecus/quarry/log"
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
 	"github.com/justapithecus/quarry/types"
 )
@@ -44,6 +45,9 @@ type RunConfig struct {
 	Source string
 	// Category is the partition key for logical data type (default: "default").
 	Category string
+	// Collector is the metrics collector for this run per CONTRACT_METRICS.md.
+	// If nil, no metrics are recorded (all Collector methods are nil-safe).
+	Collector *metrics.Collector
 }
 
 // RunResult represents the result of a run.
@@ -105,6 +109,7 @@ func NewRunOrchestrator(config *RunConfig) (*RunOrchestrator, error) {
 //  6. Return result
 func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	r.startTime = time.Now()
+	r.config.Collector.IncRunStarted()
 
 	r.logger.Info("starting run", map[string]any{
 		"script":   r.config.ScriptPath,
@@ -129,6 +134,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 
 	// Start executor
 	if err := executor.Start(ctx); err != nil {
+		r.config.Collector.IncExecutorLaunchFailure()
 		r.logger.Error("failed to start executor", map[string]any{
 			"error": err.Error(),
 		})
@@ -146,6 +152,8 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		}, "", nil, nil), nil
 	}
 
+	r.config.Collector.IncExecutorLaunchSuccess()
+
 	// Create artifact manager
 	artifacts := NewArtifactManager()
 
@@ -156,6 +164,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		artifacts,
 		r.logger,
 		r.config.RunMeta,
+		r.config.Collector,
 	)
 
 	// Run ingestion in goroutine
@@ -378,6 +387,24 @@ func (r *RunOrchestrator) buildResult(
 	if ingestion != nil {
 		result.EventCount = ingestion.CurrentSeq()
 	}
+
+	// Record run outcome metrics per CONTRACT_METRICS.md
+	switch outcome.Status {
+	case types.OutcomeSuccess:
+		r.config.Collector.IncRunCompleted()
+	case types.OutcomeScriptError, types.OutcomePolicyFailure:
+		r.config.Collector.IncRunFailed()
+	case types.OutcomeExecutorCrash:
+		r.config.Collector.IncRunCrashed()
+	}
+
+	// Absorb policy stats into the metrics collector
+	ps := result.PolicyStats
+	droppedByType := make(map[string]int64, len(ps.DroppedByType))
+	for k, v := range ps.DroppedByType {
+		droppedByType[string(k)] = v
+	}
+	r.config.Collector.AbsorbPolicyStats(ps.TotalEvents, ps.EventsPersisted, ps.EventsDropped, droppedByType)
 
 	return result
 }
