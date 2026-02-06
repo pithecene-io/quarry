@@ -48,6 +48,8 @@ Normative contracts (authoritative). These documents define **system behavior**.
 - `contracts/CONTRACT_PROXY.md` — proxy configuration, selection, and executor application
 - `contracts/CONTRACT_CLI.md` — CLI command topology and read-only guarantees
 - `contracts/CONTRACT_LODE.md` — persistence and storage interaction
+- `contracts/CONTRACT_METRICS.md` — runtime metrics surface and CLI stats requirements
+- `contracts/CONTRACT_INTEGRATION.md` — event-bus adapter boundary and delivery semantics
 - `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
 Contracts are authoritative over code.
