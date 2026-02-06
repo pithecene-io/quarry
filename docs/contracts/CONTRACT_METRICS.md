@@ -95,10 +95,10 @@ During 0.x, stats commands may return stub data when a Lode-backed reader
 is not yet implemented. This is a transitional allowance, not a permanent state.
 
 Requirements by milestone:
-- **v0.3.0**: Write path (metrics persisted to Lode). Read path stub-backed.
-  CLI output uses correct response shapes and metric names.
-- **Post-v0.3.0**: Read path wired to Lode. `stats metrics` returns real
-  persisted data. Stub reader retained only for testing.
+- **v0.3.0**: Write path complete. Read path via `--storage-backend`/`--storage-path`
+  flags on `stats metrics`. Stub fallback when flags omitted.
+- **Post-v0.3.0**: Global reader configuration. All stats commands Lode-backed.
+  Stub reader retained only for testing.
 
 ---
 
