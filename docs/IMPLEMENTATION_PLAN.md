@@ -253,8 +253,8 @@ Expose policy selection without leaking complexity.
 - Clear run summaries
 
 ### Mini-milestones
-- [ ] Policy recorded in run metadata
-- [ ] Policy effects visible in output
+- [x] Policy recorded in run metadata
+- [x] Policy effects visible in output
 
 ---
 
@@ -302,10 +302,10 @@ before adding event bus integrations.
 - Dogfooding prerequisites validated (CLI surface functional for real-project use)
 
 ### Mini-milestones
-- [ ] Lode dependency updated and validated against CONTRACT_LODE.md
-- [ ] CLI stats output includes policy effects and run outcome clarity
-- [ ] Metrics coverage for run lifecycle, ingestion drops, and executor failures
-- [ ] Dogfooding prerequisites met (Phase 6 can begin immediately post-release)
+- [x] Lode dependency updated and validated against CONTRACT_LODE.md
+- [x] CLI stats output includes policy effects and run outcome clarity
+- [x] Metrics coverage for run lifecycle, ingestion drops, and executor failures
+- [x] Dogfooding prerequisites met (Phase 6 can begin immediately post-release)
 
 ---
 

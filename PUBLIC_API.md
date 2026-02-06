@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.1.0.
+User-facing guide for Quarry v0.3.0.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -200,6 +200,7 @@ quarry inspect job <job-id>     # Inspect a specific job
 ```bash
 quarry stats runs               # Run statistics
 quarry stats jobs               # Job statistics
+quarry stats metrics            # Contract metrics (requires --storage-backend, --storage-path)
 ```
 
 ---
@@ -302,7 +303,7 @@ task build
 
 ---
 
-## Known Limitations (v0.1.0)
+## Known Limitations (v0.3.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -364,7 +365,7 @@ processing after runs complete, see [docs/guides/integration.md](docs/guides/int
 
 ```bash
 quarry version
-# 0.1.0 (commit: ...)
+# 0.3.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
