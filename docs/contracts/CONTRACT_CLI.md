@@ -254,6 +254,36 @@ Response must include:
 - `idle`
 - `failed`
 
+### `stats metrics`
+
+Returns the most recent metrics snapshot derived from Lode metrics records.
+
+Response:
+```
+MetricsSnapshot:
+  ts: time
+  run_id: string
+  job_id: string | null
+  policy: string
+  executor: string
+  storage_backend: string
+  runs_started_total: number
+  runs_completed_total: number
+  runs_failed_total: number
+  runs_crashed_total: number
+  events_received_total: number
+  events_persisted_total: number
+  events_dropped_total: number
+  events_dropped_by_type: map<string, number>
+  executor_launch_success_total: number
+  executor_launch_failure_total: number
+  executor_crash_total: number
+  ipc_decode_errors_total: number
+  lode_write_success_total: number
+  lode_write_failure_total: number
+  lode_write_retry_total: number
+```
+
 ---
 
 ## `list` (enumeration)

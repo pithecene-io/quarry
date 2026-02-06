@@ -85,6 +85,8 @@ Optional dimensions:
 
 - CLI `stats` commands must surface stable, aggregated views of required metrics.
 - Metrics must be derived from runtime-owned sources, not executor counters.
+- Metrics snapshots must be persisted as Lode `record_kind=metrics` records
+  (see CONTRACT_LODE.md) to support stats reads across processes.
 - No exporter is required for v0.3.0; exposure via CLI is mandatory.
 
 ---
