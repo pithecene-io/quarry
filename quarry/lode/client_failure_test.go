@@ -92,6 +92,7 @@ func TestLodeClient_FSDirectoryCreationFailure_NonExistentParent(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	// Failure can occur at factory creation OR at write time
@@ -151,6 +152,7 @@ func TestLodeClient_FSDirectoryCreationFailure_ReadOnlyParent(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	// Try to use a subdirectory of the read-only dir
@@ -210,6 +212,7 @@ func TestLodeClient_WriteFailure_DiskFull(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -257,6 +260,7 @@ func TestLodeClient_WriteFailure_PermissionDenied(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -290,6 +294,7 @@ func TestLodeClient_ChunkWriteFailure_DiskFull(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -328,6 +333,7 @@ func TestLodeClient_PartialWriteDetection_ChunksNotMarkedOnFailure(t *testing.T)
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -363,6 +369,7 @@ func TestLodeClient_PartialWriteDetection_OffsetsNotUpdatedOnFailure(t *testing.
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	// First, successfully write some chunks
@@ -416,6 +423,7 @@ func TestLodeClient_S3AuthFailure(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -453,6 +461,7 @@ func TestLodeClient_S3AccessDenied(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -499,6 +508,7 @@ func TestLodeClient_S3NetworkTimeout(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -536,6 +546,7 @@ func TestLodeClient_S3Throttling(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -603,6 +614,7 @@ func TestLodeClient_StorageError_ContainsOperationAndPath(t *testing.T) {
 				Category: "test-cat",
 				Day:      "2026-02-03",
 				RunID:    "run-1",
+				Policy:   "strict",
 			}
 
 			client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -663,6 +675,7 @@ func TestLodeClient_ErrorPropagation_EventWrite(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -706,6 +719,7 @@ func TestLodeClient_ErrorPropagation_ChunkWrite(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))
@@ -742,6 +756,7 @@ func TestLodeClient_NoSilentCorruption_FailedWritePreservesState(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	// Start with working store
@@ -803,6 +818,7 @@ func TestLodeClient_NoSilentCorruption_CommitFailurePreservesChunksState(t *test
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	// Start with working store
@@ -872,6 +888,7 @@ func TestLodeClient_ErrorChain_UnwrapPreservesOriginal(t *testing.T) {
 		Category: "test",
 		Day:      "2026-02-03",
 		RunID:    "run-1",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, FailingStoreFactory(store))

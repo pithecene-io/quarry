@@ -109,6 +109,7 @@ func toEventRecordMap(e *types.EventEnvelope, cfg Config) map[string]any {
 		"source":           cfg.Source,
 		"category":         cfg.Category,
 		"day":              cfg.Day,
+		"policy":           cfg.Policy,
 	}
 	if e.JobID != nil {
 		m["job_id"] = *e.JobID
@@ -156,6 +157,7 @@ func toArtifactCommitRecordMap(e *types.EventEnvelope, cfg Config) map[string]an
 		"source":           cfg.Source,
 		"category":         cfg.Category,
 		"day":              cfg.Day,
+		"policy":           cfg.Policy,
 	}
 	if e.JobID != nil {
 		m["job_id"] = *e.JobID

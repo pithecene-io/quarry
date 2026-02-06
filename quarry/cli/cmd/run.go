@@ -617,7 +617,7 @@ Quarry could not locate the executor. To fix:
 
 func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, error) {
 	// Build storage sink
-	sink, client, err := buildStorageSink(storageConfig, source, category, runID, startTime, collector)
+	sink, client, err := buildStorageSink(storageConfig, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
@@ -644,7 +644,7 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, source, categ
 // Storage backend and path are required - no silent fallback to stub.
 // If collector is non-nil, wraps the sink with metrics instrumentation.
 // Returns the sink, the underlying client (for metrics persistence), and any error.
-func buildStorageSink(storageConfig storageChoice, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, error) {
+func buildStorageSink(storageConfig storageChoice, source, category, runID, policy string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, error) {
 	// Build Lode config with partition keys
 	cfg := lode.Config{
 		Dataset:  "quarry",
@@ -652,6 +652,7 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID strin
 		Category: category,
 		Day:      lode.DeriveDay(startTime),
 		RunID:    runID,
+		Policy:   policy,
 	}
 
 	var client lode.Client
