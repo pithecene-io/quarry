@@ -61,7 +61,7 @@ func NewReadDatasetS3(s3cfg S3Config) (lode.Dataset, error) {
 // by examining file paths for the event_type=metrics partition.
 func isMetricsSnapshot(snap *lode.Snapshot) bool {
 	for _, f := range snap.Manifest.Files {
-		if strings.Contains(f.Path, "event_type=metrics") {
+		if matchesPartitionValue(f.Path, "event_type", "metrics") {
 			return true
 		}
 	}
@@ -74,9 +74,22 @@ func snapshotMatchesFilter(snap *lode.Snapshot, key, value string) bool {
 	if value == "" {
 		return true
 	}
-	filter := key + "=" + value
 	for _, f := range snap.Manifest.Files {
-		if strings.Contains(f.Path, filter) {
+		if matchesPartitionValue(f.Path, key, value) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesPartitionValue checks if a Hive-partitioned path contains an exact
+// key=value segment. Segments are delimited by "/" in paths. This avoids
+// substring false positives (e.g., run_id=run-1 matching run_id=run-10).
+func matchesPartitionValue(path, key, value string) bool {
+	segment := key + "=" + value
+	// Split path into segments and match exactly
+	for _, part := range strings.Split(path, "/") {
+		if part == segment {
 			return true
 		}
 	}

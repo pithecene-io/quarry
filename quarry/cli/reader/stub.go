@@ -141,6 +141,7 @@ func (r *StubReader) StatsExecutors() *ExecutorStats {
 // StatsMetrics returns stub metrics statistics.
 func (r *StubReader) StatsMetrics() *MetricsSnapshot {
 	return &MetricsSnapshot{
+		Ts:                    time.Now().UTC().Format(time.RFC3339),
 		RunsStarted:           100,
 		RunsCompleted:         90,
 		RunsFailed:            5,

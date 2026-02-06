@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	lodelibrary "github.com/justapithecus/lode/lode"
@@ -174,19 +173,14 @@ func statsMetricsAction(c *cli.Context) error {
 
 		record, err := lode.QueryLatestMetrics(ctx, ds, c.String("run-id"), c.String("source"))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to read metrics from Lode: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Falling back to stub data.\n")
-			snapshot = reader.StatsMetrics()
-		} else {
-			parsed, err := lode.ParseMetricsRecord(record)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to parse metrics record: %v\n", err)
-				fmt.Fprintf(os.Stderr, "Falling back to stub data.\n")
-				snapshot = reader.StatsMetrics()
-			} else {
-				snapshot = parsed
-			}
+			return fmt.Errorf("failed to read metrics from Lode: %w", err)
 		}
+
+		parsed, err := lode.ParseMetricsRecord(record)
+		if err != nil {
+			return fmt.Errorf("failed to parse metrics record: %w", err)
+		}
+		snapshot = parsed
 	} else {
 		if backend != "" || path != "" {
 			return fmt.Errorf("both --storage-backend and --storage-path are required for Lode reads")

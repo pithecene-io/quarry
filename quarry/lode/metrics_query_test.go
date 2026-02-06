@@ -309,6 +309,7 @@ func TestParseMetricsRecord(t *testing.T) {
 	// Simulate a JSON-round-tripped record (float64 values)
 	record := map[string]any{
 		"record_kind":                    "metrics",
+		"ts":                             "2026-02-03T15:00:00Z",
 		"runs_started_total":             float64(5),
 		"runs_completed_total":           float64(4),
 		"runs_failed_total":              float64(1),
@@ -336,6 +337,9 @@ func TestParseMetricsRecord(t *testing.T) {
 		t.Fatalf("ParseMetricsRecord failed: %v", err)
 	}
 
+	if parsed.Ts != "2026-02-03T15:00:00Z" {
+		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:00:00Z")
+	}
 	if parsed.RunsStarted != 5 {
 		t.Errorf("RunsStarted = %d, want 5", parsed.RunsStarted)
 	}
@@ -409,5 +413,237 @@ func TestParseMetricsRecord_MissingFields(t *testing.T) {
 	}
 	if parsed.Policy != "" {
 		t.Errorf("Policy = %q, want empty", parsed.Policy)
+	}
+}
+
+func TestParseMetricsRecord_Ts(t *testing.T) {
+	record := map[string]any{
+		"record_kind": "metrics",
+		"ts":          "2026-02-03T15:30:00Z",
+	}
+
+	parsed, err := ParseMetricsRecord(record)
+	if err != nil {
+		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	}
+	if parsed.Ts != "2026-02-03T15:30:00Z" {
+		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:30:00Z")
+	}
+}
+
+// TestQueryLatestMetrics_RunIDSubstringNoCollision verifies that filtering
+// by run_id=run-1 does not match run_id=run-10 (substring false positive).
+func TestQueryLatestMetrics_RunIDSubstringNoCollision(t *testing.T) {
+	store := lode.NewMemory()
+	factory := sharedFactory(store)
+
+	completedAt := time.Date(2026, 2, 3, 15, 0, 0, 0, time.UTC)
+
+	// Write metrics for run-1 and run-10
+	for i, runID := range []string{"run-1", "run-10"} {
+		cfg := Config{
+			Dataset:  "quarry",
+			Source:   "test-source",
+			Category: "test-category",
+			Day:      "2026-02-03",
+			RunID:    runID,
+		}
+
+		client, err := NewLodeClientWithFactory(cfg, factory)
+		if err != nil {
+			t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+		}
+
+		snap := metrics.Snapshot{
+			RunsStarted:   int64(i + 1),
+			RunID:          runID,
+			Policy:         "strict",
+			Executor:       "executor.js",
+			StorageBackend: "fs",
+		}
+
+		if err := client.WriteMetrics(t.Context(), snap, completedAt.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatalf("WriteMetrics for %s failed: %v", runID, err)
+		}
+	}
+
+	ds, err := NewReadDataset(factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	// Filter by run-1 — must NOT match run-10
+	record, err := QueryLatestMetrics(t.Context(), ds, "run-1", "")
+	if err != nil {
+		t.Fatalf("QueryLatestMetrics failed: %v", err)
+	}
+
+	parsed, err := ParseMetricsRecord(record)
+	if err != nil {
+		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	}
+
+	if parsed.RunID != "run-1" {
+		t.Errorf("RunID = %q, want %q (must not match run-10)", parsed.RunID, "run-1")
+	}
+	if parsed.RunsStarted != 1 {
+		t.Errorf("RunsStarted = %d, want 1", parsed.RunsStarted)
+	}
+}
+
+// TestQueryLatestMetrics_SourceSubstringNoCollision verifies that filtering
+// by source=alpha does not match source=alphabet.
+func TestQueryLatestMetrics_SourceSubstringNoCollision(t *testing.T) {
+	store := lode.NewMemory()
+	factory := sharedFactory(store)
+
+	completedAt := time.Date(2026, 2, 3, 15, 0, 0, 0, time.UTC)
+
+	// Write metrics for source=alpha and source=alphabet
+	for i, source := range []string{"alpha", "alphabet"} {
+		cfg := Config{
+			Dataset:  "quarry",
+			Source:   source,
+			Category: "test-category",
+			Day:      "2026-02-03",
+			RunID:    "run-001",
+		}
+
+		client, err := NewLodeClientWithFactory(cfg, factory)
+		if err != nil {
+			t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+		}
+
+		snap := metrics.Snapshot{
+			RunsStarted:   int64(i + 1),
+			RunID:          "run-001",
+			Policy:         "strict",
+			Executor:       "executor.js",
+			StorageBackend: "fs",
+		}
+
+		if err := client.WriteMetrics(t.Context(), snap, completedAt.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatalf("WriteMetrics for source %s failed: %v", source, err)
+		}
+	}
+
+	ds, err := NewReadDataset(factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	// Filter by source=alpha — must NOT match source=alphabet
+	record, err := QueryLatestMetrics(t.Context(), ds, "", "alpha")
+	if err != nil {
+		t.Fatalf("QueryLatestMetrics failed: %v", err)
+	}
+
+	parsed, err := ParseMetricsRecord(record)
+	if err != nil {
+		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	}
+
+	if parsed.RunsStarted != 1 {
+		t.Errorf("RunsStarted = %d, want 1 (alpha source, not alphabet)", parsed.RunsStarted)
+	}
+}
+
+// TestQueryLatestMetrics_RecordLevelFiltering verifies that record-level
+// run_id filtering works when manifest paths might match broadly.
+func TestQueryLatestMetrics_RecordLevelFiltering(t *testing.T) {
+	store := lode.NewMemory()
+	factory := sharedFactory(store)
+
+	completedAt := time.Date(2026, 2, 3, 15, 0, 0, 0, time.UTC)
+
+	// Write metrics for run-abc
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test-source",
+		Category: "test-category",
+		Day:      "2026-02-03",
+		RunID:    "run-abc",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, factory)
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	snap := metrics.Snapshot{
+		RunsStarted:   5,
+		RunID:          "run-abc",
+		Policy:         "strict",
+		Executor:       "executor.js",
+		StorageBackend: "fs",
+	}
+
+	if err := client.WriteMetrics(t.Context(), snap, completedAt); err != nil {
+		t.Fatalf("WriteMetrics failed: %v", err)
+	}
+
+	ds, err := NewReadDataset(factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	// Filter by a run_id that doesn't exist — should get ErrNoMetricsFound
+	_, err = QueryLatestMetrics(t.Context(), ds, "run-nonexistent", "")
+	if err == nil {
+		t.Fatal("expected error for non-matching run_id filter, got nil")
+	}
+	if !errors.Is(err, ErrNoMetricsFound) {
+		t.Errorf("expected ErrNoMetricsFound, got: %v", err)
+	}
+}
+
+// TestQueryLatestMetrics_TsRoundTrip verifies ts survives write/read cycle.
+func TestQueryLatestMetrics_TsRoundTrip(t *testing.T) {
+	store := lode.NewMemory()
+	factory := sharedFactory(store)
+
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test-source",
+		Category: "test-category",
+		Day:      "2026-02-03",
+		RunID:    "run-001",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, factory)
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	completedAt := time.Date(2026, 2, 3, 15, 30, 0, 0, time.UTC)
+	snap := metrics.Snapshot{
+		RunsStarted:   1,
+		RunID:          "run-001",
+		Policy:         "strict",
+		Executor:       "executor.js",
+		StorageBackend: "fs",
+	}
+
+	if err := client.WriteMetrics(t.Context(), snap, completedAt); err != nil {
+		t.Fatalf("WriteMetrics failed: %v", err)
+	}
+
+	ds, err := NewReadDataset(factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	record, err := QueryLatestMetrics(t.Context(), ds, "", "")
+	if err != nil {
+		t.Fatalf("QueryLatestMetrics failed: %v", err)
+	}
+
+	parsed, err := ParseMetricsRecord(record)
+	if err != nil {
+		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	}
+
+	if parsed.Ts != "2026-02-03T15:30:00Z" {
+		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:30:00Z")
 	}
 }

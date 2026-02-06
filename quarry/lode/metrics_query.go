@@ -41,15 +41,24 @@ func QueryLatestMetrics(ctx context.Context, ds lode.Dataset, runID, source stri
 			return nil, WrapReadError(err, fmt.Sprintf("quarry/snapshot/%s", snap.ID))
 		}
 
-		// Find the metrics record in the snapshot data
+		// Find a metrics record that passes record-level filters.
+		// Manifest path filtering is a coarse pre-filter; record fields
+		// are authoritative (handles cumulative/multi-record snapshots).
 		for _, item := range data {
 			record, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
-			if record["record_kind"] == RecordKindMetrics {
-				return record, nil
+			if record["record_kind"] != RecordKindMetrics {
+				continue
 			}
+			if runID != "" && toString(record["run_id"]) != runID {
+				continue
+			}
+			if source != "" && toString(record["source"]) != source {
+				continue
+			}
+			return record, nil
 		}
 	}
 
@@ -64,6 +73,8 @@ func ParseMetricsRecord(record map[string]any) (*reader.MetricsSnapshot, error) 
 	}
 
 	snap := &reader.MetricsSnapshot{
+		Ts: toString(record["ts"]),
+
 		// Run lifecycle
 		RunsStarted:   toInt64(record["runs_started_total"]),
 		RunsCompleted: toInt64(record["runs_completed_total"]),
