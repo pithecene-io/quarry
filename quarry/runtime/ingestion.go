@@ -312,7 +312,7 @@ func (e *IngestionEngine) handleArtifactCommit(envelope *types.EventEnvelope) er
 	// Extract artifact metadata from payload
 	artifactID, _ := envelope.Payload["artifact_id"].(string)
 	if artifactID == "" {
-		return fmt.Errorf("artifact event missing artifact_id")
+		return errors.New("artifact event missing artifact_id")
 	}
 
 	// size_bytes may come as various integer types from msgpack encoding

@@ -2,6 +2,7 @@ package lode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/justapithecus/lode/lode"
@@ -10,7 +11,7 @@ import (
 )
 
 // ErrNoMetricsFound is returned when no metrics records exist in the dataset.
-var ErrNoMetricsFound = fmt.Errorf("no metrics records found")
+var ErrNoMetricsFound = errors.New("no metrics records found")
 
 // QueryLatestMetrics finds and reads the most recent metrics record from Lode.
 // Filters by runID and source if non-empty.
@@ -69,7 +70,7 @@ func QueryLatestMetrics(ctx context.Context, ds lode.Dataset, runID, source stri
 // Handles both int64 (direct writes) and float64 (JSON round-trips) for numeric fields.
 func ParseMetricsRecord(record map[string]any) (*reader.MetricsSnapshot, error) {
 	if record == nil {
-		return nil, fmt.Errorf("nil record")
+		return nil, errors.New("nil record")
 	}
 
 	snap := &reader.MetricsSnapshot{
@@ -114,19 +115,19 @@ func ParseMetricsRecord(record map[string]any) (*reader.MetricsSnapshot, error) 
 	// The write path always populates these; missing values indicate
 	// data corruption or a malformed record.
 	if snap.Ts == "" {
-		return nil, fmt.Errorf("metrics record missing required field: ts")
+		return nil, errors.New("metrics record missing required field: ts")
 	}
 	if snap.RunID == "" {
-		return nil, fmt.Errorf("metrics record missing required field: run_id")
+		return nil, errors.New("metrics record missing required field: run_id")
 	}
 	if snap.Policy == "" {
-		return nil, fmt.Errorf("metrics record missing required field: policy")
+		return nil, errors.New("metrics record missing required field: policy")
 	}
 	if snap.Executor == "" {
-		return nil, fmt.Errorf("metrics record missing required field: executor")
+		return nil, errors.New("metrics record missing required field: executor")
 	}
 	if snap.StorageBackend == "" {
-		return nil, fmt.Errorf("metrics record missing required field: storage_backend")
+		return nil, errors.New("metrics record missing required field: storage_backend")
 	}
 
 	return snap, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -20,11 +21,11 @@ const checksumEnabled = false
 
 // ErrCommitWithoutChunks is returned when an artifact commit is attempted
 // without any chunks having been written for that artifact.
-var ErrCommitWithoutChunks = fmt.Errorf("artifact commit rejected: no chunks written for artifact")
+var ErrCommitWithoutChunks = errors.New("artifact commit rejected: no chunks written for artifact")
 
 // ErrMissingArtifactID is returned when an artifact commit event is missing
 // the required artifact_id field.
-var ErrMissingArtifactID = fmt.Errorf("artifact commit rejected: missing or empty artifact_id")
+var ErrMissingArtifactID = errors.New("artifact commit rejected: missing or empty artifact_id")
 
 // LodeClient is a real Lode-backed implementation of Client.
 // Uses Lode's HiveLayout with partition keys: source/category/day/run_id/event_type.

@@ -1,7 +1,7 @@
 package reader
 
 import (
-	"fmt"
+	"errors"
 	"time"
 )
 
@@ -224,7 +224,7 @@ func (r *StubReader) ListExecutors() []ListExecutorItem {
 // DebugResolveProxy returns stub proxy resolution.
 func (r *StubReader) DebugResolveProxy(pool string, commit bool) (*ResolveProxyResponse, error) {
 	if pool == "" {
-		return nil, fmt.Errorf("pool name required")
+		return nil, errors.New("pool name required")
 	}
 
 	return &ResolveProxyResponse{

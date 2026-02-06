@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,7 +61,7 @@ func ExtractedPath() (string, error) {
 // extractExecutor extracts the embedded executor to a temp directory.
 func extractExecutor() (string, error) {
 	if !IsEmbedded() {
-		return "", fmt.Errorf("no embedded executor available")
+		return "", errors.New("no embedded executor available")
 	}
 
 	// Create quarry-specific temp directory

@@ -3,6 +3,7 @@ package proxy
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -160,7 +161,7 @@ func (s *Selector) selectSticky(state *poolState, req SelectRequest, commit bool
 	// Derive sticky key per CONTRACT_PROXY.md precedence
 	stickyKey := s.deriveStickyKey(state, req)
 	if stickyKey == "" {
-		return 0, fmt.Errorf("sticky selection requires a sticky key")
+		return 0, errors.New("sticky selection requires a sticky key")
 	}
 
 	now := time.Now()
