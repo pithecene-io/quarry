@@ -607,17 +607,25 @@ func TestToMetricsRecordMap(t *testing.T) {
 	if record["ts"] != "2026-02-03T15:30:00Z" {
 		t.Errorf("ts = %v, want %q", record["ts"], "2026-02-03T15:30:00Z")
 	}
-	if record["runs_started"] != int64(1) {
-		t.Errorf("runs_started = %v, want 1", record["runs_started"])
+	if record["runs_started_total"] != int64(1) {
+		t.Errorf("runs_started_total = %v, want 1", record["runs_started_total"])
 	}
-	if record["events_received"] != int64(42) {
-		t.Errorf("events_received = %v, want 42", record["events_received"])
+	if record["events_received_total"] != int64(42) {
+		t.Errorf("events_received_total = %v, want 42", record["events_received_total"])
 	}
 	if record["policy"] != "strict" {
 		t.Errorf("policy = %v, want %q", record["policy"], "strict")
 	}
 	if record["job_id"] != "job-xyz" {
 		t.Errorf("job_id = %v, want %q", record["job_id"], "job-xyz")
+	}
+
+	// Verify job_id is omitted when empty
+	snapNoJob := snap
+	snapNoJob.JobID = ""
+	recordNoJob := toMetricsRecordMap(snapNoJob, cfg, completedAt)
+	if _, exists := recordNoJob["job_id"]; exists {
+		t.Error("job_id should be omitted when empty")
 	}
 
 	// Verify dropped_by_type is a deep copy

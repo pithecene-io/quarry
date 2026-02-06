@@ -186,45 +186,50 @@ func toChunkRecordMap(chunk *types.ArtifactChunk, offset int64, cfg Config) map[
 
 // toMetricsRecordMap converts a metrics.Snapshot to a map for Lode storage.
 // Written to event_type=metrics partition with record_kind=metrics.
+// Key names use _total suffix to match CONTRACT_METRICS.md naming.
 func toMetricsRecordMap(snap metrics.Snapshot, cfg Config, completedAt time.Time) map[string]any {
 	m := map[string]any{
 		"record_kind": RecordKindMetrics,
 		"event_type":  "metrics", // partition key
 		"ts":          completedAt.UTC().Format(time.RFC3339),
 
-		// Run lifecycle
-		"runs_started":   snap.RunsStarted,
-		"runs_completed": snap.RunsCompleted,
-		"runs_failed":    snap.RunsFailed,
-		"runs_crashed":   snap.RunsCrashed,
+		// Run lifecycle (CONTRACT_METRICS names)
+		"runs_started_total":   snap.RunsStarted,
+		"runs_completed_total": snap.RunsCompleted,
+		"runs_failed_total":    snap.RunsFailed,
+		"runs_crashed_total":   snap.RunsCrashed,
 
 		// Ingestion
-		"events_received":  snap.EventsReceived,
-		"events_persisted": snap.EventsPersisted,
-		"events_dropped":   snap.EventsDropped,
+		"events_received_total":  snap.EventsReceived,
+		"events_persisted_total": snap.EventsPersisted,
+		"events_dropped_total":   snap.EventsDropped,
 
 		// Executor
-		"executor_launch_success": snap.ExecutorLaunchSuccess,
-		"executor_launch_failure": snap.ExecutorLaunchFailure,
-		"executor_crash":          snap.ExecutorCrash,
-		"ipc_decode_errors":       snap.IPCDecodeErrors,
+		"executor_launch_success_total": snap.ExecutorLaunchSuccess,
+		"executor_launch_failure_total": snap.ExecutorLaunchFailure,
+		"executor_crash_total":          snap.ExecutorCrash,
+		"ipc_decode_errors_total":       snap.IPCDecodeErrors,
 
 		// Lode / Storage
-		"lode_write_success": snap.LodeWriteSuccess,
-		"lode_write_failure": snap.LodeWriteFailure,
-		"lode_write_retry":   snap.LodeWriteRetry,
+		"lode_write_success_total": snap.LodeWriteSuccess,
+		"lode_write_failure_total": snap.LodeWriteFailure,
+		"lode_write_retry_total":   snap.LodeWriteRetry,
 
 		// Dimensions
 		"policy":          snap.Policy,
 		"executor":        snap.Executor,
 		"storage_backend": snap.StorageBackend,
 		"run_id":          snap.RunID,
-		"job_id":          snap.JobID,
 
 		// Partition keys
 		"source":   cfg.Source,
 		"category": cfg.Category,
 		"day":      cfg.Day,
+	}
+
+	// Optional: only include job_id when non-empty
+	if snap.JobID != "" {
+		m["job_id"] = snap.JobID
 	}
 
 	// Copy dropped_by_type if non-empty

@@ -135,34 +135,36 @@ Write is best-effort — failure produces a warning but does not change run outc
 
 ### Metrics Record Schema
 
-| Field                     | Type              | Required | Description                              |
-|---------------------------|-------------------|----------|------------------------------------------|
-| `record_kind`             | string            | yes      | `"metrics"`                              |
-| `event_type`              | string            | yes      | `"metrics"` (Hive partition key)         |
-| `ts`                      | string (RFC3339)  | yes      | Completion timestamp                     |
-| `runs_started`            | int64             | yes      | Run lifecycle counter                    |
-| `runs_completed`          | int64             | yes      | Run lifecycle counter                    |
-| `runs_failed`             | int64             | yes      | Run lifecycle counter                    |
-| `runs_crashed`            | int64             | yes      | Run lifecycle counter                    |
-| `events_received`         | int64             | yes      | Ingestion counter                        |
-| `events_persisted`        | int64             | yes      | Ingestion counter                        |
-| `events_dropped`          | int64             | yes      | Ingestion counter                        |
-| `dropped_by_type`         | map[string]int64  | no       | Per-type drop breakdown                  |
-| `executor_launch_success` | int64             | yes      | Executor counter                         |
-| `executor_launch_failure` | int64             | yes      | Executor counter                         |
-| `executor_crash`          | int64             | yes      | Executor counter                         |
-| `ipc_decode_errors`       | int64             | yes      | Executor counter                         |
-| `lode_write_success`      | int64             | yes      | Storage counter                          |
-| `lode_write_failure`      | int64             | yes      | Storage counter                          |
-| `lode_write_retry`        | int64             | yes      | Storage counter (reserved)               |
-| `policy`                  | string            | yes      | Dimension: policy name                   |
-| `executor`                | string            | yes      | Dimension: executor identity             |
-| `storage_backend`         | string            | yes      | Dimension: storage backend               |
-| `run_id`                  | string            | yes      | Dimension: run identifier                |
-| `job_id`                  | string            | no       | Dimension: job identifier                |
-| `source`                  | string            | yes      | Partition key                            |
-| `category`                | string            | yes      | Partition key                            |
-| `day`                     | string            | yes      | Partition key (YYYY-MM-DD)               |
+Field names use the `_total` suffix to match CONTRACT_METRICS.md naming.
+
+| Field                           | Type              | Required | Description                              |
+|---------------------------------|-------------------|----------|------------------------------------------|
+| `record_kind`                   | string            | yes      | `"metrics"`                              |
+| `event_type`                    | string            | yes      | `"metrics"` (Hive partition key)         |
+| `ts`                            | string (RFC3339)  | yes      | Run completion timestamp                 |
+| `runs_started_total`            | int64             | yes      | Run lifecycle counter                    |
+| `runs_completed_total`          | int64             | yes      | Run lifecycle counter                    |
+| `runs_failed_total`             | int64             | yes      | Run lifecycle counter                    |
+| `runs_crashed_total`            | int64             | yes      | Run lifecycle counter                    |
+| `events_received_total`         | int64             | yes      | Ingestion counter                        |
+| `events_persisted_total`        | int64             | yes      | Ingestion counter                        |
+| `events_dropped_total`          | int64             | yes      | Ingestion counter                        |
+| `dropped_by_type`               | map[string]int64  | no       | Per-type drop breakdown                  |
+| `executor_launch_success_total` | int64             | yes      | Executor counter                         |
+| `executor_launch_failure_total` | int64             | yes      | Executor counter                         |
+| `executor_crash_total`          | int64             | yes      | Executor counter                         |
+| `ipc_decode_errors_total`       | int64             | yes      | Executor counter                         |
+| `lode_write_success_total`      | int64             | yes      | Storage counter                          |
+| `lode_write_failure_total`      | int64             | yes      | Storage counter                          |
+| `lode_write_retry_total`        | int64             | yes      | Storage counter (reserved)               |
+| `policy`                        | string            | yes      | Dimension: policy name                   |
+| `executor`                      | string            | yes      | Dimension: executor identity             |
+| `storage_backend`               | string            | yes      | Dimension: storage backend               |
+| `run_id`                        | string            | yes      | Dimension: run identifier                |
+| `job_id`                        | string            | no       | Dimension: job identifier                |
+| `source`                        | string            | yes      | Partition key                            |
+| `category`                      | string            | yes      | Partition key                            |
+| `day`                           | string            | yes      | Partition key (YYYY-MM-DD)               |
 
 ---
 

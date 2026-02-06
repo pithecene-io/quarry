@@ -336,9 +336,11 @@ func runAction(c *cli.Context) error {
 	duration := time.Since(startTime)
 
 	// Persist metrics to Lode (best effort per CONTRACT_METRICS.md)
+	// Use actual run completion time, not current wall clock
+	completedAt := startTime.Add(duration)
 	if lodeClient != nil {
 		metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if writeErr := lodeClient.WriteMetrics(metricsCtx, collector.Snapshot(), time.Now()); writeErr != nil {
+		if writeErr := lodeClient.WriteMetrics(metricsCtx, collector.Snapshot(), completedAt); writeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", writeErr)
 		}
 		metricsCancel()
