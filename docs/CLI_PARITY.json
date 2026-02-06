@@ -368,6 +368,32 @@
               "type": "bool",
               "required": false,
               "description": "Enable interactive TUI mode"
+            },
+            "storage-backend": {
+              "type": "string",
+              "required": false,
+              "description": "Storage backend: fs or s3",
+              "validation": "Must be one of: fs, s3"
+            },
+            "storage-path": {
+              "type": "string",
+              "required": false,
+              "description": "Storage path (fs: directory, s3: bucket/prefix)"
+            },
+            "storage-region": {
+              "type": "string",
+              "required": false,
+              "description": "AWS region for S3 backend"
+            },
+            "run-id": {
+              "type": "string",
+              "required": false,
+              "description": "Read metrics for specific run ID"
+            },
+            "source": {
+              "type": "string",
+              "required": false,
+              "description": "Filter by source partition"
             }
           }
         }

@@ -133,6 +133,9 @@ type ListExecutorItem struct {
 // MetricsSnapshot per CONTRACT_METRICS.md and CONTRACT_CLI.md.
 // Field names use _total suffix to match CONTRACT_METRICS naming.
 type MetricsSnapshot struct {
+	// Timestamp of the metrics snapshot (run completion time)
+	Ts string `json:"ts"`
+
 	// Run lifecycle
 	RunsStarted   int64 `json:"runs_started_total"`
 	RunsCompleted int64 `json:"runs_completed_total"`
