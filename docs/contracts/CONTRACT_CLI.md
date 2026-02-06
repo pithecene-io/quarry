@@ -283,7 +283,8 @@ MetricsSnapshot:
 ```
 
 Metric names match CONTRACT_METRICS.md. Dimensions are included for
-traceability. Currently stub-backed; Lode-backed reader deferred.
+traceability. Data source progression per CONTRACT_METRICS.md §Exposure
+Requirements: stub-backed in v0.3.0, Lode-backed post-v0.3.0.
 
 ---
 
