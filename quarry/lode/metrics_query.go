@@ -110,6 +110,19 @@ func ParseMetricsRecord(record map[string]any) (*reader.MetricsSnapshot, error) 
 		snap.DroppedByType = parseDroppedByType(dbt)
 	}
 
+	// Validate contract-required fields per CONTRACT_CLI.md.
+	// The write path always populates these; missing values indicate
+	// data corruption or a malformed record.
+	if snap.Ts == "" {
+		return nil, fmt.Errorf("metrics record missing required field: ts")
+	}
+	if snap.RunID == "" {
+		return nil, fmt.Errorf("metrics record missing required field: run_id")
+	}
+	if snap.Policy == "" {
+		return nil, fmt.Errorf("metrics record missing required field: policy")
+	}
+
 	return snap, nil
 }
 

@@ -2,6 +2,7 @@ package lode
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,22 +398,44 @@ func TestParseMetricsRecord_NilRecord(t *testing.T) {
 	}
 }
 
-func TestParseMetricsRecord_MissingFields(t *testing.T) {
-	// Empty record should parse without error (all zeros/empty)
-	record := map[string]any{
-		"record_kind": "metrics",
+func TestParseMetricsRecord_MissingRequiredFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		record map[string]any
+		errMsg string
+	}{
+		{
+			name:   "missing ts",
+			record: map[string]any{"record_kind": "metrics", "run_id": "run-1", "policy": "strict"},
+			errMsg: "ts",
+		},
+		{
+			name:   "missing run_id",
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "policy": "strict"},
+			errMsg: "run_id",
+		},
+		{
+			name:   "missing policy",
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1"},
+			errMsg: "policy",
+		},
+		{
+			name:   "all required missing",
+			record: map[string]any{"record_kind": "metrics"},
+			errMsg: "ts",
+		},
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-
-	if parsed.RunsStarted != 0 {
-		t.Errorf("RunsStarted = %d, want 0", parsed.RunsStarted)
-	}
-	if parsed.Policy != "" {
-		t.Errorf("Policy = %q, want empty", parsed.Policy)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseMetricsRecord(tt.record)
+			if err == nil {
+				t.Fatal("expected error for missing required field, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("error = %q, want it to mention %q", err.Error(), tt.errMsg)
+			}
+		})
 	}
 }
 
@@ -420,6 +443,8 @@ func TestParseMetricsRecord_Ts(t *testing.T) {
 	record := map[string]any{
 		"record_kind": "metrics",
 		"ts":          "2026-02-03T15:30:00Z",
+		"run_id":      "run-1",
+		"policy":      "strict",
 	}
 
 	parsed, err := ParseMetricsRecord(record)
