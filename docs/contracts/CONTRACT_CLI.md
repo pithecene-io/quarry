@@ -257,9 +257,17 @@ Response must include:
 
 ### `stats metrics`
 
+Returns the most recent metrics snapshot.
+
 Response:
 ```
 MetricsSnapshot:
+  ts: time
+  run_id: string
+  job_id: string | null
+  policy: string
+  executor: string
+  storage_backend: string
   runs_started_total: number
   runs_completed_total: number
   runs_failed_total: number
@@ -275,11 +283,6 @@ MetricsSnapshot:
   lode_write_success_total: number
   lode_write_failure_total: number
   lode_write_retry_total: number
-  policy: string
-  executor: string
-  storage_backend: string
-  run_id: string
-  job_id: string (optional)
 ```
 
 Metric names match CONTRACT_METRICS.md. Dimensions are included for

@@ -70,7 +70,7 @@ All stored records MUST include a `record_kind` discriminator field.
 | `event`          | Standard event envelope              |
 | `artifact_event` | Artifact commit (manifest) event     |
 | `artifact_chunk` | Artifact binary chunk                |
-| `metrics`        | Per-run metrics snapshot             |
+| `metrics`        | Run metrics snapshot                 |
 
 The `record_kind` field enables downstream consumers to distinguish record
 types without inspecting `event_type` or payload structure.
