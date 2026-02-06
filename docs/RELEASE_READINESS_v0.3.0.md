@@ -15,7 +15,7 @@ Replace or remove once the long-term release process is defined.
 - [ ] Contract changes documented for any behavior changes
 - [ ] CHANGELOG.md Unreleased section finalized
 - [ ] PUBLIC_API.md and guides updated for user-facing changes
-- [ ] Lode upgrade decision recorded if in scope
+- [x] Lode upgrade decision recorded if in scope
 - [ ] Release workflow dry-run passes
 - [ ] Release notes drafted
 
