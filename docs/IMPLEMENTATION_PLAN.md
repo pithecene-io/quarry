@@ -260,6 +260,10 @@ Expose policy selection without leaking complexity.
 
 ## Phase 6 — Dogfooding (Two Postures)
 
+> **Prerequisite**: v0.3.0 must be released before Phase 6 begins.
+> Phase 6 is a post-release validation exercise — Quarry is used E2E
+> on a real project, and feedback is captured as concrete follow-ups.
+
 ### Goal
 Validate Quarry across different ETL philosophies.
 
@@ -294,14 +298,14 @@ before adding event bus integrations.
 ### Deliverables
 - Lode upgrade to v0.4.1 with compatibility notes
 - CLI/Stats/Metrics hardening for run visibility and ingestion effects
-- Dogfooding focused on usability and integration stress testing
-- Clear v0.3.0 release readiness checklist and acceptance criteria
+- v0.3.0 release readiness checklist and acceptance criteria
+- Dogfooding prerequisites validated (CLI surface functional for real-project use)
 
 ### Mini-milestones
 - [ ] Lode dependency updated and validated against CONTRACT_LODE.md
 - [ ] CLI stats output includes policy effects and run outcome clarity
 - [ ] Metrics coverage for run lifecycle, ingestion drops, and executor failures
-- [ ] Dogfooding feedback captured and turned into concrete follow-ups
+- [ ] Dogfooding prerequisites met (Phase 6 can begin immediately post-release)
 
 ---
 
