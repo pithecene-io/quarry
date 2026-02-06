@@ -62,8 +62,10 @@ github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f/go.mod h1:vw97
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/justapithecus/lode v0.2.0 h1:HHmcA+B57bn/urte5m4TEhzRde+Kk+DSozgT2UPR3v0=
-github.com/justapithecus/lode v0.2.0/go.mod h1:HvQ8w9x3TVKPi2g2t73Ki/uChoJ7AoyzQYWgB/OEo/0=
+github.com/justapithecus/lode v0.4.1 h1:axbAyf1U7oOMgwt+GhuoFHwJBsl4UHMeA4L78P7GNww=
+github.com/justapithecus/lode v0.4.1/go.mod h1:kwseCSrcwYwyyADM3R0mMSgz54drQjGXJvb0rP+z5Y8=
+github.com/klauspost/compress v1.18.3 h1:9PJRvfbmTabkOX8moIpXPbMMbYN60bWImDDU7L+/6zw=
+github.com/klauspost/compress v1.18.3/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
 github.com/lucasb-eyer/go-colorful v1.2.0 h1:1nnpGOrhyZZuNyfu1QjKiUICQ74+3FNCN69Aj6K7nkY=
 github.com/lucasb-eyer/go-colorful v1.2.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=

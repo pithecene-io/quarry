@@ -51,6 +51,12 @@ If scope feels ambiguous or expanding, **pause and ask**.
 
 ---
 
+## Go Rules
+
+- Prefer `any` over `interface{}`
+
+---
+
 ## TypeScript Rules (Strict)
 
 Quarry is **TypeScript-first, ESM-only, modern by default**.
