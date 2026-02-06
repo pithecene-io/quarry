@@ -158,6 +158,12 @@ func (e *IngestionEngine) Run(ctx context.Context) error {
 
 		// Decode and process frame
 		if err := e.processFrame(ctx, payload); err != nil {
+			// Count all stream errors as executor crashes — decode failures,
+			// envelope validation, sequence violations all indicate executor
+			// misbehavior and produce crash outcomes.
+			if IsStreamError(err) {
+				e.collector.IncExecutorCrash()
+			}
 			return err
 		}
 	}

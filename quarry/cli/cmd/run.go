@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"syscall"
 	"time"
 
@@ -265,7 +266,8 @@ func runAction(c *cli.Context) error {
 	if runMeta.JobID != nil {
 		jobID = *runMeta.JobID
 	}
-	collector := metrics.NewCollector(choice.name, executorPath, storageConfig.backend, runMeta.RunID, jobID)
+	// Use basename for stable executor identity (avoids high-cardinality from absolute paths)
+	collector := metrics.NewCollector(choice.name, filepath.Base(executorPath), storageConfig.backend, runMeta.RunID, jobID)
 
 	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
@@ -858,8 +860,10 @@ func printMetrics(snap metrics.Snapshot) {
 	fmt.Printf("events_received_total:           %d\n", snap.EventsReceived)
 	fmt.Printf("events_persisted_total:          %d\n", snap.EventsPersisted)
 	fmt.Printf("events_dropped_total:            %d\n", snap.EventsDropped)
-	for eventType, count := range snap.DroppedByType {
-		fmt.Printf("  events_dropped{type=%s}:      %d\n", eventType, count)
+	// Deterministic output order for dropped-by-type breakdown
+	droppedTypes := sortedKeys(snap.DroppedByType)
+	for _, eventType := range droppedTypes {
+		fmt.Printf("  events_dropped{type=%s}:      %d\n", eventType, snap.DroppedByType[eventType])
 	}
 
 	// Executor
@@ -871,8 +875,18 @@ func printMetrics(snap metrics.Snapshot) {
 	// Lode / Storage (per-call granularity)
 	fmt.Printf("lode_write_success_total:        %d\n", snap.LodeWriteSuccess)
 	fmt.Printf("lode_write_failure_total:        %d\n", snap.LodeWriteFailure)
-	fmt.Printf("lode_write_retry_total:          %d\n", snap.LodeWriteRetry)
+	fmt.Printf("lode_write_retry_total:          %d (not implemented)\n", snap.LodeWriteRetry)
 
 	// Dimensions
 	fmt.Printf("\n  policy=%s executor=%s storage_backend=%s\n", snap.Policy, snap.Executor, snap.StorageBackend)
+}
+
+// sortedKeys returns map keys in sorted order for deterministic output.
+func sortedKeys(m map[string]int64) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
