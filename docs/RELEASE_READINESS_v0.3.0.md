@@ -10,11 +10,11 @@ Replace or remove once the long-term release process is defined.
 
 ## Release Gates
 
-- [ ] CI green on main (task lint/test/build/examples)
-- [ ] Version lockstep passes (types.Version, SDK package.json, tag)
-- [ ] Contract changes documented for any behavior changes
-- [ ] CHANGELOG.md Unreleased section finalized
-- [ ] PUBLIC_API.md and guides updated for user-facing changes
+- [x] CI green on main (task lint/test/build/examples)
+- [x] Version lockstep passes (types.Version, SDK package.json, tag)
+- [x] Contract changes documented for any behavior changes
+- [x] CHANGELOG.md Unreleased section finalized
+- [x] PUBLIC_API.md and guides updated for user-facing changes
 - [x] Lode upgrade decision recorded if in scope
 - [ ] Release workflow dry-run passes
 - [ ] Release notes drafted

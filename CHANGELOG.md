@@ -13,6 +13,30 @@ _No unreleased changes._
 
 ---
 
+## [0.3.0] - 2026-02-06
+
+### Added
+
+- **Metrics**: Runtime metrics surface per CONTRACT_METRICS.md — run lifecycle, ingestion drops, executor failures, storage write counters (#65)
+- **Metrics**: Persist metrics snapshot to Lode at run end as `record_kind=metrics` record (#67)
+- **CLI**: `stats metrics` subcommand with Lode-backed reader for querying persisted metrics (#68)
+- **Lode**: Policy name recorded in event and artifact commit Lode records (#71)
+- **Contracts**: CONTRACT_METRICS.md and CONTRACT_INTEGRATION.md added (#63)
+- **Contracts**: Metrics stats persistence requirements defined (#66)
+- **Docs**: Lode v0.2.0 → v0.4.1 compatibility guide (`docs/guides/lode-upgrade.md`) (#70)
+
+### Changed
+
+- **Lode**: Upgraded Lode dependency from v0.2.0 to v0.4.1 (#64)
+- **Docs**: Phase 6 (dogfooding) clarified as post-release validation exercise (#70)
+- **Docs**: v0.3.0 deliverables reworded — dogfooding is a prerequisite, not a gate (#70)
+
+### Fixed
+
+- **Go**: Prefer `errors.New` over `fmt.Errorf` for static error strings (#69)
+
+---
+
 ## [0.2.2] - 2026-02-05
 
 ### Fixed
@@ -117,6 +141,7 @@ _No unreleased changes._
 
 ---
 
+[0.3.0]: https://github.com/justapithecus/quarry/releases/tag/v0.3.0
 [0.2.2]: https://github.com/justapithecus/quarry/releases/tag/v0.2.2
 [0.2.1]: https://github.com/justapithecus/quarry/releases/tag/v0.2.1
 [0.2.0]: https://github.com/justapithecus/quarry/releases/tag/v0.2.0
