@@ -130,6 +130,32 @@ type ListExecutorItem struct {
 	State      string `json:"state"`
 }
 
+// MetricsSnapshot per CONTRACT_METRICS.md.
+type MetricsSnapshot struct {
+	// Run lifecycle
+	RunsStarted   int64 `json:"runs_started"`
+	RunsCompleted int64 `json:"runs_completed"`
+	RunsFailed    int64 `json:"runs_failed"`
+	RunsCrashed   int64 `json:"runs_crashed"`
+
+	// Ingestion
+	EventsReceived  int64            `json:"events_received"`
+	EventsPersisted int64            `json:"events_persisted"`
+	EventsDropped   int64            `json:"events_dropped"`
+	DroppedByType   map[string]int64 `json:"dropped_by_type,omitempty"`
+
+	// Executor
+	ExecutorLaunchSuccess int64 `json:"executor_launch_success"`
+	ExecutorLaunchFailure int64 `json:"executor_launch_failure"`
+	ExecutorCrash         int64 `json:"executor_crash"`
+	IPCDecodeErrors       int64 `json:"ipc_decode_errors"`
+
+	// Lode / Storage
+	LodeWriteSuccess int64 `json:"lode_write_success"`
+	LodeWriteFailure int64 `json:"lode_write_failure"`
+	LodeWriteRetry   int64 `json:"lode_write_retry"`
+}
+
 // ListRunsOptions for filtering list runs.
 type ListRunsOptions struct {
 	State string

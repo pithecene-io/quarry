@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -131,13 +132,15 @@ func TestSink_Close(t *testing.T) {
 
 // FailingClient simulates storage write failures (disk full, permission errors, etc.)
 type FailingClient struct {
-	EventWriteErr error
-	ChunkWriteErr error
-	CloseErr      error
+	EventWriteErr   error
+	ChunkWriteErr   error
+	MetricsWriteErr error
+	CloseErr        error
 	// Track calls for verification
-	EventWriteCalls int
-	ChunkWriteCalls int
-	CloseCalls      int
+	EventWriteCalls   int
+	ChunkWriteCalls   int
+	MetricsWriteCalls int
+	CloseCalls        int
 }
 
 func (c *FailingClient) WriteEvents(_ context.Context, _, _ string, _ []*types.EventEnvelope) error {
@@ -148,6 +151,11 @@ func (c *FailingClient) WriteEvents(_ context.Context, _, _ string, _ []*types.E
 func (c *FailingClient) WriteChunks(_ context.Context, _, _ string, _ []*types.ArtifactChunk) error {
 	c.ChunkWriteCalls++
 	return c.ChunkWriteErr
+}
+
+func (c *FailingClient) WriteMetrics(_ context.Context, _ metrics.Snapshot, _ time.Time) error {
+	c.MetricsWriteCalls++
+	return c.MetricsWriteErr
 }
 
 func (c *FailingClient) Close() error {

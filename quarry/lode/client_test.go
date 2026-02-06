@@ -3,9 +3,11 @@ package lode
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/justapithecus/lode/lode"
 
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -524,6 +526,107 @@ func TestParseS3Path(t *testing.T) {
 				t.Errorf("prefix = %q, want %q", prefix, tt.wantPrefix)
 			}
 		})
+	}
+}
+
+func TestLodeClient_WriteMetrics(t *testing.T) {
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test-source",
+		Category: "test-category",
+		Day:      "2026-02-03",
+		RunID:    "run-123",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	snap := metrics.Snapshot{
+		RunsStarted:          1,
+		RunsCompleted:        1,
+		EventsReceived:       10,
+		EventsPersisted:      10,
+		DroppedByType:        map[string]int64{"log": 2},
+		ExecutorLaunchSuccess: 1,
+		LodeWriteSuccess:     5,
+		Policy:               "strict",
+		Executor:             "executor.js",
+		StorageBackend:       "fs",
+		RunID:                "run-123",
+	}
+
+	completedAt := time.Date(2026, 2, 3, 15, 0, 0, 0, time.UTC)
+
+	err = client.WriteMetrics(t.Context(), snap, completedAt)
+	if err != nil {
+		t.Fatalf("WriteMetrics failed: %v", err)
+	}
+	// Success: metrics record written without error
+}
+
+func TestToMetricsRecordMap(t *testing.T) {
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "my-source",
+		Category: "my-category",
+		Day:      "2026-02-03",
+		RunID:    "run-abc",
+	}
+
+	snap := metrics.Snapshot{
+		RunsStarted:          1,
+		RunsCompleted:        1,
+		EventsReceived:       42,
+		EventsPersisted:      40,
+		EventsDropped:        2,
+		DroppedByType:        map[string]int64{"debug": 2},
+		ExecutorLaunchSuccess: 1,
+		ExecutorCrash:        0,
+		LodeWriteSuccess:     10,
+		Policy:               "strict",
+		Executor:             "executor.js",
+		StorageBackend:       "fs",
+		RunID:                "run-abc",
+		JobID:                "job-xyz",
+	}
+
+	completedAt := time.Date(2026, 2, 3, 15, 30, 0, 0, time.UTC)
+	record := toMetricsRecordMap(snap, cfg, completedAt)
+
+	if record["record_kind"] != RecordKindMetrics {
+		t.Errorf("record_kind = %v, want %q", record["record_kind"], RecordKindMetrics)
+	}
+	if record["event_type"] != "metrics" {
+		t.Errorf("event_type = %v, want %q", record["event_type"], "metrics")
+	}
+	if record["source"] != cfg.Source {
+		t.Errorf("source = %v, want %q", record["source"], cfg.Source)
+	}
+	if record["ts"] != "2026-02-03T15:30:00Z" {
+		t.Errorf("ts = %v, want %q", record["ts"], "2026-02-03T15:30:00Z")
+	}
+	if record["runs_started"] != int64(1) {
+		t.Errorf("runs_started = %v, want 1", record["runs_started"])
+	}
+	if record["events_received"] != int64(42) {
+		t.Errorf("events_received = %v, want 42", record["events_received"])
+	}
+	if record["policy"] != "strict" {
+		t.Errorf("policy = %v, want %q", record["policy"], "strict")
+	}
+	if record["job_id"] != "job-xyz" {
+		t.Errorf("job_id = %v, want %q", record["job_id"], "job-xyz")
+	}
+
+	// Verify dropped_by_type is a deep copy
+	dropped, ok := record["dropped_by_type"].(map[string]int64)
+	if !ok {
+		t.Fatalf("dropped_by_type type = %T, want map[string]int64", record["dropped_by_type"])
+	}
+	if dropped["debug"] != 2 {
+		t.Errorf("dropped_by_type[debug] = %d, want 2", dropped["debug"])
 	}
 }
 

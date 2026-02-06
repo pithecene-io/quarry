@@ -19,6 +19,7 @@ func StatsCommand() *cli.Command {
 			statsTasksCommand(),
 			statsProxiesCommand(),
 			statsExecutorsCommand(),
+			statsMetricsCommand(),
 		},
 	}
 }
@@ -131,4 +132,26 @@ func statsExecutorsAction(c *cli.Context) error {
 	}
 
 	return r.Render(reader.StatsExecutors())
+}
+
+func statsMetricsCommand() *cli.Command {
+	return &cli.Command{
+		Name:   "metrics",
+		Usage:  "Show contract metrics (run lifecycle, ingestion, executor, storage)",
+		Flags:  TUIReadOnlyFlags(),
+		Action: statsMetricsAction,
+	}
+}
+
+func statsMetricsAction(c *cli.Context) error {
+	r, err := render.NewRenderer(c)
+	if err != nil {
+		return err
+	}
+
+	if c.Bool("tui") {
+		return r.RenderTUI("stats_metrics", reader.StatsMetrics())
+	}
+
+	return r.Render(reader.StatsMetrics())
 }
