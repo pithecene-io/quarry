@@ -19,6 +19,7 @@ type Reader interface {
 	StatsTasks() *TaskStats
 	StatsProxies() []ProxyStats
 	StatsExecutors() *ExecutorStats
+	StatsMetrics() *MetricsSnapshot
 
 	// List operations
 	ListRuns(opts ListRunsOptions) []ListRunItem

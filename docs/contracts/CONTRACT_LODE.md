@@ -77,28 +77,6 @@ types without inspecting `event_type` or payload structure.
 
 ---
 
-## Metrics Storage
-
-Run metrics snapshots are stored as records under `event_type=metrics`.
-
-### Metrics Record Schema
-
-| Field             | Type   | Required | Description                                      |
-|------------------|--------|----------|--------------------------------------------------|
-| `record_kind`     | string | yes      | `"metrics"`                                      |
-| `run_id`          | string | yes      | Run identifier                                   |
-| `job_id`          | string | no       | Job identifier (if known)                        |
-| `policy`          | string | yes      | Policy name                                      |
-| `executor`        | string | yes      | Executor identifier                              |
-| `storage_backend` | string | yes      | Storage backend name (`fs`, `s3`, etc.)          |
-| `ts`              | string | yes      | Snapshot timestamp (ISO 8601 UTC)                |
-| `metrics`         | object | yes      | Metrics payload per CONTRACT_METRICS.md          |
-
-The metrics record is a snapshot captured after run completion and policy
-flush. It is append-only and does not replace prior snapshots.
-
----
-
 ## Artifact Chunk Storage
 
 Artifact binary data is stored as chunk records under `event_type=artifact`.
@@ -147,6 +125,46 @@ If present:
 - `checksum` contains the hex-encoded MD5 digest of the chunk data.
 
 Checksum validation is a downstream consumer responsibility.
+
+---
+
+## Metrics Record Storage
+
+A metrics snapshot is written at run completion under `event_type=metrics`.
+Write is best-effort — failure produces a warning but does not change run outcome.
+
+### Metrics Record Schema
+
+Field names use the `_total` suffix to match CONTRACT_METRICS.md naming.
+
+| Field                           | Type              | Required | Description                              |
+|---------------------------------|-------------------|----------|------------------------------------------|
+| `record_kind`                   | string            | yes      | `"metrics"`                              |
+| `event_type`                    | string            | yes      | `"metrics"` (Hive partition key)         |
+| `ts`                            | string (RFC3339)  | yes      | Run completion timestamp                 |
+| `runs_started_total`            | int64             | yes      | Run lifecycle counter                    |
+| `runs_completed_total`          | int64             | yes      | Run lifecycle counter                    |
+| `runs_failed_total`             | int64             | yes      | Run lifecycle counter                    |
+| `runs_crashed_total`            | int64             | yes      | Run lifecycle counter                    |
+| `events_received_total`         | int64             | yes      | Ingestion counter                        |
+| `events_persisted_total`        | int64             | yes      | Ingestion counter                        |
+| `events_dropped_total`          | int64             | yes      | Ingestion counter                        |
+| `dropped_by_type`               | map[string]int64  | no       | Per-type drop breakdown                  |
+| `executor_launch_success_total` | int64             | yes      | Executor counter                         |
+| `executor_launch_failure_total` | int64             | yes      | Executor counter                         |
+| `executor_crash_total`          | int64             | yes      | Executor counter                         |
+| `ipc_decode_errors_total`       | int64             | yes      | Executor counter                         |
+| `lode_write_success_total`      | int64             | yes      | Storage counter                          |
+| `lode_write_failure_total`      | int64             | yes      | Storage counter                          |
+| `lode_write_retry_total`        | int64             | yes      | Storage counter (reserved)               |
+| `policy`                        | string            | yes      | Dimension: policy name                   |
+| `executor`                      | string            | yes      | Dimension: executor identity             |
+| `storage_backend`               | string            | yes      | Dimension: storage backend               |
+| `run_id`                        | string            | yes      | Dimension: run identifier                |
+| `job_id`                        | string            | no       | Dimension: job identifier                |
+| `source`                        | string            | yes      | Partition key                            |
+| `category`                      | string            | yes      | Partition key                            |
+| `day`                           | string            | yes      | Partition key (YYYY-MM-DD)               |
 
 ---
 

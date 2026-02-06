@@ -350,6 +350,26 @@
               "description": "Enable interactive TUI mode"
             }
           }
+        },
+        "metrics": {
+          "flags": {
+            "format": {
+              "type": "string",
+              "aliases": ["f"],
+              "required": false,
+              "description": "Output format: json, table, yaml"
+            },
+            "no-color": {
+              "type": "bool",
+              "required": false,
+              "description": "Disable colored output (table format only)"
+            },
+            "tui": {
+              "type": "bool",
+              "required": false,
+              "description": "Enable interactive TUI mode"
+            }
+          }
         }
       }
     },

@@ -138,6 +138,32 @@ func (r *StubReader) StatsExecutors() *ExecutorStats {
 	}
 }
 
+// StatsMetrics returns stub metrics statistics.
+func (r *StubReader) StatsMetrics() *MetricsSnapshot {
+	return &MetricsSnapshot{
+		RunsStarted:           100,
+		RunsCompleted:         90,
+		RunsFailed:            5,
+		RunsCrashed:           5,
+		EventsReceived:        50000,
+		EventsPersisted:       49500,
+		EventsDropped:         500,
+		DroppedByType:         map[string]int64{"log": 300, "debug": 200},
+		ExecutorLaunchSuccess: 100,
+		ExecutorLaunchFailure: 0,
+		ExecutorCrash:         5,
+		IPCDecodeErrors:       2,
+		LodeWriteSuccess:      980,
+		LodeWriteFailure:      3,
+		LodeWriteRetry:        0,
+		Policy:                "strict",
+		Executor:              "executor.js",
+		StorageBackend:        "fs",
+		RunID:                 "stub-run-001",
+		JobID:                 "stub-job-001",
+	}
+}
+
 // ListRuns returns stub run list.
 func (r *StubReader) ListRuns(opts ListRunsOptions) []ListRunItem {
 	now := time.Now()

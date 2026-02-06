@@ -52,7 +52,8 @@ quarry
 │  ├─ jobs
 │  ├─ tasks
 │  ├─ proxies
-│  └─ executors
+│  ├─ executors
+│  └─ metrics
 ├─ list
 │  ├─ runs
 │  ├─ jobs
@@ -116,7 +117,7 @@ Commands that do not support TUI must error if `--tui` is provided.
 
 Supported TUI commands:
 - `inspect run|job|task|proxy|executor`
-- `stats runs|jobs|tasks|proxies|executors`
+- `stats runs|jobs|tasks|proxies|executors|metrics`
 
 Unsupported (must error with `--tui`):
 - `list` commands
@@ -256,7 +257,7 @@ Response must include:
 
 ### `stats metrics`
 
-Returns the most recent metrics snapshot derived from Lode metrics records.
+Returns the most recent metrics snapshot.
 
 Response:
 ```
@@ -274,7 +275,7 @@ MetricsSnapshot:
   events_received_total: number
   events_persisted_total: number
   events_dropped_total: number
-  events_dropped_by_type: map<string, number>
+  dropped_by_type: map[string]number (optional)
   executor_launch_success_total: number
   executor_launch_failure_total: number
   executor_crash_total: number
@@ -283,6 +284,10 @@ MetricsSnapshot:
   lode_write_failure_total: number
   lode_write_retry_total: number
 ```
+
+Metric names match CONTRACT_METRICS.md. Dimensions are included for
+traceability. Data source progression per CONTRACT_METRICS.md §Exposure
+Requirements: stub-backed in v0.3.0, Lode-backed post-v0.3.0.
 
 ---
 

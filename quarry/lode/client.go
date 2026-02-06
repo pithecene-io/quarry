@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/justapithecus/lode/lode"
 
+	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/types"
 )
 
@@ -163,6 +165,18 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 		c.chunksSeen[chunk.ArtifactID] = struct{}{}
 	}
 
+	return nil
+}
+
+// WriteMetrics writes a metrics snapshot to Lode.
+// Written to event_type=metrics partition with record_kind=metrics.
+// This is a standalone write (not part of the event/chunk pipeline).
+func (c *LodeClient) WriteMetrics(ctx context.Context, snap metrics.Snapshot, completedAt time.Time) error {
+	record := toMetricsRecordMap(snap, c.config, completedAt)
+	_, err := c.dataset.Write(ctx, []any{record}, lode.Metadata{})
+	if err != nil {
+		return WrapWriteError(err, buildPartitionPath(c.config, "metrics"))
+	}
 	return nil
 }
 
