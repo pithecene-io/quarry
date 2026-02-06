@@ -259,6 +259,17 @@ Response must include:
 
 Returns the most recent metrics snapshot.
 
+Optional flags:
+- `--storage-backend=fs|s3` — storage backend for Lode reads
+- `--storage-path=<path>` — storage path (fs: directory, s3: bucket/prefix)
+- `--storage-region=<region>` — AWS region for S3 backend
+- `--run-id=<id>` — read metrics for a specific run
+- `--source=<source>` — filter by source partition
+
+Both `--storage-backend` and `--storage-path` must be provided together.
+When provided, metrics are read from Lode storage. When omitted, stub
+data is returned (see Data Source Progression in CONTRACT_METRICS.md).
+
 Response:
 ```
 MetricsSnapshot:
@@ -286,8 +297,15 @@ MetricsSnapshot:
 ```
 
 Metric names match CONTRACT_METRICS.md. Dimensions are included for
-traceability. Data source progression per CONTRACT_METRICS.md §Exposure
-Requirements: stub-backed in v0.3.0, Lode-backed post-v0.3.0.
+traceability.
+
+Usage examples:
+```
+quarry stats metrics --storage-backend fs --storage-path /data/quarry
+quarry stats metrics --storage-backend fs --storage-path /data/quarry --run-id run-001
+quarry stats metrics --storage-backend s3 --storage-path mybucket/quarry --storage-region us-west-2
+quarry stats metrics --format json
+```
 
 ---
 

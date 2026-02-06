@@ -85,6 +85,11 @@ func TestStatsMetricsResponse(t *testing.T) {
 		t.Fatal("StatsMetrics() returned nil")
 	}
 
+	// Ts must not be empty per CONTRACT_CLI.md
+	if resp.Ts == "" {
+		t.Error("Ts should not be empty")
+	}
+
 	// All counters must be non-negative
 	if resp.RunsStarted < 0 {
 		t.Errorf("RunsStarted = %d, should be >= 0", resp.RunsStarted)
