@@ -406,18 +406,28 @@ func TestParseMetricsRecord_MissingRequiredFields(t *testing.T) {
 	}{
 		{
 			name:   "missing ts",
-			record: map[string]any{"record_kind": "metrics", "run_id": "run-1", "policy": "strict"},
+			record: map[string]any{"record_kind": "metrics", "run_id": "run-1", "policy": "strict", "executor": "e.js", "storage_backend": "fs"},
 			errMsg: "ts",
 		},
 		{
 			name:   "missing run_id",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "policy": "strict"},
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "policy": "strict", "executor": "e.js", "storage_backend": "fs"},
 			errMsg: "run_id",
 		},
 		{
 			name:   "missing policy",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1"},
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "executor": "e.js", "storage_backend": "fs"},
 			errMsg: "policy",
+		},
+		{
+			name:   "missing executor",
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "policy": "strict", "storage_backend": "fs"},
+			errMsg: "executor",
+		},
+		{
+			name:   "missing storage_backend",
+			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "policy": "strict", "executor": "e.js"},
+			errMsg: "storage_backend",
 		},
 		{
 			name:   "all required missing",
@@ -441,10 +451,12 @@ func TestParseMetricsRecord_MissingRequiredFields(t *testing.T) {
 
 func TestParseMetricsRecord_Ts(t *testing.T) {
 	record := map[string]any{
-		"record_kind": "metrics",
-		"ts":          "2026-02-03T15:30:00Z",
-		"run_id":      "run-1",
-		"policy":      "strict",
+		"record_kind":    "metrics",
+		"ts":             "2026-02-03T15:30:00Z",
+		"run_id":         "run-1",
+		"policy":         "strict",
+		"executor":       "executor.js",
+		"storage_backend": "fs",
 	}
 
 	parsed, err := ParseMetricsRecord(record)

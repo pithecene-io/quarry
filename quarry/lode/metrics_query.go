@@ -122,6 +122,12 @@ func ParseMetricsRecord(record map[string]any) (*reader.MetricsSnapshot, error) 
 	if snap.Policy == "" {
 		return nil, fmt.Errorf("metrics record missing required field: policy")
 	}
+	if snap.Executor == "" {
+		return nil, fmt.Errorf("metrics record missing required field: executor")
+	}
+	if snap.StorageBackend == "" {
+		return nil, fmt.Errorf("metrics record missing required field: storage_backend")
+	}
 
 	return snap, nil
 }
