@@ -70,9 +70,32 @@ All stored records MUST include a `record_kind` discriminator field.
 | `event`          | Standard event envelope              |
 | `artifact_event` | Artifact commit (manifest) event     |
 | `artifact_chunk` | Artifact binary chunk                |
+| `metrics`        | Run metrics snapshot                 |
 
 The `record_kind` field enables downstream consumers to distinguish record
 types without inspecting `event_type` or payload structure.
+
+---
+
+## Metrics Storage
+
+Run metrics snapshots are stored as records under `event_type=metrics`.
+
+### Metrics Record Schema
+
+| Field             | Type   | Required | Description                                      |
+|------------------|--------|----------|--------------------------------------------------|
+| `record_kind`     | string | yes      | `"metrics"`                                      |
+| `run_id`          | string | yes      | Run identifier                                   |
+| `job_id`          | string | no       | Job identifier (if known)                        |
+| `policy`          | string | yes      | Policy name                                      |
+| `executor`        | string | yes      | Executor identifier                              |
+| `storage_backend` | string | yes      | Storage backend name (`fs`, `s3`, etc.)          |
+| `ts`              | string | yes      | Snapshot timestamp (ISO 8601 UTC)                |
+| `metrics`         | object | yes      | Metrics payload per CONTRACT_METRICS.md          |
+
+The metrics record is a snapshot captured after run completion and policy
+flush. It is append-only and does not replace prior snapshots.
 
 ---
 
