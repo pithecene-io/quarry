@@ -32,6 +32,8 @@ type Config struct {
 	Day string
 	// RunID is the partition key for run identifier.
 	RunID string
+	// Policy is the ingestion policy name (e.g. "strict", "buffered").
+	Policy string
 }
 
 // Sink is a Lode-backed implementation of policy.Sink.

@@ -18,6 +18,7 @@ func TestLodeClient_WriteEvents(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -62,6 +63,7 @@ func TestLodeClient_WriteArtifactEvent(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -111,6 +113,7 @@ func TestLodeClient_WriteChunks(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -147,6 +150,7 @@ func TestLodeClient_ChunkOffset(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	// Test that offsets are computed correctly per-artifact
@@ -184,6 +188,7 @@ func TestLodeClient_ChunkOffset_AcrossBatches(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -227,6 +232,7 @@ func TestLodeClient_CommitRequiresChunks(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -267,6 +273,7 @@ func TestLodeClient_CommitSucceedsWithChunks(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -311,6 +318,7 @@ func TestLodeClient_OffsetsResetAfterCommit(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -380,6 +388,7 @@ func TestLodeClient_CommitRejectsMissingArtifactID(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -433,6 +442,7 @@ func TestToEventRecord(t *testing.T) {
 		Category: "my-category",
 		Day:      "2026-02-03",
 		RunID:    "run-abc",
+		Policy:   "strict",
 	}
 
 	jobID := "job-xyz"
@@ -536,6 +546,7 @@ func TestLodeClient_WriteMetrics(t *testing.T) {
 		Category: "test-category",
 		Day:      "2026-02-03",
 		RunID:    "run-123",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, lode.NewMemoryFactory())
@@ -573,6 +584,7 @@ func TestToMetricsRecordMap(t *testing.T) {
 		Category: "my-category",
 		Day:      "2026-02-03",
 		RunID:    "run-abc",
+		Policy:   "strict",
 	}
 
 	snap := metrics.Snapshot{
@@ -645,6 +657,7 @@ func TestToArtifactCommitRecord(t *testing.T) {
 		Category: "my-category",
 		Day:      "2026-02-03",
 		RunID:    "run-abc",
+		Policy:   "strict",
 	}
 
 	e := &types.EventEnvelope{

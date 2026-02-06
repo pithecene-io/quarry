@@ -31,6 +31,7 @@ func TestNewReadDataset_WriteReadRoundTrip(t *testing.T) {
 		Category: "rt-category",
 		Day:      "2026-02-04",
 		RunID:    "run-rt",
+		Policy:   "strict",
 	}
 
 	client, err := NewLodeClientWithFactory(cfg, factory)
