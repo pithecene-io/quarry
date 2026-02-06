@@ -4,7 +4,10 @@
 //nolint:revive // types is a common Go package naming convention
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // RunMeta contains run identity and lineage metadata per CONTRACT_RUN.md.
 type RunMeta struct {
@@ -24,7 +27,7 @@ type RunMeta struct {
 //   - attempt > 1 => parent_run_id must be present (retry run)
 func (r *RunMeta) Validate() error {
 	if r.RunID == "" {
-		return fmt.Errorf("run_id must be non-empty")
+		return errors.New("run_id must be non-empty")
 	}
 
 	if r.Attempt < 1 {
@@ -32,7 +35,7 @@ func (r *RunMeta) Validate() error {
 	}
 
 	if r.Attempt == 1 && r.ParentRunID != nil {
-		return fmt.Errorf("initial run (attempt=1) must not have parent_run_id")
+		return errors.New("initial run (attempt=1) must not have parent_run_id")
 	}
 
 	if r.Attempt > 1 && r.ParentRunID == nil {

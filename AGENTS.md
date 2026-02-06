@@ -54,6 +54,7 @@ If scope feels ambiguous or expanding, **pause and ask**.
 ## Go Rules
 
 - Prefer `any` over `interface{}`
+- Prefer `errors.New` over `fmt.Errorf` when no formatting verbs are needed
 
 ---
 

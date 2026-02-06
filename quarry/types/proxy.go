@@ -1,7 +1,10 @@
 // Package types defines core domain types for the Quarry runtime.
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ProxyProtocol is the allowed proxy protocol.
 // Note: socks5 is best-effort with Puppeteer.
@@ -68,7 +71,7 @@ func (p *ProxyEndpoint) Validate() error {
 	hasUsername := p.Username != nil && *p.Username != ""
 	hasPassword := p.Password != nil && *p.Password != ""
 	if hasUsername != hasPassword {
-		return fmt.Errorf("username and password must be provided together")
+		return errors.New("username and password must be provided together")
 	}
 
 	return nil
@@ -117,7 +120,7 @@ type ProxyPool struct {
 // Validate validates a proxy pool per CONTRACT_PROXY.md hard validation rules.
 func (p *ProxyPool) Validate() error {
 	if p.Name == "" {
-		return fmt.Errorf("pool name is required")
+		return errors.New("pool name is required")
 	}
 
 	switch p.Strategy {
@@ -128,7 +131,7 @@ func (p *ProxyPool) Validate() error {
 	}
 
 	if len(p.Endpoints) == 0 {
-		return fmt.Errorf("pool must have at least one endpoint")
+		return errors.New("pool must have at least one endpoint")
 	}
 
 	for i, ep := range p.Endpoints {
@@ -146,7 +149,7 @@ func (p *ProxyPool) Validate() error {
 		}
 
 		if p.Sticky.TTLMs != nil && *p.Sticky.TTLMs <= 0 {
-			return fmt.Errorf("sticky TTL must be positive")
+			return errors.New("sticky TTL must be positive")
 		}
 	}
 

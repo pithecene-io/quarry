@@ -2,6 +2,7 @@ package lode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,7 +25,7 @@ type S3Config struct {
 // Validate checks that required S3 configuration is present.
 func (c *S3Config) Validate() error {
 	if c.Bucket == "" {
-		return fmt.Errorf("S3 bucket is required")
+		return errors.New("S3 bucket is required")
 	}
 	return nil
 }

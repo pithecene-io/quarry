@@ -131,7 +131,7 @@ func (m *ExecutorManager) Stderr() io.Reader {
 // Must be called after Start.
 func (m *ExecutorManager) Wait() (*ExecutorResult, error) {
 	if m.cmd == nil {
-		return nil, fmt.Errorf("executor not started")
+		return nil, errors.New("executor not started")
 	}
 
 	// Read stderr (non-blocking capture)

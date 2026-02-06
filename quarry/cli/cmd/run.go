@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -707,7 +708,7 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoint, error) {
 	// Load proxy pools from config file
 	if config.configPath == "" {
-		return nil, fmt.Errorf("--proxy-config required when --proxy-pool is specified")
+		return nil, errors.New("--proxy-config required when --proxy-pool is specified")
 	}
 
 	pools, err := loadProxyPools(config.configPath)
