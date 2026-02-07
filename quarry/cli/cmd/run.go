@@ -17,6 +17,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/justapithecus/quarry/adapter"
+	redisadapter "github.com/justapithecus/quarry/adapter/redis"
 	"github.com/justapithecus/quarry/adapter/webhook"
 	quarryconfig "github.com/justapithecus/quarry/cli/config"
 	"github.com/justapithecus/quarry/executor"
@@ -212,7 +213,7 @@ ADVANCED:
 			// Adapter flags (event-bus notification)
 			&cli.StringFlag{
 				Name:  "adapter",
-				Usage: "Event-bus adapter type (webhook)",
+				Usage: "Event-bus adapter type (webhook, redis)",
 			},
 			&cli.StringFlag{
 				Name:  "adapter-url",
@@ -231,6 +232,10 @@ ADVANCED:
 				Name:  "adapter-retries",
 				Usage: "Adapter retry attempts",
 				Value: webhook.DefaultRetries,
+			},
+			&cli.StringFlag{
+				Name:  "adapter-channel",
+				Usage: "Pub/sub channel name for Redis adapter (default: quarry:run_completed)",
 			},
 		},
 		Action: runAction,
@@ -268,6 +273,7 @@ type storageChoice struct {
 type adapterChoice struct {
 	adapterType string
 	url         string
+	channel     string
 	headers     map[string]string
 	timeout     time.Duration
 	retries     int
@@ -613,8 +619,13 @@ func parseAdapterConfigWithPrecedence(c *cli.Context, cfg *quarryconfig.Config, 
 		if ac.url == "" {
 			return ac, fmt.Errorf("--adapter-url is required when --adapter=webhook")
 		}
+	case "redis":
+		if ac.url == "" {
+			return ac, fmt.Errorf("--adapter-url is required when --adapter=redis")
+		}
+		ac.channel = resolveString(c, "adapter-channel", configVal(cfg, func(c *quarryconfig.Config) string { return c.Adapter.Channel }))
 	default:
-		return ac, fmt.Errorf("unknown adapter type: %q (supported: webhook)", ac.adapterType)
+		return ac, fmt.Errorf("unknown adapter type: %q (supported: webhook, redis)", ac.adapterType)
 	}
 
 	// Merge config headers first, then CLI headers override
@@ -629,6 +640,11 @@ func parseAdapterConfigWithPrecedence(c *cli.Context, cfg *quarryconfig.Config, 
 			return ac, fmt.Errorf("invalid --adapter-header %q: expected key=value", h)
 		}
 		ac.headers[k] = v
+	}
+
+	// Warn about irrelevant flags for the chosen adapter type
+	if ac.adapterType == "redis" && len(ac.headers) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: --adapter-header is ignored for redis adapter\n")
 	}
 
 	return ac, nil
@@ -985,6 +1001,13 @@ func buildAdapter(ac adapterChoice) (adapter.Adapter, error) {
 		return webhook.New(webhook.Config{
 			URL:     ac.url,
 			Headers: ac.headers,
+			Timeout: ac.timeout,
+			Retries: ac.retries,
+		})
+	case "redis":
+		return redisadapter.New(redisadapter.Config{
+			URL:     ac.url,
+			Channel: ac.channel,
 			Timeout: ac.timeout,
 			Retries: ac.retries,
 		})

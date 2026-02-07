@@ -58,6 +58,7 @@ type ProxySelection struct {
 type AdapterConfig struct {
 	Type    string            `yaml:"type"`
 	URL     string            `yaml:"url"`
+	Channel string            `yaml:"channel,omitempty"`
 	Headers map[string]string `yaml:"headers,omitempty"`
 	Timeout Duration          `yaml:"timeout,omitempty"`
 	Retries *int              `yaml:"retries,omitempty"`

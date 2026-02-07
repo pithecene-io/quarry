@@ -341,6 +341,44 @@ func TestDuration_UnmarshalYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_RedisAdapterConfig(t *testing.T) {
+	yaml := `adapter:
+  type: redis
+  url: redis://localhost:6379/0
+  channel: quarry:run_completed
+  timeout: 5s
+  retries: 3
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	assertEqual(t, "adapter.type", cfg.Adapter.Type, "redis")
+	assertEqual(t, "adapter.url", cfg.Adapter.URL, "redis://localhost:6379/0")
+	assertEqual(t, "adapter.channel", cfg.Adapter.Channel, "quarry:run_completed")
+	if cfg.Adapter.Timeout.Duration != 5*time.Second {
+		t.Errorf("expected adapter.timeout=5s, got %v", cfg.Adapter.Timeout.Duration)
+	}
+	if cfg.Adapter.Retries == nil || *cfg.Adapter.Retries != 3 {
+		t.Errorf("expected adapter.retries=3")
+	}
+}
+
+func TestLoad_RedisAdapterChannelOmitted(t *testing.T) {
+	yaml := `adapter:
+  type: redis
+  url: redis://localhost:6379/0
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	assertEqual(t, "adapter.type", cfg.Adapter.Type, "redis")
+	assertEqual(t, "adapter.channel", cfg.Adapter.Channel, "")
+}
+
 // writeTemp writes content to a temp file and returns the path.
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()

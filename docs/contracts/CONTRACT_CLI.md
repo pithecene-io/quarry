@@ -142,9 +142,10 @@ See CONTRACT_INTEGRATION.md for semantics.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--adapter` | string | | Adapter type (`webhook`) |
+| `--adapter` | string | | Adapter type (`webhook`, `redis`) |
 | `--adapter-url` | string | | Endpoint URL (required when `--adapter` set) |
-| `--adapter-header` | string (repeatable) | | Custom header as `key=value` |
+| `--adapter-header` | string (repeatable) | | Custom header as `key=value` (webhook only) |
+| `--adapter-channel` | string | | Pub/sub channel name (redis only, default `quarry:run_completed`) |
 | `--adapter-timeout` | duration | `10s` | Per-request timeout |
 | `--adapter-retries` | int | `3` | Retry attempts |
 
