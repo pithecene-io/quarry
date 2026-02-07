@@ -13,6 +13,54 @@ _No unreleased changes._
 
 ---
 
+## [0.3.3] - 2026-02-07
+
+### Added
+
+- **Storage**: S3-compatible provider support — new `--storage-endpoint` and `--storage-s3-path-style` CLI flags for Cloudflare R2, MinIO, and other S3-compatible backends (#87)
+- **Docs**: S3-compatible storage flags and R2 examples added to cli.md, configuration.md, and PUBLIC_API.md (#89)
+- **Docs**: S3-compatible provider support section added to CONTRACT_LODE.md (#87)
+
+### Fixed
+
+- **Release**: JSR now publishes TypeScript source instead of compiled dist, preserving full type information (#88)
+- **CLI**: Fixed duplicate run-id in usage text (#89)
+
+---
+
+## [0.3.2] - 2026-02-07
+
+### Added
+
+- **Release**: Cross-compiled platform binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64) included in GitHub Releases (#82)
+- **Release**: mise install support — `mise install github:justapithecus/quarry@<version>` (#82)
+- **Release**: JSR publishing via OIDC (zero-secret) — `npx jsr add @justapithecus/quarry-sdk` (#83)
+- **Release**: Dual SDK distribution on JSR (public) and GitHub Packages (restricted) (#82, #83)
+- **Release**: Checksums manifest (`checksums.txt`) included in every release (#82)
+- **Docs**: Installation docs updated across README, PUBLIC_API.md, and SDK README (#82)
+
+---
+
+## [0.3.1] - 2026-02-06
+
+### Added
+
+- **Executor**: puppeteer-extra support with stealth and adblocker plugins (#75)
+  - Stealth enabled by default (`QUARRY_STEALTH=0` to disable)
+  - Adblocker opt-in via `QUARRY_ADBLOCKER=1`
+  - No-sandbox mode for CI via `QUARRY_NO_SANDBOX=1`
+- **Docs**: Consolidated configuration reference (`docs/guides/configuration.md`) (#81)
+
+### Changed
+
+- **Refactor**: Cleanup passes across SDK, executor, and Go runtime — extract helpers, reduce duplication, declarative validation (#76, #77, #78, #79)
+
+### Fixed
+
+- **Build**: Stabilized embedded executor bundle sync (#80)
+
+---
+
 ## [0.3.0] - 2026-02-06
 
 ### Added
@@ -141,6 +189,9 @@ _No unreleased changes._
 
 ---
 
+[0.3.3]: https://github.com/justapithecus/quarry/releases/tag/v0.3.3
+[0.3.2]: https://github.com/justapithecus/quarry/releases/tag/v0.3.2
+[0.3.1]: https://github.com/justapithecus/quarry/releases/tag/v0.3.1
 [0.3.0]: https://github.com/justapithecus/quarry/releases/tag/v0.3.0
 [0.2.2]: https://github.com/justapithecus/quarry/releases/tag/v0.2.2
 [0.2.1]: https://github.com/justapithecus/quarry/releases/tag/v0.2.1

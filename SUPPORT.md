@@ -1,23 +1,19 @@
-# Support Posture — Quarry v0.2.1
+# Support Posture — Quarry v0.3.3
 
-This document defines support expectations for Quarry v0.2.1.
+This document defines support expectations for Quarry v0.3.3.
 
 ---
 
 ## Maturity Level
 
-**v0.2.1 is an early release.** APIs and behaviors may change in subsequent
+**v0.3.3 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
 
 ---
 
 ## Known Issues
 
-_No known issues in v0.2.1._
-
-### Fixed in v0.2.1
-
-- **IPC Race Condition** ([#56](https://github.com/justapithecus/quarry/issues/56)): Fixed issue where fast-completing scripts intermittently reported `executor_crash` outcome. Upgrade to v0.2.1 to resolve.
+_No known issues in v0.3.3._
 
 ---
 
@@ -127,12 +123,12 @@ Quarry uses lockstep versioning:
 Check versions:
 ```bash
 quarry version
-# 0.2.0 (commit: ...)
+# 0.3.3 (commit: ...)
 ```
 
 ---
 
 ## No Warranty
 
-Quarry v0.2.0 is provided "as is" without warranty of any kind.
+Quarry v0.3.3 is provided "as is" without warranty of any kind.
 See LICENSE for details.
