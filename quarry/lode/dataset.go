@@ -59,7 +59,7 @@ func NewReadDatasetS3(dataset string, s3cfg S3Config) (lode.Dataset, error) {
 
 // isMetricsSnapshot checks if a snapshot contains metrics data
 // by examining file paths for the event_type=metrics partition.
-func isMetricsSnapshot(snap *lode.Snapshot) bool {
+func isMetricsSnapshot(snap *lode.DatasetSnapshot) bool {
 	for _, f := range snap.Manifest.Files {
 		if matchesPartitionValue(f.Path, "event_type", "metrics") {
 			return true
@@ -70,7 +70,7 @@ func isMetricsSnapshot(snap *lode.Snapshot) bool {
 
 // snapshotMatchesFilter checks if a snapshot's file paths match
 // the given partition key=value filter.
-func snapshotMatchesFilter(snap *lode.Snapshot, key, value string) bool {
+func snapshotMatchesFilter(snap *lode.DatasetSnapshot, key, value string) bool {
 	if value == "" {
 		return true
 	}
