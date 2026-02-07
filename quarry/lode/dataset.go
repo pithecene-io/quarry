@@ -13,9 +13,9 @@ import (
 
 // NewReadDataset creates a Lode Dataset for reading.
 // Uses the same codec and layout as the write path to ensure compatibility.
-func NewReadDataset(factory lode.StoreFactory) (lode.Dataset, error) {
+func NewReadDataset(dataset string, factory lode.StoreFactory) (lode.Dataset, error) {
 	return lode.NewDataset(
-		lode.DatasetID("quarry"),
+		lode.DatasetID(dataset),
 		factory,
 		lode.WithHiveLayout("source", "category", "day", "run_id", "event_type"),
 		lode.WithCodec(lode.NewJSONLCodec()),
@@ -23,13 +23,13 @@ func NewReadDataset(factory lode.StoreFactory) (lode.Dataset, error) {
 }
 
 // NewReadDatasetFS creates a read Dataset with filesystem storage.
-func NewReadDatasetFS(rootPath string) (lode.Dataset, error) {
-	return NewReadDataset(lode.NewFSFactory(rootPath))
+func NewReadDatasetFS(dataset, rootPath string) (lode.Dataset, error) {
+	return NewReadDataset(dataset, lode.NewFSFactory(rootPath))
 }
 
 // NewReadDatasetS3 creates a read Dataset with S3 storage.
 // Uses AWS SDK default credential chain (env vars, shared config, IAM role).
-func NewReadDatasetS3(s3cfg S3Config) (lode.Dataset, error) {
+func NewReadDatasetS3(dataset string, s3cfg S3Config) (lode.Dataset, error) {
 	if err := s3cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func NewReadDatasetS3(s3cfg S3Config) (lode.Dataset, error) {
 		})
 	}
 
-	return NewReadDataset(s3Factory)
+	return NewReadDataset(dataset, s3Factory)
 }
 
 // isMetricsSnapshot checks if a snapshot contains metrics data

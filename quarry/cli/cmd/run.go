@@ -177,6 +177,11 @@ ADVANCED:
 			},
 			// Storage flags
 			&cli.StringFlag{
+				Name:  "storage-dataset",
+				Usage: "Lode dataset ID (overrides default \"quarry\")",
+				Value: lode.DefaultDataset,
+			},
+			&cli.StringFlag{
 				Name:     "storage-backend",
 				Usage:    "Storage backend: fs (filesystem) or s3 (Amazon S3)",
 				Required: true,
@@ -291,7 +296,7 @@ func runAction(c *cli.Context) error {
 	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, lodeClient, err := buildPolicy(choice, storageConfig, c.String("source"), c.String("category"), runMeta.RunID, startTime, collector)
+	pol, lodeClient, err := buildPolicy(choice, storageConfig, c.String("storage-dataset"), c.String("source"), c.String("category"), runMeta.RunID, startTime, collector)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -636,9 +641,9 @@ Quarry could not locate the executor. To fix:
   3. Or add quarry-executor to your PATH`)
 }
 
-func buildPolicy(choice policyChoice, storageConfig storageChoice, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, error) {
+func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, error) {
 	// Build storage sink
-	sink, client, err := buildStorageSink(storageConfig, source, category, runID, choice.name, startTime, collector)
+	sink, client, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
@@ -665,10 +670,10 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, source, categ
 // Storage backend and path are required - no silent fallback to stub.
 // If collector is non-nil, wraps the sink with metrics instrumentation.
 // Returns the sink, the underlying client (for metrics persistence), and any error.
-func buildStorageSink(storageConfig storageChoice, source, category, runID, policy string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, error) {
+func buildStorageSink(storageConfig storageChoice, dataset, source, category, runID, policy string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, error) {
 	// Build Lode config with partition keys
 	cfg := lode.Config{
-		Dataset:  "quarry",
+		Dataset:  dataset,
 		Source:   source,
 		Category: category,
 		Day:      lode.DeriveDay(startTime),

@@ -57,7 +57,7 @@ func TestQueryLatestMetrics_WriteAndRead(t *testing.T) {
 	}
 
 	// Read via QueryLatestMetrics
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestQueryLatestMetrics_MultipleRuns(t *testing.T) {
 	}
 
 	// Read without filter — should get latest (run-003)
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestQueryLatestMetrics_FilterByRunID(t *testing.T) {
 	}
 
 	// Filter by specific run-id
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestQueryLatestMetrics_FilterBySource(t *testing.T) {
 		}
 	}
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestQueryLatestMetrics_NoMetrics(t *testing.T) {
 	store := lode.NewMemory()
 	factory := sharedFactory(store)
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestQueryLatestMetrics_RunIDSubstringNoCollision(t *testing.T) {
 		}
 	}
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -564,7 +564,7 @@ func TestQueryLatestMetrics_SourceSubstringNoCollision(t *testing.T) {
 		}
 	}
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -619,7 +619,7 @@ func TestQueryLatestMetrics_RecordLevelFiltering(t *testing.T) {
 		t.Fatalf("WriteMetrics failed: %v", err)
 	}
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
@@ -665,7 +665,7 @@ func TestQueryLatestMetrics_TsRoundTrip(t *testing.T) {
 		t.Fatalf("WriteMetrics failed: %v", err)
 	}
 
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}

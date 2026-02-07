@@ -52,6 +52,7 @@ command reference.
 
 | Flag | Type | Purpose |
 |------|------|---------|
+| `--storage-dataset` | string | Lode dataset ID (default: `"quarry"`) |
 | `--storage-backend` | `fs` or `s3` | Backend type |
 | `--storage-path` | string | `fs`: local directory; `s3`: `bucket/optional-prefix` |
 | `--storage-region` | string | AWS region (S3 only; uses default credential chain) |

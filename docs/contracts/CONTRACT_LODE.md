@@ -20,7 +20,9 @@ Non-goals:
 
 ## Dataset Identity
 
-Quarry writes to a fixed Lode dataset ID: `quarry`.
+Quarry writes to a Lode dataset ID that defaults to `quarry`.
+The Lode dataset ID can be overridden via `--storage-dataset` on `quarry run`
+and `quarry stats metrics`.
 
 This dataset ID is a global container and is **not** the same as Quarry's
 logical `category` partition key.

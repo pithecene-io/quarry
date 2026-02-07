@@ -11,7 +11,7 @@ import (
 
 func TestNewReadDatasetFS(t *testing.T) {
 	dir := t.TempDir()
-	ds, err := NewReadDatasetFS(dir)
+	ds, err := NewReadDatasetFS("quarry", dir)
 	if err != nil {
 		t.Fatalf("NewReadDatasetFS failed: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestNewReadDataset_WriteReadRoundTrip(t *testing.T) {
 	}
 
 	// Read via Dataset.Read
-	ds, err := NewReadDataset(factory)
+	ds, err := NewReadDataset("quarry", factory)
 	if err != nil {
 		t.Fatalf("NewReadDataset failed: %v", err)
 	}
