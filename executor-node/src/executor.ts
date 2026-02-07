@@ -31,7 +31,7 @@ import {
 } from '@justapithecus/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
 import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
-import { ObservingSink, SinkAlreadyFailedError, type SinkState } from './ipc/observing-sink.js'
+import { ObservingSink, type SinkState } from './ipc/observing-sink.js'
 import { StdioSink } from './ipc/sink.js'
 import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
 
@@ -66,6 +66,32 @@ async function resolveModule(name: string, scriptPath: string): Promise<Record<s
 }
 
 /**
+ * Extract a human-readable message from an unknown error value.
+ */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/**
+ * Resolve a module or throw a descriptive error with install hints.
+ */
+async function resolveModuleOrThrow(
+  name: string,
+  scriptPath: string,
+  hint: string
+): Promise<Record<string, unknown>> {
+  try {
+    return await resolveModule(name, scriptPath)
+  } catch (err) {
+    const scriptDir = dirname(resolve(scriptPath))
+    throw new Error(
+      `Failed to load ${name}: ${errorMessage(err)}\n${hint}\n` +
+        `Install it in your project (${scriptDir}): npm install ${name}`
+    )
+  }
+}
+
+/**
  * Lazily import puppeteer with puppeteer-extra plugin support.
  *
  * Resolution strategy:
@@ -84,86 +110,59 @@ async function getPuppeteer(
   scriptPath: string,
   plugins: PluginConfig
 ): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
-  if (puppeteerModule) {
-    // Reinitialize if plugin config changed since last call
-    if (
-      cachedPluginConfig &&
-      (cachedPluginConfig.stealth !== plugins.stealth ||
-        cachedPluginConfig.adblocker !== plugins.adblocker)
-    ) {
-      puppeteerModule = null
-      cachedPluginConfig = null
-    } else {
-      return puppeteerModule
-    }
+  if (puppeteerModule && cachedPluginConfig) {
+    const configChanged =
+      cachedPluginConfig.stealth !== plugins.stealth ||
+      cachedPluginConfig.adblocker !== plugins.adblocker
+    if (!configChanged) return puppeteerModule
+    puppeteerModule = null
+    cachedPluginConfig = null
   }
 
-  const absoluteScriptPath = resolve(scriptPath)
-  const scriptDir = dirname(absoluteScriptPath)
-
   // 1. Resolve vanilla puppeteer
-  let vanillaPuppeteer: { launch: (options?: LaunchOptions) => Promise<Browser> }
-  try {
-    const mod = await resolveModule('puppeteer', scriptPath)
-    vanillaPuppeteer = mod.default as typeof vanillaPuppeteer
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    throw new Error(
-      `Failed to load puppeteer: ${message}\n` +
-        'Puppeteer is a peer dependency of quarry-executor. ' +
-        `Install it in your project (${scriptDir}): npm install puppeteer`
-    )
+  const puppeteerMod = await resolveModuleOrThrow(
+    'puppeteer',
+    scriptPath,
+    'Puppeteer is a peer dependency of quarry-executor.'
+  )
+  const vanillaPuppeteer = puppeteerMod.default as {
+    launch: (options?: LaunchOptions) => Promise<Browser>
   }
 
   // 2. Resolve puppeteer-extra and wrap vanilla puppeteer
-  let pptr: {
-    launch: (options?: LaunchOptions) => Promise<Browser>
-    use: (plugin: unknown) => void
+  const extraMod = await resolveModuleOrThrow(
+    'puppeteer-extra',
+    scriptPath,
+    'puppeteer-extra is a peer dependency of quarry-executor.'
+  )
+  const { addExtra } = extraMod as {
+    addExtra: (puppeteer: unknown) => {
+      launch: (options?: LaunchOptions) => Promise<Browser>
+      use: (plugin: unknown) => void
+    }
   }
-  try {
-    const extraMod = await resolveModule('puppeteer-extra', scriptPath)
-    const { addExtra } = extraMod as { addExtra: (puppeteer: unknown) => typeof pptr }
-    pptr = addExtra(vanillaPuppeteer)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    throw new Error(
-      `Failed to load puppeteer-extra: ${message}\n` +
-        'puppeteer-extra is a peer dependency of quarry-executor. ' +
-        `Install it in your project (${scriptDir}): npm install puppeteer-extra`
-    )
-  }
+  const pptr = addExtra(vanillaPuppeteer)
 
   // 3. Apply stealth plugin (on by default)
   if (plugins.stealth) {
-    try {
-      const stealthMod = await resolveModule('puppeteer-extra-plugin-stealth', scriptPath)
-      const StealthPlugin = stealthMod.default as () => unknown
-      pptr.use(StealthPlugin())
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      throw new Error(
-        `Failed to load puppeteer-extra-plugin-stealth: ${message}\n` +
-          'Stealth is enabled by default. ' +
-          `Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-stealth\n` +
-          'Or disable stealth with QUARRY_STEALTH=0'
-      )
-    }
+    const stealthMod = await resolveModuleOrThrow(
+      'puppeteer-extra-plugin-stealth',
+      scriptPath,
+      'Stealth is enabled by default.\nOr disable stealth with QUARRY_STEALTH=0'
+    )
+    const StealthPlugin = stealthMod.default as () => unknown
+    pptr.use(StealthPlugin())
   }
 
   // 4. Apply adblocker plugin (off by default)
   if (plugins.adblocker) {
-    try {
-      const adblockerMod = await resolveModule('puppeteer-extra-plugin-adblocker', scriptPath)
-      const AdblockerPlugin = adblockerMod.default as (opts?: Record<string, unknown>) => unknown
-      pptr.use(AdblockerPlugin({ blockTrackers: true }))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      throw new Error(
-        `Failed to load puppeteer-extra-plugin-adblocker: ${message}\n` +
-          'Adblocker was enabled but the plugin is not installed. ' +
-          `Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-adblocker`
-      )
-    }
+    const adblockerMod = await resolveModuleOrThrow(
+      'puppeteer-extra-plugin-adblocker',
+      scriptPath,
+      'Adblocker was enabled but the plugin is not installed.'
+    )
+    const AdblockerPlugin = adblockerMod.default as (opts?: Record<string, unknown>) => unknown
+    pptr.use(AdblockerPlugin({ blockTrackers: true }))
   }
 
   cachedPluginConfig = plugins
@@ -302,18 +301,39 @@ function buildPuppeteerLaunchOptions(
 }
 
 /**
+ * Emit run_result control frame. Best-effort — never throws.
+ */
+async function emitRunResult(
+  stdioSink: StdioSink,
+  outcome: ExecutionOutcome,
+  proxy: ProxyEndpoint | undefined
+): Promise<void> {
+  try {
+    const runResultOutcome = toRunResultOutcome(outcome)
+    const proxyUsed = proxy ? redactProxy(proxy) : undefined
+    await stdioSink.writeRunResult(runResultOutcome, proxyUsed)
+  } catch {
+    // Best effort — don't fail the run if run_result emission fails
+  }
+}
+
+/**
+ * Safely close a resource, ignoring errors.
+ */
+async function safeClose(resource: { close(): Promise<void> } | null): Promise<void> {
+  if (!resource) return
+  try {
+    await resource.close()
+  } catch {
+    // Ignore close errors
+  }
+}
+
+/**
  * Determine if an error is a sink failure (vs expected TerminalEventError).
- * SinkAlreadyFailedError is also a sink failure - it wraps the original cause.
  */
 function isSinkFailure(err: unknown): boolean {
-  if (err instanceof TerminalEventError) {
-    return false
-  }
-  if (err instanceof SinkAlreadyFailedError) {
-    return true
-  }
-  // Any other error from emit is a sink failure
-  return true
+  return !(err instanceof TerminalEventError)
 }
 
 /**
@@ -407,7 +427,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
     // 1. Sink failure at any point → crash
     if (sinkState.isSinkFailed()) {
       const failure = sinkState.getSinkFailure()
-      const message = failure instanceof Error ? failure.message : String(failure)
+      const message = errorMessage(failure)
       return {
         outcome: { status: 'crash', message },
         terminalEmitted: sinkState.getTerminalState() !== null
@@ -515,7 +535,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       // Script threw - capture for outcome determination
       scriptThrew = true
       scriptError = {
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage(err),
         stack: err instanceof Error ? err.stack : undefined
       }
 
@@ -569,55 +589,24 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
 
     // 8. Emit run_result control frame per CONTRACT_IPC.md
     // This is emitted exactly once, after terminal event emission attempt
-    try {
-      const runResultOutcome = toRunResultOutcome(result.outcome)
-      const proxyUsed = config.proxy ? redactProxy(config.proxy) : undefined
-      await stdioSink.writeRunResult(runResultOutcome, proxyUsed)
-    } catch {
-      // Best effort - don't fail the run if run_result emission fails
-    }
+    await emitRunResult(stdioSink, result.outcome, config.proxy)
 
     return result
   } catch (err) {
     // Executor-level crash (Puppeteer launch failure, etc.)
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorMessage(err)
     const crashOutcome: ExecutionOutcome = { status: 'crash', message }
 
     // Emit run_result even for executor-level crashes if possible
-    try {
-      const runResultOutcome = toRunResultOutcome(crashOutcome)
-      const proxyUsed = config.proxy ? redactProxy(config.proxy) : undefined
-      await stdioSink.writeRunResult(runResultOutcome, proxyUsed)
-    } catch {
-      // Best effort - sink may not be available
-    }
+    await emitRunResult(stdioSink, crashOutcome, config.proxy)
 
     return {
       outcome: crashOutcome,
       terminalEmitted: false
     }
   } finally {
-    // Resource cleanup
-    if (page) {
-      try {
-        await page.close()
-      } catch {
-        // Ignore close errors
-      }
-    }
-    if (browserContext) {
-      try {
-        await browserContext.close()
-      } catch {
-        // Ignore close errors
-      }
-    }
-    if (browser) {
-      try {
-        await browser.close()
-      } catch {
-        // Ignore close errors
-      }
-    }
+    await safeClose(page)
+    await safeClose(browserContext)
+    await safeClose(browser)
   }
 }
