@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.3.2.
+User-facing guide for Quarry v0.3.3.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -26,14 +26,14 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:justapithecus/quarry@0.3.2
+mise install github:justapithecus/quarry@0.3.3
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:justapithecus/quarry" = "0.3.2"
+"github:justapithecus/quarry" = "0.3.3"
 ```
 
 ### SDK
@@ -345,7 +345,7 @@ task build
 
 ---
 
-## Known Limitations (v0.3.2)
+## Known Limitations (v0.3.3)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -424,7 +424,7 @@ processing after runs complete, see [docs/guides/integration.md](docs/guides/int
 
 ```bash
 quarry version
-# 0.3.2 (commit: ...)
+# 0.3.3 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -433,6 +433,6 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.3.2` |
+| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.3.3` |
 | SDK | JSR | `npx jsr add @justapithecus/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @justapithecus/quarry-sdk` |
