@@ -34,6 +34,7 @@ Non-goals:
 | Adapter | Package | Status |
 |---------|---------|--------|
 | Webhook (HTTP POST) | `quarry/adapter/webhook` | Available |
+| Redis (Pub/Sub) | `quarry/adapter/redis` | Available |
 | Temporal | — | Planned |
 | NATS | — | Planned |
 | SNS | — | Planned |
@@ -57,9 +58,10 @@ Non-goals:
 
 | Flag | Description |
 |------|-------------|
-| `--adapter <type>` | Adapter type (`webhook`) |
+| `--adapter <type>` | Adapter type (`webhook`, `redis`) |
 | `--adapter-url <url>` | Endpoint URL (required when `--adapter` is set) |
-| `--adapter-header <key=value>` | Custom HTTP header (repeatable) |
+| `--adapter-header <key=value>` | Custom HTTP header (repeatable, webhook only) |
+| `--adapter-channel <name>` | Pub/sub channel name (redis only, default `quarry:run_completed`) |
 | `--adapter-timeout <duration>` | Notification timeout (default `10s`) |
 | `--adapter-retries <n>` | Retry attempts (default `3`) |
 

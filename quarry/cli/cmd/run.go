@@ -213,7 +213,7 @@ ADVANCED:
 			// Adapter flags (event-bus notification)
 			&cli.StringFlag{
 				Name:  "adapter",
-				Usage: "Event-bus adapter type (webhook)",
+				Usage: "Event-bus adapter type (webhook, redis)",
 			},
 			&cli.StringFlag{
 				Name:  "adapter-url",

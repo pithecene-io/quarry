@@ -3,12 +3,14 @@ module github.com/justapithecus/quarry
 go 1.25.6
 
 require (
+	github.com/alicebob/miniredis/v2 v2.36.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/charmbracelet/bubbles v0.21.1
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/justapithecus/lode v0.7.0
+	github.com/redis/go-redis/v9 v9.17.3
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.uber.org/zap v1.27.1
@@ -16,7 +18,6 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.36.1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
@@ -63,7 +64,6 @@ require (
 	github.com/parquet-go/jsonlite v1.4.0 // indirect
 	github.com/parquet-go/parquet-go v0.27.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
-	github.com/redis/go-redis/v9 v9.17.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
