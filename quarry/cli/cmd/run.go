@@ -978,40 +978,6 @@ func buildStorageSink(storageConfig storageChoice, dataset, source, category, ru
 	return sink, client, nil
 }
 
-// parseAdapterConfig parses adapter flags from the CLI context.
-func parseAdapterConfig(c *cli.Context) (adapterChoice, error) {
-	ac := adapterChoice{
-		adapterType: c.String("adapter"),
-		url:         c.String("adapter-url"),
-		timeout:     c.Duration("adapter-timeout"),
-		retries:     c.Int("adapter-retries"),
-		headers:     make(map[string]string),
-	}
-
-	if ac.retries < 0 {
-		return ac, fmt.Errorf("--adapter-retries must be >= 0, got %d", ac.retries)
-	}
-
-	switch ac.adapterType {
-	case "webhook":
-		if ac.url == "" {
-			return ac, fmt.Errorf("--adapter-url is required when --adapter=webhook")
-		}
-	default:
-		return ac, fmt.Errorf("unknown adapter type: %q (supported: webhook)", ac.adapterType)
-	}
-
-	for _, h := range c.StringSlice("adapter-header") {
-		k, v, ok := strings.Cut(h, "=")
-		if !ok || k == "" {
-			return ac, fmt.Errorf("invalid --adapter-header %q: expected key=value", h)
-		}
-		ac.headers[k] = v
-	}
-
-	return ac, nil
-}
-
 // buildAdapter creates an adapter from parsed config.
 func buildAdapter(ac adapterChoice) (adapter.Adapter, error) {
 	switch ac.adapterType {
