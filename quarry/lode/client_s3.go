@@ -101,7 +101,9 @@ func NewLodeS3Client(cfg Config, s3cfg S3Config) (*LodeClient, error) {
 	}
 
 	return &LodeClient{
-		dataset: ds,
-		config:  cfg,
+		dataset:    ds,
+		config:     cfg,
+		offsets:    make(map[string]int64),
+		chunksSeen: make(map[string]struct{}),
 	}, nil
 }
