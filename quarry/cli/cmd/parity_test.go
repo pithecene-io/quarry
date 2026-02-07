@@ -387,6 +387,8 @@ func getFlagType(f cli.Flag) string {
 		return "float64"
 	case *cli.DurationFlag:
 		return "duration"
+	case *cli.StringSliceFlag:
+		return "string_slice"
 	default:
 		return "unknown"
 	}
@@ -402,6 +404,10 @@ func isFlagRequired(f cli.Flag) bool {
 	case *cli.Int64Flag:
 		return tf.Required
 	case *cli.BoolFlag:
+		return tf.Required
+	case *cli.DurationFlag:
+		return tf.Required
+	case *cli.StringSliceFlag:
 		return tf.Required
 	default:
 		return false
@@ -432,6 +438,13 @@ func getFlagDefault(f cli.Flag) any {
 			return nil
 		}
 		return tf.Value
+	case *cli.DurationFlag:
+		if tf.Value == 0 {
+			return nil
+		}
+		return tf.Value.String()
+	case *cli.StringSliceFlag:
+		return nil
 	default:
 		return nil
 	}

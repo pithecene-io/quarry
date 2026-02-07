@@ -10,11 +10,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/justapithecus/quarry/adapter"
+	"github.com/justapithecus/quarry/adapter/webhook"
 	quarryconfig "github.com/justapithecus/quarry/cli/config"
 	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
@@ -206,6 +209,29 @@ ADVANCED:
 				Name:  "storage-s3-path-style",
 				Usage: "Force path-style addressing for S3 (required by R2, MinIO)",
 			},
+			// Adapter flags (event-bus notification)
+			&cli.StringFlag{
+				Name:  "adapter",
+				Usage: "Event-bus adapter type (webhook)",
+			},
+			&cli.StringFlag{
+				Name:  "adapter-url",
+				Usage: "Adapter endpoint URL (required when --adapter is set)",
+			},
+			&cli.StringSliceFlag{
+				Name:  "adapter-header",
+				Usage: "Custom HTTP header as key=value (repeatable)",
+			},
+			&cli.DurationFlag{
+				Name:  "adapter-timeout",
+				Usage: "Adapter notification timeout",
+				Value: webhook.DefaultTimeout,
+			},
+			&cli.IntFlag{
+				Name:  "adapter-retries",
+				Usage: "Adapter retry attempts",
+				Value: webhook.DefaultRetries,
+			},
 		},
 		Action: runAction,
 	}
@@ -238,6 +264,15 @@ type storageChoice struct {
 	usePathStyle bool   // force path-style addressing for S3 (optional)
 }
 
+// adapterChoice holds parsed adapter configuration.
+type adapterChoice struct {
+	adapterType string
+	url         string
+	headers     map[string]string
+	timeout     time.Duration
+	retries     int
+}
+
 func runAction(c *cli.Context) error {
 	// Load config file if --config is provided
 	var cfg *quarryconfig.Config
@@ -247,11 +282,6 @@ func runAction(c *cli.Context) error {
 			return cli.Exit(fmt.Sprintf("failed to load config: %v", err), exitConfigError)
 		}
 		cfg = loaded
-	}
-
-	// Warn if adapter config is present but adapter feature is not yet available
-	if cfg != nil && cfg.Adapter.Type != "" {
-		fmt.Fprintf(os.Stderr, "Warning: adapter config in YAML is not yet supported and will be ignored\n")
 	}
 
 	// Resolve values with precedence: CLI flag > config file > flag default
@@ -319,6 +349,16 @@ func runAction(c *cli.Context) error {
 
 	storageDataset := resolveString(c, "storage-dataset", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Dataset }))
 
+	// Parse and validate adapter config (pre-execution: fail fast on bad config)
+	var adptConfig *adapterChoice
+	adapterType := resolveString(c, "adapter", configVal(cfg, func(c *quarryconfig.Config) string { return c.Adapter.Type }))
+	if adapterType != "" {
+		ac, err := parseAdapterConfigWithPrecedence(c, cfg, adapterType)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("invalid adapter config: %v", err), exitConfigError)
+		}
+		adptConfig = &ac
+	}
 
 	// Resolve executor path (needed for metrics dimension before policy build)
 	executorPath, err := resolveExecutor(executor)
@@ -428,6 +468,23 @@ func runAction(c *cli.Context) error {
 		metricsCancel()
 	}
 
+	// Notify adapter (if configured) per CONTRACT_INTEGRATION.md.
+	// Config was validated pre-execution; publish failure does NOT fail the run.
+	if adptConfig != nil {
+		adpt, err := buildAdapter(*adptConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
+		} else {
+			event := buildRunCompletedEvent(result, storageConfig, storageDataset, source, category, lode.DeriveDay(startTime), duration)
+			notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
+			if err := adpt.Publish(notifyCtx, event); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
+			}
+			notifyCancel()
+			_ = adpt.Close()
+		}
+	}
+
 	// Print result
 	if !c.Bool("quiet") {
 		printRunResult(result, choice, duration)
@@ -527,6 +584,62 @@ func configBoolVal(cfg *quarryconfig.Config, fn func(*quarryconfig.Config) bool)
 		return false
 	}
 	return fn(cfg)
+}
+
+// parseAdapterConfigWithPrecedence builds adapter config using CLI > config > defaults.
+func parseAdapterConfigWithPrecedence(c *cli.Context, cfg *quarryconfig.Config, adapterType string) (adapterChoice, error) {
+	ac := adapterChoice{
+		adapterType: adapterType,
+		url:         resolveString(c, "adapter-url", configVal(cfg, func(c *quarryconfig.Config) string { return c.Adapter.URL })),
+		timeout:     resolveDuration(c, "adapter-timeout", configDurationVal(cfg)),
+		headers:     make(map[string]string),
+	}
+
+	// Retries: CLI > config > urfave default
+	if c.IsSet("adapter-retries") {
+		ac.retries = c.Int("adapter-retries")
+	} else if cfg != nil && cfg.Adapter.Retries != nil {
+		ac.retries = *cfg.Adapter.Retries
+	} else {
+		ac.retries = c.Int("adapter-retries")
+	}
+
+	if ac.retries < 0 {
+		return ac, fmt.Errorf("--adapter-retries must be >= 0, got %d", ac.retries)
+	}
+
+	switch ac.adapterType {
+	case "webhook":
+		if ac.url == "" {
+			return ac, fmt.Errorf("--adapter-url is required when --adapter=webhook")
+		}
+	default:
+		return ac, fmt.Errorf("unknown adapter type: %q (supported: webhook)", ac.adapterType)
+	}
+
+	// Merge config headers first, then CLI headers override
+	if cfg != nil {
+		for k, v := range cfg.Adapter.Headers {
+			ac.headers[k] = v
+		}
+	}
+	for _, h := range c.StringSlice("adapter-header") {
+		k, v, ok := strings.Cut(h, "=")
+		if !ok || k == "" {
+			return ac, fmt.Errorf("invalid --adapter-header %q: expected key=value", h)
+		}
+		ac.headers[k] = v
+	}
+
+	return ac, nil
+}
+
+// configDurationVal extracts the adapter timeout duration from config.
+func configDurationVal(cfg *quarryconfig.Config) time.Duration {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.Adapter.Timeout.Duration
 }
 
 func validatePolicyConfig(choice policyChoice) error {
@@ -863,6 +976,71 @@ func buildStorageSink(storageConfig storageChoice, dataset, source, category, ru
 		return lode.NewInstrumentedSink(sink, collector), client, nil
 	}
 	return sink, client, nil
+}
+
+// buildAdapter creates an adapter from parsed config.
+func buildAdapter(ac adapterChoice) (adapter.Adapter, error) {
+	switch ac.adapterType {
+	case "webhook":
+		return webhook.New(webhook.Config{
+			URL:     ac.url,
+			Headers: ac.headers,
+			Timeout: ac.timeout,
+			Retries: ac.retries,
+		})
+	default:
+		return nil, fmt.Errorf("unknown adapter type: %q", ac.adapterType)
+	}
+}
+
+// buildRunCompletedEvent constructs the adapter event from run result and config.
+func buildRunCompletedEvent(
+	result *runtime.RunResult,
+	storageConfig storageChoice,
+	dataset, source, category, day string,
+	duration time.Duration,
+) *adapter.RunCompletedEvent {
+	event := &adapter.RunCompletedEvent{
+		ContractVersion: types.ContractVersion,
+		EventType:       "run_completed",
+		RunID:           result.RunMeta.RunID,
+		Source:          source,
+		Category:        category,
+		Day:             day,
+		Outcome:         string(result.Outcome.Status),
+		StoragePath:     buildStoragePath(storageConfig, dataset, source, category, day, result.RunMeta.RunID),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		Attempt:         result.RunMeta.Attempt,
+		EventCount:      result.EventCount,
+		DurationMs:      duration.Milliseconds(),
+	}
+	if result.RunMeta.JobID != nil {
+		event.JobID = *result.RunMeta.JobID
+	}
+	return event
+}
+
+// buildStoragePath constructs a human-readable storage path for the event payload.
+func buildStoragePath(storageConfig storageChoice, dataset, source, category, day, runID string) string {
+	partitions := fmt.Sprintf("datasets/%s/partitions/source=%s/category=%s/day=%s/run_id=%s",
+		dataset, source, category, day, runID)
+
+	switch storageConfig.backend {
+	case "fs":
+		absPath, err := filepath.Abs(storageConfig.path)
+		if err != nil {
+			absPath = storageConfig.path
+		}
+		return fmt.Sprintf("file://%s/%s", absPath, partitions)
+	case "s3":
+		bucket, prefix := lode.ParseS3Path(storageConfig.path)
+		if prefix != "" {
+			return fmt.Sprintf("s3://%s/%s/%s", bucket, prefix, partitions)
+		}
+		return fmt.Sprintf("s3://%s/%s", bucket, partitions)
+	default:
+		return partitions
+	}
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {

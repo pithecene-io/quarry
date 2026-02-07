@@ -255,7 +255,17 @@ CLI flags always override config file values.
 > **Note:** `--job` and `--job-json` are mutually exclusive. Using both is an error.
 > The payload **must** be a top-level JSON object. Arrays, primitives, and null are rejected.
 
-**Advanced flags:**
+**Adapter flags (event-bus notification):**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--adapter <type>` | | Adapter type (`webhook`) |
+| `--adapter-url <url>` | | Endpoint URL (required when `--adapter` set) |
+| `--adapter-header <key=value>` | | Custom HTTP header (repeatable) |
+| `--adapter-timeout <duration>` | `10s` | Notification timeout |
+| `--adapter-retries <n>` | `3` | Retry attempts |
+
+**Advanced flags (development only):**
 
 | Flag | Description |
 |------|-------------|
@@ -392,6 +402,7 @@ task build
 4. **S3 is experimental**: S3 and S3-compatible providers (R2, MinIO) are supported but experimental; no transactional guarantees across writes
 5. **No job scheduling**: Quarry is an execution runtime, not a scheduler
 6. **Puppeteer required**: All scripts run in a browser context
+7. **Event bus adapters**: Only webhook adapter is available. Temporal, NATS, and SNS adapters are planned. For v0.4.x, use shell wrappers or external notification scripts for downstream triggers. See `docs/guides/integration.md`.
 
 ---
 
@@ -454,7 +465,9 @@ export AWS_SECRET_ACCESS_KEY=<secret-key>
 Quarry is an extraction runtime, not a full pipeline. For triggering downstream
 processing after runs complete, see [docs/guides/integration.md](docs/guides/integration.md).
 
-**Recommended pattern**: Event-bus-driven triggers after storage commit.
+**Built-in adapter** (v0.5.0+): `--adapter webhook` sends an HTTP POST after
+each run completes. See adapter flags above.
+
 **Fallback pattern**: Polling-based triggers with idempotent checkpoints.
 
 ---

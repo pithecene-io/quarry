@@ -333,7 +333,82 @@ enabling direct writes to addressable storage paths outside the event pipeline.
 
 ---
 
-## v0.5.0 Roadmap — Advanced Proxy Rotation
+## v0.5.0 Roadmap — Event Bus Adapters
+
+### Goal
+Provide runtime-integrated downstream notification so consumers do not need
+to poll Lode or wire external plumbing.
+
+### Deliverables
+- `Adapter` interface and `RunCompletedEvent` type (`quarry/adapter/`)
+- Webhook adapter: HTTP POST with retries, custom headers, timeout (`quarry/adapter/webhook/`)
+- CLI flags: `--adapter`, `--adapter-url`, `--adapter-header`, `--adapter-timeout`, `--adapter-retries`
+- Hook in `runAction()` after metrics persist (best-effort, does not fail run)
+- Contract and guide updates
+
+### Mini-milestones
+- [x] Adapter interface and event type (`quarry/adapter/adapter.go`)
+- [x] Webhook adapter implementation (`quarry/adapter/webhook/webhook.go`)
+- [x] Webhook tests with httptest (`quarry/adapter/webhook/webhook_test.go`)
+- [x] CLI flags and hook in `quarry/cli/cmd/run.go`
+- [x] CONTRACT_INTEGRATION.md updated with runtime adapter reference
+- [x] CONTRACT_CLI.md updated with adapter flags
+- [x] Integration guide updated with webhook example
+- [x] CLI_PARITY.json updated
+
+### Future adapters (separate PRs)
+- Temporal
+- NATS
+- SNS
+
+### Future: At-Least-Once Delivery (Outbox Pattern)
+
+v0.5.0 delivery is best-effort with retries. If all retries exhaust, the
+notification is lost. For workloads that require at-least-once guarantees,
+a Lode-backed outbox pattern can be added without breaking the existing
+contract (strengthening from best-effort to at-least-once is additive).
+
+#### Design sketch
+1. Write a `notification_pending` record to Lode **before** attempting
+   publish (durable intent).
+2. Attempt publish with retries (existing webhook logic).
+3. On success, mark the record `delivered`.
+4. Undelivered records are retryable via a CLI command
+   (`quarry adapter drain`) or detected by the next run.
+
+Outbox records would live at:
+```
+datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
+```
+
+#### Relationship to Temporal adapter
+
+The outbox pattern applies only to standalone/CLI usage where no external
+orchestrator provides delivery guarantees. When Quarry runs as a Temporal
+activity, the outbox is redundant — Temporal owns durable execution and
+the downstream notification becomes a separate activity with Temporal's
+built-in retry semantics. In that paradigm, Quarry embeds naturally:
+the workflow orchestrates extraction (Quarry activity) and notification
+(webhook/SNS activity) as independent steps, each with Temporal's
+at-least-once guarantees.
+
+Temporal eliminates the need for the outbox in orchestrated deployments,
+but standalone CLI usage remains a first-class paradigm. The outbox
+pattern is still relevant for users running Quarry directly (cron, CI,
+shell scripts) without an external orchestrator.
+
+#### Open questions
+- Retry ownership: CLI command, background process, or next-run piggyback?
+- TTL for stale outbox entries (when to give up permanently).
+- Whether `quarry adapter drain` should be a new CLI command or a
+  subcommand of `quarry run`.
+
+This is deferred until best-effort proves insufficient in standalone
+production usage.
+
+---
+
+## v0.6.0 Roadmap — Advanced Proxy Rotation
 
 ### Goal
 Harden proxy selection for production workloads that require recency-aware
@@ -381,13 +456,11 @@ Phase 2 is deferred until Phase 1 is validated in production.
 
 ---
 
-## Post-v0.3.0 — Event Bus Integrations (Staggered)
+## Post-v0.5.0 — Additional Event Bus Adapters (Staggered)
 
 Order of support:
 - Temporal.io
 - NATS
-- Kafka
-- Rabbit
 - SNS/SQS
 
 Principles:
