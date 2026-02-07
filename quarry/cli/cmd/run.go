@@ -66,6 +66,12 @@ EXAMPLES:
     --storage-backend s3 --storage-path my-bucket/prefix \
     --storage-region us-east-1
 
+  # Run with Cloudflare R2 (S3-compatible)
+  quarry run --script ./script.ts --run-id run-005 --source my-source \
+    --storage-backend s3 --storage-path my-bucket/prefix \
+    --storage-endpoint https://ACCOUNT_ID.r2.cloudflarestorage.com \
+    --storage-s3-path-style
+
 ADVANCED:
   # Override executor path (troubleshooting)
   quarry run --script ./script.ts --run-id run-005 --source my-source \
@@ -184,6 +190,14 @@ ADVANCED:
 				Name:  "storage-region",
 				Usage: "AWS region for S3 backend (uses default credential chain if omitted)",
 			},
+			&cli.StringFlag{
+				Name:  "storage-endpoint",
+				Usage: "Custom S3 endpoint URL for S3-compatible providers (e.g. Cloudflare R2, MinIO)",
+			},
+			&cli.BoolFlag{
+				Name:  "storage-s3-path-style",
+				Usage: "Force path-style addressing for S3 (required by R2, MinIO)",
+			},
 		},
 		Action: runAction,
 	}
@@ -209,9 +223,11 @@ type proxyChoice struct {
 
 // storageChoice holds parsed storage configuration.
 type storageChoice struct {
-	backend string // "fs" or "s3"
-	path    string // fs: directory, s3: bucket/prefix
-	region  string // AWS region for S3 (optional)
+	backend      string // "fs" or "s3"
+	path         string // fs: directory, s3: bucket/prefix
+	region       string // AWS region for S3 (optional)
+	endpoint     string // custom S3 endpoint for S3-compatible providers (optional)
+	usePathStyle bool   // force path-style addressing for S3 (optional)
 }
 
 func runAction(c *cli.Context) error {
@@ -248,9 +264,11 @@ func runAction(c *cli.Context) error {
 
 	// Parse and validate storage config
 	storageConfig := storageChoice{
-		backend: c.String("storage-backend"),
-		path:    c.String("storage-path"),
-		region:  c.String("storage-region"),
+		backend:      c.String("storage-backend"),
+		path:         c.String("storage-path"),
+		region:       c.String("storage-region"),
+		endpoint:     c.String("storage-endpoint"),
+		usePathStyle: c.Bool("storage-s3-path-style"),
 	}
 	if err := validateStorageConfig(storageConfig); err != nil {
 		return cli.Exit(err.Error(), exitConfigError)
@@ -396,6 +414,9 @@ Valid options:
 func validateStorageConfig(config storageChoice) error {
 	switch config.backend {
 	case "fs":
+		if config.endpoint != "" || config.usePathStyle {
+			fmt.Fprintf(os.Stderr, "Warning: --storage-endpoint and --storage-s3-path-style are ignored for fs backend\n")
+		}
 		// Validate path exists and is a directory
 		info, err := os.Stat(config.path)
 		if os.IsNotExist(err) {
@@ -667,9 +688,11 @@ func buildStorageSink(storageConfig storageChoice, source, category, runID, poli
 	case "s3":
 		bucket, prefix := lode.ParseS3Path(storageConfig.path)
 		s3cfg := lode.S3Config{
-			Bucket: bucket,
-			Prefix: prefix,
-			Region: storageConfig.region,
+			Bucket:       bucket,
+			Prefix:       prefix,
+			Region:       storageConfig.region,
+			Endpoint:     storageConfig.endpoint,
+			UsePathStyle: storageConfig.usePathStyle,
 		}
 		client, err = lode.NewLodeS3Client(cfg, s3cfg)
 		if err != nil {

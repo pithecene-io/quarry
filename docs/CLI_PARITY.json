@@ -140,6 +140,18 @@
           "type": "string",
           "required": false,
           "description": "AWS region for S3 backend (uses default credential chain if omitted)"
+        },
+        "storage-endpoint": {
+          "type": "string",
+          "required": false,
+          "description": "Custom S3 endpoint URL for S3-compatible providers (e.g. Cloudflare R2, MinIO)",
+          "dependsOn": ["storage-backend=s3"]
+        },
+        "storage-s3-path-style": {
+          "type": "bool",
+          "required": false,
+          "description": "Force path-style addressing for S3 (required by R2, MinIO)",
+          "dependsOn": ["storage-backend=s3"]
         }
       }
     },

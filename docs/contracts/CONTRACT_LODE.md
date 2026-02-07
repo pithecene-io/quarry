@@ -197,3 +197,17 @@ Lode must surface run metadata alongside stored events:
 - run outcome status
 
 Deduplication is explicitly out of scope and left to downstream consumers.
+
+---
+
+## S3-Compatible Provider Support
+
+The S3 storage backend supports S3-compatible providers (Cloudflare R2, MinIO, etc.)
+via custom endpoint and path-style addressing options.
+
+- **Custom endpoint**: overrides the default AWS S3 endpoint URL.
+- **Path-style addressing**: uses `endpoint/bucket/key` instead of `bucket.endpoint/key`.
+  Required by most S3-compatible providers.
+
+These are runtime configuration options passed via CLI flags (`--storage-endpoint`,
+`--storage-s3-path-style`). They do not affect partition layout or record format.
