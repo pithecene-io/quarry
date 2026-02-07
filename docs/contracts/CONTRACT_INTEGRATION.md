@@ -68,12 +68,13 @@ Non-goals:
 ## Delivery Semantics
 
 - Delivery is **at-least-once**.
-- Dedupe guidance: consumers should use `run_id + seq` as the idempotency key.
+- Dedupe guidance for run completion notifications: consumers should use
+  `run_id` as the idempotency key. Each run produces exactly one
+  completion event; retries may deliver it more than once.
 
 Adapters must not:
-- reorder events within a run,
-- alter the emit envelope,
-- drop non-droppable events.
+- alter the event payload,
+- silently drop events without observable failure.
 
 ---
 

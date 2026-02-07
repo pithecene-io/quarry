@@ -61,7 +61,8 @@ func New(cfg Config) (*Adapter, error) {
 }
 
 // Publish sends the event as a JSON POST request.
-// Retries with exponential backoff on non-2xx responses and transient errors.
+// Retries with exponential backoff on 5xx responses and network errors.
+// 4xx responses are non-retriable and fail immediately.
 func (a *Adapter) Publish(ctx context.Context, event *adapter.RunCompletedEvent) error {
 	body, err := json.Marshal(event)
 	if err != nil {
@@ -91,9 +92,26 @@ func (a *Adapter) Publish(ctx context.Context, event *adapter.RunCompletedEvent)
 		if lastErr == nil {
 			return nil
 		}
+
+		// 4xx errors are non-retriable — stop immediately
+		var statusErr *StatusError
+		if errors.As(lastErr, &statusErr) && statusErr.Code >= 400 && statusErr.Code < 500 {
+			return fmt.Errorf("webhook: non-retriable error: %w", lastErr)
+		}
 	}
 
 	return fmt.Errorf("webhook: failed after %d attempts: %w", attempts, lastErr)
+}
+
+// StatusError is returned for non-2xx HTTP responses.
+// Wrapping the status code allows callers to distinguish retriable (5xx)
+// from non-retriable (4xx) failures.
+type StatusError struct {
+	Code int
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("unexpected status %d", e.Code)
 }
 
 // doRequest performs a single HTTP POST and returns nil on 2xx.
@@ -118,7 +136,7 @@ func (a *Adapter) doRequest(ctx context.Context, body []byte) error {
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return &StatusError{Code: resp.StatusCode}
 	}
 
 	return nil

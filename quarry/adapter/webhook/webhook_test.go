@@ -221,16 +221,18 @@ func TestPublish_Accepts2xxRange(t *testing.T) {
 	}
 }
 
-func TestPublish_Rejects4xxAnd5xx(t *testing.T) {
-	codes := []int{400, 401, 403, 404, 500, 502, 503}
+func TestPublish_4xxFailsImmediately(t *testing.T) {
+	codes := []int{400, 401, 403, 404}
 	for _, code := range codes {
 		t.Run(http.StatusText(code), func(t *testing.T) {
+			var attempts atomic.Int32
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				attempts.Add(1)
 				w.WriteHeader(code)
 			}))
 			defer ts.Close()
 
-			a, err := New(Config{URL: ts.URL, Retries: 0})
+			a, err := New(Config{URL: ts.URL, Retries: 3})
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
@@ -239,6 +241,41 @@ func TestPublish_Rejects4xxAnd5xx(t *testing.T) {
 			err = a.Publish(t.Context(), testEvent())
 			if err == nil {
 				t.Fatalf("expected error for %d", code)
+			}
+
+			// 4xx must not retry — only 1 attempt
+			if got := attempts.Load(); got != 1 {
+				t.Errorf("expected 1 attempt for %d, got %d", code, got)
+			}
+		})
+	}
+}
+
+func TestPublish_5xxRetriesAndFails(t *testing.T) {
+	codes := []int{500, 502, 503}
+	for _, code := range codes {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			var attempts atomic.Int32
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				attempts.Add(1)
+				w.WriteHeader(code)
+			}))
+			defer ts.Close()
+
+			a, err := New(Config{URL: ts.URL, Retries: 2, Timeout: 5 * time.Second})
+			if err != nil {
+				t.Fatalf("new: %v", err)
+			}
+			defer func() { _ = a.Close() }()
+
+			err = a.Publish(t.Context(), testEvent())
+			if err == nil {
+				t.Fatalf("expected error for %d", code)
+			}
+
+			// 5xx must retry: 1 initial + 2 retries = 3
+			if got := attempts.Load(); got != 3 {
+				t.Errorf("expected 3 attempts for %d, got %d", code, got)
 			}
 		})
 	}

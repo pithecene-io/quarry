@@ -314,6 +314,16 @@ func runAction(c *cli.Context) error {
 		return cli.Exit(err.Error(), exitConfigError)
 	}
 
+	// Parse and validate adapter config (pre-execution: fail fast on bad config)
+	var adptConfig *adapterChoice
+	if adapterType := c.String("adapter"); adapterType != "" {
+		ac, err := parseAdapterConfig(c)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("invalid adapter config: %v", err), exitConfigError)
+		}
+		adptConfig = &ac
+	}
+
 	// Resolve executor path (needed for metrics dimension before policy build)
 	executorPath, err := resolveExecutor(c.String("executor"))
 	if err != nil {
@@ -406,24 +416,19 @@ func runAction(c *cli.Context) error {
 	}
 
 	// Notify adapter (if configured) per CONTRACT_INTEGRATION.md.
-	// Adapter failure does NOT fail the run — data is already persisted.
-	if adapterType := c.String("adapter"); adapterType != "" {
-		adptConfig, err := parseAdapterConfig(c)
+	// Config was validated pre-execution; publish failure does NOT fail the run.
+	if adptConfig != nil {
+		adpt, err := buildAdapter(*adptConfig)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: adapter config error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
 		} else {
-			adpt, err := buildAdapter(adptConfig)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
-			} else {
-				event := buildRunCompletedEvent(result, storageConfig, c.String("storage-dataset"), c.String("source"), c.String("category"), lode.DeriveDay(startTime), duration)
-				notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
-				if err := adpt.Publish(notifyCtx, event); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
-				}
-				notifyCancel()
-				_ = adpt.Close()
+			event := buildRunCompletedEvent(result, storageConfig, c.String("storage-dataset"), c.String("source"), c.String("category"), lode.DeriveDay(startTime), duration)
+			notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
+			if err := adpt.Publish(notifyCtx, event); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
 			}
+			notifyCancel()
+			_ = adpt.Close()
 		}
 	}
 
