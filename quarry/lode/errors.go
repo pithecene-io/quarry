@@ -8,6 +8,7 @@ package lode
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Sentinel errors for storage failure classification.
@@ -108,14 +109,36 @@ func WrapInitError(err error, dataset string) error {
 	return NewStorageError(kind, "init", dataset, err)
 }
 
+// errorPattern pairs a set of message substrings with a sentinel error.
+// Order matters: more-specific patterns must appear before general ones.
+type errorPattern struct {
+	patterns []string
+	kind     error
+}
+
+// classifierTable is a declarative list of error message patterns.
+// Entries are checked in order; the first match wins.
+// ErrAccessDenied appears before ErrPermissionDenied so that
+// "AccessDenied"/"Forbidden"/"403" is not shadowed by "access denied".
+var classifierTable = []errorPattern{
+	{[]string{"AccessDenied", "Forbidden", "403"}, ErrAccessDenied},
+	{[]string{"permission denied", "EACCES"}, ErrPermissionDenied},
+	{[]string{"no such file", "does not exist", "not found", "ENOENT", "404", "NoSuchKey"}, ErrNotFound},
+	{[]string{"no space left", "disk full", "ENOSPC", "quota exceeded"}, ErrDiskFull},
+	{[]string{"timeout", "timed out", "deadline exceeded"}, ErrTimeout},
+	{[]string{"SlowDown", "rate exceeded", "throttl", "429", "TooManyRequests"}, ErrThrottled},
+	{[]string{"NoCredentialProviders", "credentials", "InvalidAccessKeyId",
+		"SignatureDoesNotMatch", "ExpiredToken", "401", "Unauthorized"}, ErrAuth},
+	{[]string{"connection refused", "no route to host", "network unreachable",
+		"DNS", "dial tcp", "i/o timeout"}, ErrNetwork},
+}
+
 // classifyError determines the appropriate sentinel error for the given error.
-// Classification is based on error type and message patterns.
+// Classification checks typed errors first, then walks the classifier table.
 func classifyError(err error) error {
 	if err == nil {
 		return nil
 	}
-
-	errStr := err.Error()
 
 	// Check for typed errors first via errors.As
 	var timeoutErr interface{ Timeout() bool }
@@ -123,88 +146,24 @@ func classifyError(err error) error {
 		return ErrTimeout
 	}
 
-	// Classify by error message patterns
-	switch {
-	// Permission/access errors
-	case containsAny(errStr, "permission denied", "EACCES", "access denied"):
-		// Distinguish auth vs access denied
-		if containsAny(errStr, "AccessDenied", "Forbidden", "403") {
-			return ErrAccessDenied
+	// Walk the classifier table (first match wins)
+	errStr := err.Error()
+	for _, entry := range classifierTable {
+		if containsAny(errStr, entry.patterns...) {
+			return entry.kind
 		}
-		return ErrPermissionDenied
-
-	// Not found errors
-	case containsAny(errStr, "no such file", "does not exist", "not found", "ENOENT", "404", "NoSuchKey"):
-		return ErrNotFound
-
-	// Disk full errors
-	case containsAny(errStr, "no space left", "disk full", "ENOSPC", "quota exceeded"):
-		return ErrDiskFull
-
-	// Timeout errors
-	case containsAny(errStr, "timeout", "timed out", "deadline exceeded"):
-		return ErrTimeout
-
-	// Throttling errors
-	case containsAny(errStr, "SlowDown", "rate exceeded", "throttl", "429", "TooManyRequests"):
-		return ErrThrottled
-
-	// Auth errors
-	case containsAny(errStr, "NoCredentialProviders", "credentials", "InvalidAccessKeyId",
-		"SignatureDoesNotMatch", "ExpiredToken", "401", "Unauthorized"):
-		return ErrAuth
-
-	// Access denied (AWS-specific)
-	case containsAny(errStr, "AccessDenied", "Forbidden", "403"):
-		return ErrAccessDenied
-
-	// Network errors
-	case containsAny(errStr, "connection refused", "no route to host", "network unreachable",
-		"DNS", "dial tcp", "i/o timeout"):
-		return ErrNetwork
-
-	default:
-		// Return a generic wrapped error for unclassified errors
-		return errors.New("storage error")
 	}
+
+	return errors.New("storage error")
 }
 
 // containsAny checks if s contains any of the substrings (case-insensitive).
 func containsAny(s string, substrs ...string) bool {
-	lower := toLower(s)
+	lower := strings.ToLower(s)
 	for _, sub := range substrs {
-		if contains(lower, toLower(sub)) {
+		if strings.Contains(lower, strings.ToLower(sub)) {
 			return true
 		}
 	}
 	return false
-}
-
-// toLower is a simple ASCII lowercase function to avoid importing strings.
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
-}
-
-// contains checks if s contains substr.
-func contains(s, substr string) bool {
-	return len(substr) <= len(s) && indexSubstr(s, substr) >= 0
-}
-
-// indexSubstr finds the first occurrence of substr in s.
-func indexSubstr(s, substr string) int {
-	if len(substr) == 0 {
-		return 0
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

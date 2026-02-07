@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/justapithecus/lode/lode"
@@ -654,7 +655,7 @@ func TestLodeClient_StorageError_ContainsOperationAndPath(t *testing.T) {
 
 			// Verify original error is in the chain
 			errStr := err.Error()
-			if !contains(errStr, tt.wantInErr) {
+			if !strings.Contains(errStr, tt.wantInErr) {
 				t.Errorf("error %q should contain %q", errStr, tt.wantInErr)
 			}
 		})
@@ -703,7 +704,7 @@ func TestLodeClient_ErrorPropagation_EventWrite(t *testing.T) {
 	// The underlying error should be accessible
 	if !errors.Is(storageErr.Err, originalErr) {
 		// Check if error message is preserved
-		if !contains(err.Error(), "storage backend unavailable") {
+		if !strings.Contains(err.Error(), "storage backend unavailable") {
 			t.Errorf("original error not in chain: %v", err)
 		}
 	}
@@ -914,7 +915,7 @@ func TestLodeClient_ErrorChain_UnwrapPreservesOriginal(t *testing.T) {
 	// The original error message should be preserved in the chain
 	// (Note: Lode may wrap the error, so we check the message is present)
 	errStr := err.Error()
-	if !contains(errStr, "original underlying error") {
+	if !strings.Contains(errStr, "original underlying error") {
 		t.Errorf("original error message not in chain: %v", err)
 	}
 

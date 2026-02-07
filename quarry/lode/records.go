@@ -92,6 +92,45 @@ type ArtifactChunkRecord struct {
 	RunID    string `json:"run_id"`
 }
 
+// artifactPayload holds fields extracted from an artifact event's payload.
+type artifactPayload struct {
+	artifactID  string
+	name        string
+	contentType string
+	sizeBytes   int64
+}
+
+// extractArtifactPayload extracts typed artifact fields from a payload map.
+func extractArtifactPayload(payload map[string]any) artifactPayload {
+	var p artifactPayload
+	if payload == nil {
+		return p
+	}
+	if v, ok := payload["artifact_id"].(string); ok {
+		p.artifactID = v
+	}
+	if v, ok := payload["name"].(string); ok {
+		p.name = v
+	}
+	if v, ok := payload["content_type"].(string); ok {
+		p.contentType = v
+	}
+	if v, ok := payload["size_bytes"].(float64); ok {
+		p.sizeBytes = int64(v)
+	}
+	return p
+}
+
+// addOptionalEnvelopeFields adds optional envelope fields (job_id, parent_run_id) to a record map.
+func addOptionalEnvelopeFields(m map[string]any, e *types.EventEnvelope) {
+	if e.JobID != nil {
+		m["job_id"] = *e.JobID
+	}
+	if e.ParentRunID != nil {
+		m["parent_run_id"] = *e.ParentRunID
+	}
+}
+
 // toEventRecordMap converts an EventEnvelope to a map for Lode storage.
 // Lode HiveLayout requires records as map[string]any.
 func toEventRecordMap(e *types.EventEnvelope, cfg Config) map[string]any {
@@ -111,42 +150,19 @@ func toEventRecordMap(e *types.EventEnvelope, cfg Config) map[string]any {
 		"day":              cfg.Day,
 		"policy":           cfg.Policy,
 	}
-	if e.JobID != nil {
-		m["job_id"] = *e.JobID
-	}
-	if e.ParentRunID != nil {
-		m["parent_run_id"] = *e.ParentRunID
-	}
+	addOptionalEnvelopeFields(m, e)
 	return m
 }
 
 // toArtifactCommitRecordMap converts an artifact EventEnvelope to a map for storage.
 func toArtifactCommitRecordMap(e *types.EventEnvelope, cfg Config) map[string]any {
-	// Extract artifact payload fields
-	var artifactID, name, contentType string
-	var sizeBytes int64
-
-	if payload := e.Payload; payload != nil {
-		if v, ok := payload["artifact_id"].(string); ok {
-			artifactID = v
-		}
-		if v, ok := payload["name"].(string); ok {
-			name = v
-		}
-		if v, ok := payload["content_type"].(string); ok {
-			contentType = v
-		}
-		if v, ok := payload["size_bytes"].(float64); ok {
-			sizeBytes = int64(v)
-		}
-	}
-
+	ap := extractArtifactPayload(e.Payload)
 	m := map[string]any{
 		"record_kind":      RecordKindArtifactEvent,
-		"artifact_id":      artifactID,
-		"name":             name,
-		"content_type":     contentType,
-		"size_bytes":       sizeBytes,
+		"artifact_id":      ap.artifactID,
+		"name":             ap.name,
+		"content_type":     ap.contentType,
+		"size_bytes":       ap.sizeBytes,
 		"contract_version": e.ContractVersion,
 		"event_id":         e.EventID,
 		"run_id":           e.RunID,
@@ -159,12 +175,7 @@ func toArtifactCommitRecordMap(e *types.EventEnvelope, cfg Config) map[string]an
 		"day":              cfg.Day,
 		"policy":           cfg.Policy,
 	}
-	if e.JobID != nil {
-		m["job_id"] = *e.JobID
-	}
-	if e.ParentRunID != nil {
-		m["parent_run_id"] = *e.ParentRunID
-	}
+	addOptionalEnvelopeFields(m, e)
 	return m
 }
 
@@ -267,30 +278,13 @@ func toEventRecord(e *types.EventEnvelope, cfg Config) EventRecord {
 }
 
 func toArtifactCommitRecord(e *types.EventEnvelope, cfg Config) ArtifactCommitRecord {
-	var artifactID, name, contentType string
-	var sizeBytes int64
-
-	if payload := e.Payload; payload != nil {
-		if v, ok := payload["artifact_id"].(string); ok {
-			artifactID = v
-		}
-		if v, ok := payload["name"].(string); ok {
-			name = v
-		}
-		if v, ok := payload["content_type"].(string); ok {
-			contentType = v
-		}
-		if v, ok := payload["size_bytes"].(float64); ok {
-			sizeBytes = int64(v)
-		}
-	}
-
+	ap := extractArtifactPayload(e.Payload)
 	return ArtifactCommitRecord{
 		RecordKind:      RecordKindArtifactEvent,
-		ArtifactID:      artifactID,
-		Name:            name,
-		ContentType:     contentType,
-		SizeBytes:       sizeBytes,
+		ArtifactID:      ap.artifactID,
+		Name:            ap.name,
+		ContentType:     ap.contentType,
+		SizeBytes:       ap.sizeBytes,
 		ContractVersion: e.ContractVersion,
 		EventID:         e.EventID,
 		RunID:           e.RunID,
