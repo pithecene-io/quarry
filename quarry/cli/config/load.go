@@ -1,14 +1,18 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Load reads a YAML config file, expands environment variables, and
-// unmarshals into a Config struct.
+// unmarshals into a Config struct. Unknown keys are rejected to catch
+// typos early.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -21,7 +25,9 @@ func Load(path string) (*Config, error) {
 	expanded := ExpandEnv(string(data))
 
 	var cfg Config
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader([]byte(expanded)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("invalid YAML in %s: %w", path, err)
 	}
 

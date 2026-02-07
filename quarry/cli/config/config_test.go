@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -207,6 +208,36 @@ func TestProxyPools_WithSticky(t *testing.T) {
 	}
 	if pools[0].Sticky.TTLMs == nil || *pools[0].Sticky.TTLMs != 3600000 {
 		t.Error("expected sticky TTL=3600000")
+	}
+}
+
+func TestLoad_UnknownKeyRejected(t *testing.T) {
+	yaml := `source: my-source
+bogus_key: should_fail
+`
+	path := writeTemp(t, yaml)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for unknown key, got nil")
+	}
+	if !strings.Contains(err.Error(), "bogus_key") {
+		t.Errorf("error should mention the unknown key, got: %v", err)
+	}
+}
+
+func TestLoad_UnknownNestedKeyRejected(t *testing.T) {
+	yaml := `storage:
+  backend: fs
+  path: ./data
+  unknown_field: bad
+`
+	path := writeTemp(t, yaml)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for unknown nested key, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown_field") {
+		t.Errorf("error should mention the unknown key, got: %v", err)
 	}
 }
 
