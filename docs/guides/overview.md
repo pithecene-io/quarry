@@ -31,6 +31,7 @@ At a high level:
 
 - Authoring scripts: `docs/guides/emit.md`
 - Running jobs: `docs/guides/cli.md`
+- Configuration reference: `docs/guides/configuration.md`
 - Proxies: `docs/guides/proxy.md`
 - Run lifecycle: `docs/guides/run.md`
 
