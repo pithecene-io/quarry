@@ -13,7 +13,7 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:justapithecus/quarry@0.3.3
+mise install github:justapithecus/quarry@0.3.4
 ```
 
 ### SDK

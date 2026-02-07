@@ -13,10 +13,10 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.3.3)
-- Latest release: v0.3.3 (see CHANGELOG.md).
+## Current Status (as of v0.3.4)
+- Latest release: v0.3.4 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.3.3 adds S3-compatible provider support (R2, MinIO).
+- v0.3.4 adds S3-compatible provider support (R2, MinIO).
 
 ---
 
