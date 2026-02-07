@@ -650,6 +650,47 @@ func TestToMetricsRecordMap(t *testing.T) {
 	}
 }
 
+func TestNewClient_InitializesMaps(t *testing.T) {
+	// Regression: NewLodeS3Client previously returned &LodeClient{} without
+	// initializing offsets/chunksSeen maps, causing nil-map panic on first
+	// WriteChunks call. All constructors now use newClient() which must
+	// initialize both maps.
+	ds, err := lode.NewDataset(
+		lode.DatasetID("test"),
+		lode.NewMemoryFactory(),
+		lode.WithHiveLayout("source", "category", "day", "run_id", "event_type"),
+		lode.WithCodec(lode.NewJSONLCodec()),
+	)
+	if err != nil {
+		t.Fatalf("NewDataset failed: %v", err)
+	}
+
+	cfg := Config{
+		Dataset:  "test",
+		Source:   "src",
+		Category: "cat",
+		Day:      "2026-02-03",
+		RunID:    "run-1",
+	}
+
+	client := newClient(ds, cfg)
+
+	if client.offsets == nil {
+		t.Fatal("offsets map is nil, must be initialized")
+	}
+	if client.chunksSeen == nil {
+		t.Fatal("chunksSeen map is nil, must be initialized")
+	}
+
+	// Verify WriteChunks works immediately (would panic with nil maps)
+	chunks := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 1, IsLast: true, Data: []byte("data")},
+	}
+	if err := client.WriteChunks(t.Context(), cfg.Dataset, cfg.RunID, chunks); err != nil {
+		t.Fatalf("WriteChunks on newClient: %v", err)
+	}
+}
+
 func TestToArtifactCommitRecord(t *testing.T) {
 	cfg := Config{
 		Dataset:  "quarry",

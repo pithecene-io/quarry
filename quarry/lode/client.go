@@ -38,6 +38,17 @@ type LodeClient struct { //nolint:revive // intentional naming for clarity
 	chunksSeen map[string]struct{} // tracks artifacts that have had chunks written
 }
 
+// newClient creates a LodeClient from a dataset and config.
+// All constructors must use this to ensure consistent initialization.
+func newClient(ds lode.Dataset, cfg Config) *LodeClient {
+	return &LodeClient{
+		dataset:    ds,
+		config:     cfg,
+		offsets:    make(map[string]int64),
+		chunksSeen: make(map[string]struct{}),
+	}
+}
+
 // NewLodeClient creates a new Lode client with filesystem storage.
 // The root parameter is the base directory for Hive-partitioned storage.
 func NewLodeClient(cfg Config, root string) (*LodeClient, error) {
@@ -57,12 +68,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 		return nil, WrapInitError(err, cfg.Dataset)
 	}
 
-	return &LodeClient{
-		dataset:    ds,
-		config:     cfg,
-		offsets:    make(map[string]int64),
-		chunksSeen: make(map[string]struct{}),
-	}, nil
+	return newClient(ds, cfg), nil
 }
 
 // WriteEvents writes a batch of events to Lode.
