@@ -28,7 +28,16 @@ export interface WriteArtifactDataCall {
   readonly callIndex: number
 }
 
-export type SinkCall = WriteEventCall | WriteArtifactDataCall
+export interface WriteFileCall {
+  readonly kind: 'writeFile'
+  readonly filename: string
+  readonly contentType: string
+  readonly data: Buffer | Uint8Array
+  readonly timestamp: number
+  readonly callIndex: number
+}
+
+export type SinkCall = WriteEventCall | WriteArtifactDataCall | WriteFileCall
 
 export interface FakeSinkOptions {
   /**
@@ -143,6 +152,19 @@ export class FakeSink implements EmitSink {
     this.calls.push({
       kind: 'writeArtifactData',
       artifactId,
+      data,
+      timestamp: Date.now(),
+      callIndex: index
+    })
+  }
+
+  async writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void> {
+    const index = this.callIndex++
+
+    this.calls.push({
+      kind: 'writeFile',
+      filename,
+      contentType,
       data,
       timestamp: Date.now(),
       callIndex: index

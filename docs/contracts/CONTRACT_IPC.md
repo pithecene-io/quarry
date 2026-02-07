@@ -26,9 +26,10 @@ Non-goals:
 - **Length prefix**: 4 bytes, unsigned big-endian integer
 - **Payload**: encoded bytes as specified below
 
-The stream is a sequence of frames. Each frame is either:
-- an **event frame** (encoded event envelope), or
-- an **artifact chunk frame** (binary chunk)
+The stream is a sequence of frames. Each frame is one of:
+- an **event frame** (encoded event envelope),
+- an **artifact chunk frame** (binary chunk), or
+- a **file write frame** (sidecar file upload)
 
 ---
 
@@ -41,9 +42,12 @@ Rationale: compact, stable, language-agnostic.
 
 Event frames contain the msgpack-encoded EventEnvelope directly.
 Artifact chunk frames contain a msgpack-encoded chunk envelope (see Artifact Chunking).
+File write frames contain a msgpack-encoded file write envelope (see File Write Frames).
 
-Decoding discrimination: artifact chunk frames have `type: 'artifact_chunk'`;
-event envelopes have event types like `'item'`, `'log'`, `'run_complete'`, etc.
+Decoding discrimination uses the `type` field:
+- `'artifact_chunk'` → artifact chunk frame
+- `'file_write'` → file write frame
+- all other values (`'item'`, `'log'`, `'run_complete'`, etc.) → event envelope
 
 ---
 
@@ -185,6 +189,29 @@ The **artifact event** is the authoritative **commit record** for an artifact.
 - Maximum artifact size: implementation-defined (recommended: 1 GiB).
 - Maximum chunk size: 8 MiB (per Artifact Chunking above).
 - Artifacts exceeding the maximum size **MUST** be rejected by the runtime.
+
+---
+
+## File Write Frames
+
+File write frames transport sidecar files via `storage.put()`.
+They bypass the event sequence (`seq`), policy pipeline, and artifact
+chunk/manifest machinery. Files are written directly to Lode Store
+at Hive-partitioned paths.
+
+File write frame payload layout (msgpack-encoded):
+- `type` = `file_write`
+- `filename` (string) — flat filename, no path separators or `..`
+- `content_type` (string) — MIME type
+- `data` (bytes) — file contents
+
+Constraints:
+- **Maximum data size**: 8 MiB (same limit as artifact chunks).
+- **Single-frame**: file writes are not chunked.
+- **Terminal boundary**: file write frames received after a terminal event
+  are ignored by the runtime.
+- **Not events**: file write frames do not affect event sequence ordering
+  and are not counted in `seq`.
 
 ---
 

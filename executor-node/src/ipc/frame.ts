@@ -122,13 +122,29 @@ export interface RunResultFrame {
 }
 
 /**
+ * File write frame for sidecar file uploads via Lode Store.
+ * Single-frame transport (not chunked). Max 8 MiB data.
+ * Bypasses seq numbering, policy pipeline, and artifact manager.
+ */
+export interface FileWriteFrame {
+  readonly type: 'file_write'
+  /** Target filename (no path separators, no "..") */
+  readonly filename: string
+  /** MIME content type */
+  readonly content_type: string
+  /** Raw binary data (max MAX_CHUNK_SIZE) */
+  readonly data: Uint8Array
+}
+
+/**
  * Union of all frame payload types for decoding.
  * Discriminate using type field:
  * - 'artifact_chunk' → ArtifactChunkFrame
+ * - 'file_write' → FileWriteFrame (sidecar file upload)
  * - 'run_result' → RunResultFrame (control, not counted in seq)
  * - other (item, log, etc.) → EventEnvelope
  */
-export type Frame = EventEnvelope | ArtifactChunkFrame | RunResultFrame
+export type Frame = EventEnvelope | ArtifactChunkFrame | RunResultFrame | FileWriteFrame
 
 /**
  * Error thrown when a frame exceeds the maximum size.
@@ -311,6 +327,40 @@ export function encodeRunResultFrame(
     type: 'run_result',
     outcome,
     ...(proxyUsed && { proxy_used: proxyUsed })
+  }
+  const payload = msgpackEncode(frame)
+  return encodeFrame(payload)
+}
+
+/**
+ * Encode a file write frame for sidecar file uploads.
+ *
+ * File writes bypass seq numbering and the policy pipeline.
+ * Max data size is MAX_CHUNK_SIZE (8 MiB).
+ *
+ * @param filename - Target filename (no path separators, no "..")
+ * @param contentType - MIME content type
+ * @param data - Raw binary data
+ * @returns Buffer containing length prefix + msgpack-encoded frame
+ * @throws ChunkValidationError if data exceeds MAX_CHUNK_SIZE
+ * @throws FrameSizeError if encoded payload exceeds MAX_PAYLOAD_SIZE
+ */
+export function encodeFileWriteFrame(
+  filename: string,
+  contentType: string,
+  data: Buffer | Uint8Array
+): Buffer {
+  if (data.length > MAX_CHUNK_SIZE) {
+    throw new ChunkValidationError(
+      `file data size ${data.length} exceeds MAX_CHUNK_SIZE ${MAX_CHUNK_SIZE}`
+    )
+  }
+
+  const frame: FileWriteFrame = {
+    type: 'file_write',
+    filename,
+    content_type: contentType,
+    data
   }
   const payload = msgpackEncode(frame)
   return encodeFrame(payload)

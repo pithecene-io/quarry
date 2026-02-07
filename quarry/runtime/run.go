@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/log"
 	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
@@ -41,6 +42,9 @@ type RunConfig struct {
 	// ExecutorFactory overrides executor creation (for testing).
 	// If nil, uses NewExecutorManager.
 	ExecutorFactory ExecutorFactory
+	// FileWriter handles sidecar file writes via Lode Store.
+	// If nil, file_write frames are logged and ignored.
+	FileWriter lode.FileWriter
 	// Source is the partition key for origin system/provider.
 	Source string
 	// Category is the partition key for logical data type (default: "default").
@@ -162,6 +166,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		executor.Stdout(),
 		r.config.Policy,
 		artifacts,
+		r.config.FileWriter,
 		r.logger,
 		r.config.RunMeta,
 		r.config.Collector,

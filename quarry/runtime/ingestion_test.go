@@ -49,7 +49,7 @@ func TestIngestionEngine_EnvelopeValidation_ContractVersionMismatch(t *testing.T
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -81,7 +81,7 @@ func TestIngestionEngine_EnvelopeValidation_RunIDMismatch(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -113,7 +113,7 @@ func TestIngestionEngine_EnvelopeValidation_AttemptMismatch(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -157,7 +157,7 @@ func TestIngestionEngine_SequenceViolation(t *testing.T) {
 	buf.Write(encodeEventFrame(envelope2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -179,7 +179,7 @@ func TestIngestionEngine_FrameDecodeError(t *testing.T) {
 	data := encodeFrame(invalidPayload)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(bytes.NewReader(data), policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(bytes.NewReader(data), policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -262,7 +262,7 @@ func TestIngestionEngine_PolicyFailure(t *testing.T) {
 	}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, failPolicy, NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, failPolicy, NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -294,7 +294,7 @@ func TestIngestionEngine_ValidEvent(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -350,7 +350,7 @@ func TestIngestionEngine_RunResult_Completed(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -413,7 +413,7 @@ func TestIngestionEngine_RunResult_WithProxy(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -479,7 +479,7 @@ func TestIngestionEngine_RunResult_DuplicateIgnored(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -543,7 +543,7 @@ func TestIngestionEngine_RunResult_NotCountedInSeq(t *testing.T) {
 	buf.Write(encodeEventFrame(envelope2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -609,7 +609,7 @@ func TestIngestionEngine_PipeCloseAfterTerminal(t *testing.T) {
 	reader := &pipeCloseReader{data: data}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 
@@ -654,7 +654,7 @@ func TestIngestionEngine_PipeCloseBeforeTerminal(t *testing.T) {
 	reader := &pipeCloseReader{data: data}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), logger, runMeta, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil)
 
 	err := engine.Run(t.Context())
 
