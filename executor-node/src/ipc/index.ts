@@ -18,7 +18,9 @@ export {
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
   encodeEventFrame,
+  encodeFileWriteFrame,
   encodeFrame,
+  type FileWriteFrame,
   type Frame,
   FrameSizeError,
   // Constants

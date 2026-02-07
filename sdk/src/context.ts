@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
 import type { EmitSink } from './emit'
-import { createEmitAPI } from './emit-impl'
+import { createAPIs } from './emit-impl'
 import type { QuarryContext, RunMeta } from './types/context'
 
 /**
@@ -27,7 +27,7 @@ export interface CreateContextOptions<Job = unknown> {
 export function createContext<Job = unknown>(
   options: CreateContextOptions<Job>
 ): QuarryContext<Job> {
-  const emit = createEmitAPI(options.run, options.sink)
+  const { emit, storage } = createAPIs(options.run, options.sink)
 
   const ctx: QuarryContext<Job> = {
     job: options.job,
@@ -35,7 +35,8 @@ export function createContext<Job = unknown>(
     page: options.page,
     browser: options.browser,
     browserContext: options.browserContext,
-    emit
+    emit,
+    storage
   }
 
   return Object.freeze(ctx)

@@ -30,6 +30,10 @@ const ArtifactChunkType = "artifact_chunk"
 // RunResultType is the type discriminant for run result control frames.
 const RunResultType = "run_result"
 
+// FileWriteType is the type discriminant for file write frames.
+// File writes bypass seq numbering and the policy pipeline.
+const FileWriteType = "file_write"
+
 // FrameErrorKind classifies frame decoding errors.
 type FrameErrorKind int
 
@@ -137,8 +141,9 @@ type frameTypeProbe struct {
 	Type string `msgpack:"type"`
 }
 
-// DecodeFrame decodes a payload and returns either an EventEnvelope or ArtifactChunkFrame.
-// Discriminates based on the type field: "artifact_chunk" vs event types.
+// DecodeFrame decodes a payload and returns a typed frame.
+// Discriminates based on the type field: "artifact_chunk", "run_result",
+// "file_write", or event types.
 func DecodeFrame(payload []byte) (any, error) {
 	// Peek at type field
 	var probe frameTypeProbe
@@ -155,6 +160,8 @@ func DecodeFrame(payload []byte) (any, error) {
 		return DecodeArtifactChunk(payload)
 	case RunResultType:
 		return DecodeRunResult(payload)
+	case FileWriteType:
+		return DecodeFileWrite(payload)
 	default:
 		return DecodeEventEnvelope(payload)
 	}
@@ -197,4 +204,17 @@ func DecodeRunResult(payload []byte) (*types.RunResultFrame, error) {
 		}
 	}
 	return &result, nil
+}
+
+// DecodeFileWrite decodes a payload as a FileWriteFrame.
+func DecodeFileWrite(payload []byte) (*types.FileWriteFrame, error) {
+	var frame types.FileWriteFrame
+	if err := msgpack.Unmarshal(payload, &frame); err != nil {
+		return nil, &FrameError{
+			Kind: FrameErrorDecode,
+			Msg:  "failed to decode file write",
+			Err:  err,
+		}
+	}
+	return &frame, nil
 }

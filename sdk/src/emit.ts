@@ -156,6 +156,31 @@ export interface EmitAPI {
 }
 
 /**
+ * Options for writing a sidecar file via ctx.storage.put().
+ */
+export interface StoragePutOptions {
+  /** Target filename (no path separators, no "..") */
+  filename: string
+  /** MIME content type */
+  content_type: string
+  /** The binary data (Buffer or Uint8Array, max 8 MiB) */
+  data: Buffer | Uint8Array
+}
+
+/**
+ * Storage API for sidecar file uploads via Lode Store.
+ * Files land at Hive-partitioned paths under files/, bypassing
+ * Dataset segment/manifest machinery entirely.
+ */
+export interface StorageAPI {
+  /**
+   * Write a file to Hive-partitioned storage.
+   * Shares the emit serialization chain for ordering and fail-fast.
+   */
+  readonly put: (options: StoragePutOptions) => Promise<void>
+}
+
+/**
  * Internal interface for emit sink.
  * The executor-node will provide an implementation of this.
  * This is NOT part of the public SDK API.
@@ -176,4 +201,10 @@ export interface EmitSink {
    * The sink handles chunking per CONTRACT_IPC.md.
    */
   writeArtifactData(artifact_id: ArtifactId, data: Buffer | Uint8Array): Promise<void>
+
+  /**
+   * Write a sidecar file via file_write frame.
+   * Bypasses seq numbering and the policy pipeline.
+   */
+  writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void>
 }

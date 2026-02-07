@@ -673,7 +673,7 @@ func TestNewClient_InitializesMaps(t *testing.T) {
 		RunID:    "run-1",
 	}
 
-	client := newClient(ds, cfg)
+	client := newClient(ds, cfg, lode.NewMemoryFactory())
 
 	if client.offsets == nil {
 		t.Fatal("offsets map is nil, must be initialized")

@@ -100,5 +100,5 @@ func NewLodeS3Client(cfg Config, s3cfg S3Config) (*LodeClient, error) {
 		return nil, fmt.Errorf("failed to create Lode dataset: %w", err)
 	}
 
-	return newClient(ds, cfg), nil
+	return newClient(ds, cfg, s3Factory), nil
 }

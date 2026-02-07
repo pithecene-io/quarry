@@ -14,10 +14,12 @@ export type {
   EmitRotateProxyOptions,
   EmitRunCompleteOptions,
   EmitRunErrorOptions,
-  EmitSink
+  EmitSink,
+  StorageAPI,
+  StoragePutOptions
 } from './emit'
 // Errors (public — useful for user scripts to catch)
-export { createEmitAPI, TerminalEventError } from './emit-impl'
+export { createAPIs, createEmitAPI, StorageFilenameError, TerminalEventError } from './emit-impl'
 // Hook types
 export type {
   AfterRunHook,
