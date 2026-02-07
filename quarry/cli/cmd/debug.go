@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/urfave/cli/v2"
 
@@ -87,18 +85,10 @@ func debugResolveProxyAction(c *cli.Context) error {
 		return cli.Exit("--tui is not supported for debug commands", 1)
 	}
 
-	// Load proxy pools from config file
-	pools, err := loadDebugProxyPools(configPath)
+	// Load proxy pools and create selector
+	selector, err := loadAndRegisterPools(configPath)
 	if err != nil {
-		return cli.Exit(fmt.Sprintf("failed to load proxy pools: %v", err), 1)
-	}
-
-	// Create selector and register pools
-	selector := proxy.NewSelector()
-	for _, pool := range pools {
-		if err := selector.RegisterPool(&pool); err != nil {
-			return cli.Exit(fmt.Sprintf("failed to register pool %q: %v", pool.Name, err), 1)
-		}
+		return cli.Exit(fmt.Sprintf("proxy setup failed: %v", err), 1)
 	}
 
 	// Build selection request
@@ -137,20 +127,6 @@ func debugResolveProxyAction(c *cli.Context) error {
 	return r.Render(resp)
 }
 
-// loadDebugProxyPools loads proxy pools from a JSON config file for debug commands.
-func loadDebugProxyPools(path string) ([]types.ProxyPool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var pools []types.ProxyPool
-	if err := json.Unmarshal(data, &pools); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
-	}
-
-	return pools, nil
-}
 
 func debugIPCCommand() *cli.Command {
 	return &cli.Command{

@@ -712,21 +712,14 @@ func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoi
 		return nil, errors.New("--proxy-config required when --proxy-pool is specified")
 	}
 
-	pools, err := loadProxyPools(config.configPath)
+	selector, err := loadAndRegisterPools(config.configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load proxy pools: %w", err)
+		return nil, err
 	}
 
-	// Create selector and register pools
-	// Note: Selector is per-invocation; state doesn't persist across CLI runs.
-	selector := proxy.NewSelector()
-	for _, pool := range pools {
-		if err := selector.RegisterPool(&pool); err != nil {
-			return nil, fmt.Errorf("failed to register pool %q: %w", pool.Name, err)
-		}
-	}
-
-	// Warn about domain/origin sticky scopes without the required input
+	// Warn about domain/origin sticky scopes without the required input.
+	// Re-read pools for config inspection (selector doesn't expose pool metadata).
+	pools, _ := loadProxyPools(config.configPath)
 	for _, pool := range pools {
 		if pool.Name == config.poolName && pool.Sticky != nil {
 			scope := pool.Sticky.Scope
@@ -771,6 +764,21 @@ func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoi
 	}
 
 	return endpoint, nil
+}
+
+// loadAndRegisterPools loads proxy pools from a config file and returns a ready selector.
+func loadAndRegisterPools(configPath string) (*proxy.Selector, error) {
+	pools, err := loadProxyPools(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load proxy pools: %w", err)
+	}
+	selector := proxy.NewSelector()
+	for _, pool := range pools {
+		if err := selector.RegisterPool(&pool); err != nil {
+			return nil, fmt.Errorf("failed to register pool %q: %w", pool.Name, err)
+		}
+	}
+	return selector, nil
 }
 
 // loadProxyPools loads proxy pools from a JSON config file.

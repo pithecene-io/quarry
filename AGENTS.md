@@ -55,6 +55,7 @@ If scope feels ambiguous or expanding, **pause and ask**.
 
 - Prefer `any` over `interface{}`
 - Prefer `errors.New` over `fmt.Errorf` when no formatting verbs are needed
+- Prefer iterators (`range`/`yield`-based or `iter.Seq`) over building intermediate slices, where appropriate
 
 ---
 
