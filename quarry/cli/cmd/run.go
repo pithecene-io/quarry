@@ -15,6 +15,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	quarryconfig "github.com/justapithecus/quarry/cli/config"
 	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/metrics"
@@ -78,6 +79,11 @@ ADVANCED:
     --storage-backend fs --storage-path ./data \
     --executor /custom/path/to/executor.js`,
 		Flags: []cli.Flag{
+			// Config file flag
+			&cli.StringFlag{
+				Name:  "config",
+				Usage: "Path to YAML config file (project-level defaults for quarry run)",
+			},
 			// Execution flags
 			&cli.StringFlag{
 				Name:     "script",
@@ -120,9 +126,8 @@ ADVANCED:
 			},
 			// Partition key flags
 			&cli.StringFlag{
-				Name:     "source",
-				Usage:    "Source identifier for partitioning (required)",
-				Required: true,
+				Name:  "source",
+				Usage: "Source identifier for partitioning (required)",
 			},
 			&cli.StringFlag{
 				Name:  "category",
@@ -182,14 +187,12 @@ ADVANCED:
 				Value: lode.DefaultDataset,
 			},
 			&cli.StringFlag{
-				Name:     "storage-backend",
-				Usage:    "Storage backend: fs (filesystem) or s3 (Amazon S3)",
-				Required: true,
+				Name:  "storage-backend",
+				Usage: "Storage backend: fs (filesystem) or s3 (Amazon S3)",
 			},
 			&cli.StringFlag{
-				Name:     "storage-path",
-				Usage:    "Storage path (fs: writable directory, s3: bucket/prefix)",
-				Required: true,
+				Name:  "storage-path",
+				Usage: "Storage path (fs: writable directory, s3: bucket/prefix)",
 			},
 			&cli.StringFlag{
 				Name:  "storage-region",
@@ -236,12 +239,32 @@ type storageChoice struct {
 }
 
 func runAction(c *cli.Context) error {
-	// Parse policy config
+	// Load config file if --config is provided
+	var cfg *quarryconfig.Config
+	if configPath := c.String("config"); configPath != "" {
+		loaded, err := quarryconfig.Load(configPath)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("failed to load config: %v", err), exitConfigError)
+		}
+		cfg = loaded
+	}
+
+	// Resolve values with precedence: CLI flag > config file > flag default
+	source := resolveString(c, "source", configVal(cfg, func(c *quarryconfig.Config) string { return c.Source }))
+	category := resolveString(c, "category", configVal(cfg, func(c *quarryconfig.Config) string { return c.Category }))
+	executor := resolveString(c, "executor", configVal(cfg, func(c *quarryconfig.Config) string { return c.Executor }))
+
+	// Manual validation for fields that were previously Required:true
+	if source == "" {
+		return cli.Exit("--source is required (provide via CLI flag or config file)", exitConfigError)
+	}
+
+	// Parse policy config with precedence
 	choice := policyChoice{
-		name:      c.String("policy"),
-		flushMode: c.String("flush-mode"),
-		maxEvents: c.Int("buffer-events"),
-		maxBytes:  c.Int64("buffer-bytes"),
+		name:      resolveString(c, "policy", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.Name })),
+		flushMode: resolveString(c, "flush-mode", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.FlushMode })),
+		maxEvents: resolveInt(c, "buffer-events", configIntVal(cfg, func(c *quarryconfig.Config) int { return c.Policy.BufferEvents })),
+		maxBytes:  resolveInt64(c, "buffer-bytes", configInt64Val(cfg, func(c *quarryconfig.Config) int64 { return c.Policy.BufferBytes })),
 	}
 
 	// Validate policy config
@@ -267,20 +290,33 @@ func runAction(c *cli.Context) error {
 		runMeta.ParentRunID = &parentRunID
 	}
 
-	// Parse and validate storage config
+	// Parse and validate storage config with precedence
+	storageBackend := resolveString(c, "storage-backend", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Backend }))
+	storagePath := resolveString(c, "storage-path", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Path }))
+
+	if storageBackend == "" {
+		return cli.Exit("--storage-backend is required (provide via CLI flag or config file)", exitConfigError)
+	}
+	if storagePath == "" {
+		return cli.Exit("--storage-path is required (provide via CLI flag or config file)", exitConfigError)
+	}
+
 	storageConfig := storageChoice{
-		backend:      c.String("storage-backend"),
-		path:         c.String("storage-path"),
-		region:       c.String("storage-region"),
-		endpoint:     c.String("storage-endpoint"),
-		usePathStyle: c.Bool("storage-s3-path-style"),
+		backend:      storageBackend,
+		path:         storagePath,
+		region:       resolveString(c, "storage-region", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Region })),
+		endpoint:     resolveString(c, "storage-endpoint", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Endpoint })),
+		usePathStyle: resolveBool(c, "storage-s3-path-style", configBoolVal(cfg, func(c *quarryconfig.Config) bool { return c.Storage.S3PathStyle })),
 	}
 	if err := validateStorageConfig(storageConfig); err != nil {
 		return cli.Exit(err.Error(), exitConfigError)
 	}
 
+	storageDataset := resolveString(c, "storage-dataset", configVal(cfg, func(c *quarryconfig.Config) string { return c.Storage.Dataset }))
+
+
 	// Resolve executor path (needed for metrics dimension before policy build)
-	executorPath, err := resolveExecutor(c.String("executor"))
+	executorPath, err := resolveExecutor(executor)
 	if err != nil {
 		return cli.Exit(err.Error(), exitConfigError)
 	}
@@ -296,17 +332,34 @@ func runAction(c *cli.Context) error {
 	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, lodeClient, err := buildPolicy(choice, storageConfig, c.String("storage-dataset"), c.String("source"), c.String("category"), runMeta.RunID, startTime, collector)
+	pol, lodeClient, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
 	defer func() { _ = pol.Close() }()
 
-	// Parse proxy config
+	// Resolve proxy pools from config file (inline proxies: key)
+	var configPools []types.ProxyPool
+	if cfg != nil {
+		configPools = cfg.ProxyPools()
+	}
+
+	// Conflict check: --proxy-config and config proxies: cannot both be present
+	cliProxyConfig := c.String("proxy-config")
+	if cliProxyConfig != "" && len(configPools) > 0 {
+		return cli.Exit("cannot use --proxy-config and config file proxies: together (use one source for proxy pools)", exitConfigError)
+	}
+
+	// Deprecation warning for --proxy-config
+	if cliProxyConfig != "" {
+		fmt.Fprintf(os.Stderr, "Warning: --proxy-config is deprecated; define proxy pools in quarry.yaml under the proxies: key instead\n")
+	}
+
+	// Parse proxy config with precedence
 	proxyConfig := proxyChoice{
-		configPath: c.String("proxy-config"),
-		poolName:   c.String("proxy-pool"),
-		strategy:   c.String("proxy-strategy"),
+		configPath: cliProxyConfig,
+		poolName:   resolveString(c, "proxy-pool", configVal(cfg, func(c *quarryconfig.Config) string { return c.Proxy.Pool })),
+		strategy:   resolveString(c, "proxy-strategy", configVal(cfg, func(c *quarryconfig.Config) string { return c.Proxy.Strategy })),
 		stickyKey:  c.String("proxy-sticky-key"),
 		domain:     c.String("proxy-domain"),
 		origin:     c.String("proxy-origin"),
@@ -315,7 +368,7 @@ func runAction(c *cli.Context) error {
 	// Select proxy if configured
 	var resolvedProxy *types.ProxyEndpoint
 	if proxyConfig.poolName != "" {
-		endpoint, err := selectProxy(proxyConfig, runMeta)
+		endpoint, err := selectProxy(proxyConfig, runMeta, configPools)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("proxy selection failed: %v", err), exitExecutorCrash)
 		}
@@ -330,8 +383,8 @@ func runAction(c *cli.Context) error {
 		RunMeta:      runMeta,
 		Policy:       pol,
 		Proxy:        resolvedProxy,
-		Source:       c.String("source"),
-		Category:     c.String("category"),
+		Source:       source,
+		Category:     category,
 		Collector:    collector,
 	}
 
@@ -377,6 +430,98 @@ func runAction(c *cli.Context) error {
 	}
 
 	return cli.Exit("", outcomeToExitCode(result.Outcome.Status))
+}
+
+// resolveString returns the CLI flag value if explicitly set, else the config
+// value if non-empty, else the urfave default.
+func resolveString(c *cli.Context, flag string, configVal string) string {
+	if c.IsSet(flag) {
+		return c.String(flag)
+	}
+	if configVal != "" {
+		return configVal
+	}
+	return c.String(flag)
+}
+
+// resolveInt returns the CLI flag value if explicitly set, else the config
+// value if non-zero, else the urfave default.
+func resolveInt(c *cli.Context, flag string, configVal int) int {
+	if c.IsSet(flag) {
+		return c.Int(flag)
+	}
+	if configVal != 0 {
+		return configVal
+	}
+	return c.Int(flag)
+}
+
+// resolveInt64 returns the CLI flag value if explicitly set, else the config
+// value if non-zero, else the urfave default.
+func resolveInt64(c *cli.Context, flag string, configVal int64) int64 {
+	if c.IsSet(flag) {
+		return c.Int64(flag)
+	}
+	if configVal != 0 {
+		return configVal
+	}
+	return c.Int64(flag)
+}
+
+// resolveBool returns the CLI flag value if explicitly set, else the config
+// value if true, else the urfave default.
+func resolveBool(c *cli.Context, flag string, configVal bool) bool {
+	if c.IsSet(flag) {
+		return c.Bool(flag)
+	}
+	if configVal {
+		return configVal
+	}
+	return c.Bool(flag)
+}
+
+// resolveDuration returns the CLI flag value if explicitly set, else the config
+// value if non-zero, else the urfave default.
+func resolveDuration(c *cli.Context, flag string, configVal time.Duration) time.Duration {
+	if c.IsSet(flag) {
+		return c.Duration(flag)
+	}
+	if configVal != 0 {
+		return configVal
+	}
+	return c.Duration(flag)
+}
+
+// configVal safely extracts a string value from an optional config.
+func configVal(cfg *quarryconfig.Config, fn func(*quarryconfig.Config) string) string {
+	if cfg == nil {
+		return ""
+	}
+	return fn(cfg)
+}
+
+// configIntVal safely extracts an int value from an optional config.
+func configIntVal(cfg *quarryconfig.Config, fn func(*quarryconfig.Config) int) int {
+	if cfg == nil {
+		return 0
+	}
+	return fn(cfg)
+}
+
+// configInt64Val safely extracts an int64 value from an optional config.
+func configInt64Val(cfg *quarryconfig.Config, fn func(*quarryconfig.Config) int64) int64 {
+	if cfg == nil {
+		return 0
+	}
+	return fn(cfg)
+}
+
+// configBoolVal safely extracts a bool value from an optional config.
+func configBoolVal(cfg *quarryconfig.Config, fn func(*quarryconfig.Config) bool) bool {
+	if cfg == nil {
+		return false
+	}
+	return fn(cfg)
 }
 
 func validatePolicyConfig(choice policyChoice) error {
@@ -734,20 +879,36 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 // Note: The selector is created fresh per invocation (CLI is one-shot).
 // Round-robin counters and sticky maps do not persist across runs.
 // This is intentional - each run is independent.
-func selectProxy(config proxyChoice, runMeta *types.RunMeta) (*types.ProxyEndpoint, error) {
-	// Load proxy pools from config file
-	if config.configPath == "" {
-		return nil, errors.New("--proxy-config required when --proxy-pool is specified")
-	}
+//
+// configPools are pools defined inline in a quarry.yaml config file.
+// They take priority over --proxy-config when present.
+func selectProxy(config proxyChoice, runMeta *types.RunMeta, configPools []types.ProxyPool) (*types.ProxyEndpoint, error) {
+	var selector *proxy.Selector
+	var pools []types.ProxyPool
 
-	selector, err := loadAndRegisterPools(config.configPath)
-	if err != nil {
-		return nil, err
+	if len(configPools) > 0 {
+		// Use inline pools from config file
+		pools = configPools
+		selector = proxy.NewSelector()
+		for _, pool := range pools {
+			p := pool
+			if err := selector.RegisterPool(&p); err != nil {
+				return nil, fmt.Errorf("failed to register pool %q: %w", p.Name, err)
+			}
+		}
+	} else if config.configPath != "" {
+		// Use legacy --proxy-config JSON file
+		var err error
+		selector, err = loadAndRegisterPools(config.configPath)
+		if err != nil {
+			return nil, err
+		}
+		pools, _ = loadProxyPools(config.configPath)
+	} else {
+		return nil, errors.New("--proxy-config or config file proxies: required when --proxy-pool is specified")
 	}
 
 	// Warn about domain/origin sticky scopes without the required input.
-	// Re-read pools for config inspection (selector doesn't expose pool metadata).
-	pools, _ := loadProxyPools(config.configPath)
 	for _, pool := range pools {
 		if pool.Name == config.poolName && pool.Sticky != nil {
 			scope := pool.Sticky.Scope

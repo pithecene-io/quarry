@@ -65,7 +65,11 @@ job:
 
 ## CLI Selection
 
-You can also select proxies directly from the CLI using a JSON config file:
+**Recommended:** Define proxy pools in a `quarry.yaml` config file (see
+`docs/guides/configuration.md`) and use `--config quarry.yaml`.
+
+**Legacy:** You can also select proxies using a separate JSON config file
+via `--proxy-config`. This method is deprecated and will emit a warning:
 
 ```
 quarry run \
