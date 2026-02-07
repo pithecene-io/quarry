@@ -5,6 +5,10 @@ TypeScript SDK for writing Quarry extraction scripts.
 ## Installation
 
 ```bash
+# via JSR (recommended)
+npx jsr add @justapithecus/quarry-sdk
+
+# via GitHub Packages
 pnpm add @justapithecus/quarry-sdk
 ```
 

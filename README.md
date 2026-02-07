@@ -8,6 +8,24 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 
 ---
 
+## Installation
+
+### CLI
+
+```bash
+mise install github:justapithecus/quarry@0.3.2
+```
+
+### SDK
+
+```bash
+npx jsr add @justapithecus/quarry-sdk
+```
+
+See [PUBLIC_API.md](PUBLIC_API.md) for full setup and usage guide.
+
+---
+
 ## What Quarry Is
 
 Quarry is:

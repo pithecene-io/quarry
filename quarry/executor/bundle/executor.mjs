@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.3.1
+// Quarry Executor Bundle v0.3.2
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: task executor:bundle
 

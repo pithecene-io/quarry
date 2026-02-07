@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.3.0.
+User-facing guide for Quarry v0.3.2.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -18,6 +18,46 @@ type-stripping. Node 23+ enables this by default. Node 22.6–22.x requires
 `--experimental-strip-types` flag (set via `NODE_OPTIONS`).
 
 Quarry is **TypeScript-first** and **ESM-only**.
+
+---
+
+## Installation
+
+### Via mise (recommended)
+
+```bash
+mise install github:justapithecus/quarry@0.3.2
+```
+
+Or pin in your `mise.toml`:
+
+```toml
+[tools]
+"github:justapithecus/quarry" = "0.3.2"
+```
+
+### SDK
+
+Install the SDK in your script project:
+
+```bash
+npx jsr add @justapithecus/quarry-sdk
+```
+
+Or via pnpm with GitHub Packages:
+
+```bash
+pnpm add @justapithecus/quarry-sdk
+```
+
+### From source
+
+```bash
+git clone https://github.com/justapithecus/quarry.git
+cd quarry
+pnpm install
+task build
+```
 
 ---
 
@@ -303,7 +343,7 @@ task build
 
 ---
 
-## Known Limitations (v0.3.0)
+## Known Limitations (v0.3.2)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -365,7 +405,15 @@ processing after runs complete, see [docs/guides/integration.md](docs/guides/int
 
 ```bash
 quarry version
-# 0.3.0 (commit: ...)
+# 0.3.2 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
+
+### Distribution Channels
+
+| Component | Channel | Install |
+|-----------|---------|---------|
+| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.3.2` |
+| SDK | JSR | `npx jsr add @justapithecus/quarry-sdk` |
+| SDK | GitHub Packages | `pnpm add @justapithecus/quarry-sdk` |
