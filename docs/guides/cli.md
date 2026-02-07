@@ -115,6 +115,11 @@ Optional flags:
 - `--proxy-domain <domain>` (when sticky scope = domain)
 - `--proxy-origin <origin>` (when sticky scope = origin, format: scheme://host:port)
 
+Storage flags (S3 / S3-compatible):
+- `--storage-region <region>` (AWS region, uses default chain if omitted)
+- `--storage-endpoint <url>` (custom S3 endpoint for R2, MinIO, etc.)
+- `--storage-s3-path-style` (force path-style addressing, required by R2/MinIO)
+
 Advanced flags:
 - `--executor <path>` (auto-resolved by default; override for troubleshooting)
 
@@ -150,6 +155,20 @@ quarry run \
   --proxy-pool residential_sticky \
   --proxy-domain example.com \
   --job '{"source":"demo"}'
+```
+
+S3-compatible storage example (Cloudflare R2):
+
+```
+quarry run \
+  --script ./my-script.ts \
+  --run-id run-001 \
+  --source my-source \
+  --storage-backend s3 \
+  --storage-path my-bucket/quarry \
+  --storage-endpoint https://ACCOUNT_ID.r2.cloudflarestorage.com \
+  --storage-s3-path-style \
+  --job '{"url":"https://example.com"}'
 ```
 
 #### Job Payload Contract

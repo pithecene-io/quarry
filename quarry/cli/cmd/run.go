@@ -74,7 +74,7 @@ EXAMPLES:
 
 ADVANCED:
   # Override executor path (troubleshooting)
-  quarry run --script ./script.ts --run-id run-005 --source my-source \
+  quarry run --script ./script.ts --run-id run-006 --source my-source \
     --storage-backend fs --storage-path ./data \
     --executor /custom/path/to/executor.js`,
 		Flags: []cli.Flag{
