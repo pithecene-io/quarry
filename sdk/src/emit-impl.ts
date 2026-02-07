@@ -258,6 +258,7 @@ export function createAPIs(run: RunMeta, sink: EmitSink): { emit: EmitAPI; stora
   const storage: StorageAPI = {
     put(options: StoragePutOptions): Promise<void> {
       return serialize(async () => {
+        assertNotTerminal()
         validateFilename(options.filename)
         await sink.writeFile(options.filename, options.content_type, options.data)
       })

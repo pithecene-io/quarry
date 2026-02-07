@@ -3,6 +3,7 @@ package lode
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -22,15 +23,33 @@ type FileWriter interface {
 var _ FileWriter = (*LodeClient)(nil)
 
 // PutFile writes a sidecar file to Lode Store at the computed Hive path.
+// Writes the data file and a companion .meta.json with content type.
 // Uses lazy store initialization via storeFactory.
-func (c *LodeClient) PutFile(ctx context.Context, filename, _ string, data []byte) error {
+func (c *LodeClient) PutFile(ctx context.Context, filename, contentType string, data []byte) error {
 	store, err := c.getOrCreateStore()
 	if err != nil {
 		return fmt.Errorf("file write store init failed: %w", err)
 	}
 
 	path := c.buildFilePath(filename)
-	return store.Put(ctx, path, bytes.NewReader(data))
+	if err := store.Put(ctx, path, bytes.NewReader(data)); err != nil {
+		return err
+	}
+
+	// Write companion metadata file preserving content type.
+	// Store.Put has no metadata parameter, so content type is persisted
+	// as a sidecar JSON file alongside the data.
+	meta, err := json.Marshal(fileMetadata{ContentType: contentType})
+	if err != nil {
+		return fmt.Errorf("file write metadata marshal failed: %w", err)
+	}
+	metaPath := path + ".meta.json"
+	return store.Put(ctx, metaPath, bytes.NewReader(meta))
+}
+
+// fileMetadata is the companion metadata written alongside sidecar files.
+type fileMetadata struct {
+	ContentType string `json:"content_type"`
 }
 
 // getOrCreateStore lazily initializes the Store from the factory.

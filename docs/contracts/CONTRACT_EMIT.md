@@ -11,6 +11,7 @@ This is a contract document. Implementations must conform.
 ## Scope
 
 - Applies to all events emitted by user scripts via `emit.*`.
+- Applies to sidecar file uploads via `storage.put()`.
 - Defines an envelope that must wrap every event.
 - Defines initial event types and their invariants.
 - Defines ordering guarantees per run.
@@ -127,6 +128,35 @@ Represents normal completion of the script.
 
 Required payload fields:
 - `summary` (object, optional)
+
+---
+
+## Storage API (`storage.put()`)
+
+Scripts may write sidecar files via `storage.put()`. These files bypass
+the event envelope, sequence numbering, and policy pipeline entirely.
+
+### Semantics
+
+- `storage.put()` shares the same serialization chain as `emit.*` for
+  ordering and fail-fast behavior.
+- **Terminal boundary**: calling `storage.put()` after a terminal event
+  (`run_complete` or `run_error`) throws `TerminalEventError`.
+- **Not events**: file writes do not produce event envelopes and are
+  not counted in `seq`.
+- Files are transported as `file_write` IPC frames (see CONTRACT_IPC.md).
+
+### Filename Rules
+
+- Must not be empty.
+- Must not contain path separators (`/` or `\`).
+- Must not contain `..`.
+
+### Content Type
+
+- Caller provides a `content_type` (MIME type) with each file.
+- Content type is persisted as a companion `.meta.json` sidecar file
+  alongside the data file in storage.
 
 ---
 

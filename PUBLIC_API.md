@@ -120,6 +120,7 @@ The `QuarryContext` provides:
 | `browser` | `Browser` | Puppeteer browser instance |
 | `browserContext` | `BrowserContext` | Puppeteer browser context |
 | `emit` | `EmitAPI` | Output emission interface |
+| `storage` | `StorageAPI` | Sidecar file upload interface |
 
 ### Terminal Behavior
 
@@ -136,7 +137,8 @@ After a terminal event, further emit calls are undefined behavior.
 
 ## Emit API
 
-`emit.*` is the **sole output mechanism** for scripts.
+`emit.*` is the **primary output mechanism** for scripts. For sidecar
+file uploads, see the Storage API below.
 
 ### Primary Methods
 
@@ -181,6 +183,31 @@ await ctx.emit.enqueue({
 
 // Suggest proxy rotation
 await ctx.emit.rotateProxy({ reason: "rate limited" });
+```
+
+### Storage API
+
+`storage.put()` writes sidecar files directly to addressable storage paths,
+bypassing the event pipeline.
+
+```typescript
+// Write a file to storage (e.g., images, CSVs, raw HTML)
+await ctx.storage.put({
+  filename: "product-image.png",
+  content_type: "image/png",
+  data: buffer  // Buffer or Uint8Array
+});
+```
+
+Rules:
+- Filename must be flat (no `/`, `\`, or `..`)
+- Maximum file size: 8 MiB
+- Shares ordering and fail-fast with `emit.*`
+- Cannot be called after a terminal event (`run_complete` / `run_error`)
+
+Files land at Hive-partitioned paths:
+```
+<storage-path>/source=<s>/category=<c>/day=<d>/run_id=<r>/files/<filename>
 ```
 
 ---

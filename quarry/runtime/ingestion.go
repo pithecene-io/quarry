@@ -466,6 +466,14 @@ func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
 // File writes bypass seq numbering and the policy pipeline.
 // File write errors are stream errors (same category as artifact chunk errors).
 func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.FileWriteFrame) error {
+	// Reject file writes after terminal event
+	if e.terminalSeen {
+		e.logger.Warn("ignoring file_write after terminal event", map[string]any{
+			"filename": frame.Filename,
+		})
+		return nil
+	}
+
 	// Validate filename: no path separators, no ".."
 	if frame.Filename == "" {
 		return &IngestionError{
