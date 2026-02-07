@@ -17,8 +17,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/justapithecus/quarry/adapter"
-	quarryconfig "github.com/justapithecus/quarry/cli/config"
 	"github.com/justapithecus/quarry/adapter/webhook"
+	quarryconfig "github.com/justapithecus/quarry/cli/config"
 	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/metrics"

@@ -13,6 +13,29 @@ _No unreleased changes._
 
 ---
 
+## [0.4.1] - 2026-02-07
+
+### Added
+
+- **Config**: `--config` flag for YAML project-level defaults — reduces CLI flag repetition across invocations (#104)
+- **Config**: `${VAR}` and `${VAR:-default}` environment variable expansion in YAML config files (#104)
+- **Config**: Inline proxy pool definitions via `proxies:` key in YAML config, replacing deprecated `--proxy-config` JSON file (#104)
+- **Config**: Unknown YAML keys rejected via `KnownFields(true)` to catch typos early (#104)
+- **Testing**: Hardened config edge cases — env expansion boundaries, whitespace/comments-only YAML, Duration validation, retries nil vs zero
+
+### Changed
+
+- **CLI**: `--source`, `--storage-backend`, `--storage-path` no longer require CLI flags when provided via `--config` file (#104)
+- **CLI**: `--proxy-config` deprecated in favor of `proxies:` key in YAML config (#104)
+- **Docs**: Removed premature adapter schema from configuration guide
+- **Docs**: Clarified proxy job-level selection as CLI flags, not YAML config keys
+
+### Fixed
+
+- **Runtime**: Adapter config in YAML now emits a warning instead of being silently ignored
+
+---
+
 ## [0.4.0] - 2026-02-07
 
 ### Added
@@ -227,6 +250,7 @@ _No unreleased changes._
 
 ---
 
+[0.4.1]: https://github.com/justapithecus/quarry/releases/tag/v0.4.1
 [0.4.0]: https://github.com/justapithecus/quarry/releases/tag/v0.4.0
 [0.3.5]: https://github.com/justapithecus/quarry/releases/tag/v0.3.5
 [0.3.4]: https://github.com/justapithecus/quarry/releases/tag/v0.3.4

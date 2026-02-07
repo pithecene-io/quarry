@@ -13,10 +13,11 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.4.0)
-- Latest release: v0.4.0 (see CHANGELOG.md).
+## Current Status (as of v0.4.1)
+- Latest release: v0.4.1 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.4.0 adds `ctx.storage.put()` for sidecar file uploads via Lode Store.
+- v0.4.1 adds `--config` for YAML project-level defaults and config package hardening.
+- v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
 
 ---
 

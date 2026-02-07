@@ -241,6 +241,94 @@ func TestLoad_UnknownNestedKeyRejected(t *testing.T) {
 	}
 }
 
+func TestLoad_WhitespaceOnlyConfig(t *testing.T) {
+	path := writeTemp(t, "   \n  \n  \n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed for whitespace-only config: %v", err)
+	}
+	if cfg.Source != "" {
+		t.Errorf("expected empty source, got %q", cfg.Source)
+	}
+}
+
+func TestLoad_CommentsOnlyConfig(t *testing.T) {
+	path := writeTemp(t, "# This is a comment\n# Another comment\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed for comments-only config: %v", err)
+	}
+	if cfg.Source != "" {
+		t.Errorf("expected empty source, got %q", cfg.Source)
+	}
+}
+
+func TestLoad_RetriesZeroDistinctFromNil(t *testing.T) {
+	// retries: 0 should parse as *int(0), not nil.
+	yaml := `adapter:
+  type: webhook
+  url: https://example.com
+  retries: 0
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.Adapter.Retries == nil {
+		t.Fatal("expected retries to be non-nil (*int(0)), got nil")
+	}
+	if *cfg.Adapter.Retries != 0 {
+		t.Errorf("expected retries=0, got %d", *cfg.Adapter.Retries)
+	}
+}
+
+func TestLoad_RetriesOmittedIsNil(t *testing.T) {
+	// Omitting retries should leave the pointer nil.
+	yaml := `adapter:
+  type: webhook
+  url: https://example.com
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.Adapter.Retries != nil {
+		t.Errorf("expected retries to be nil, got %d", *cfg.Adapter.Retries)
+	}
+}
+
+func TestDuration_InvalidFormat(t *testing.T) {
+	yaml := `adapter:
+  timeout: not-a-duration
+`
+	path := writeTemp(t, yaml)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid duration")
+	}
+	if !strings.Contains(err.Error(), "invalid duration") {
+		t.Errorf("error should mention invalid duration, got: %v", err)
+	}
+}
+
+func TestDuration_EmptyIsZero(t *testing.T) {
+	yaml := `adapter:
+  type: webhook
+  url: https://example.com
+  timeout: ""
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.Adapter.Timeout.Duration != 0 {
+		t.Errorf("expected zero duration, got %v", cfg.Adapter.Timeout.Duration)
+	}
+}
+
 func TestDuration_UnmarshalYAML(t *testing.T) {
 	yaml := `timeout: 30s`
 	path := writeTemp(t, "adapter:\n  "+yaml)
