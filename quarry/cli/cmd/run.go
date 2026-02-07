@@ -249,6 +249,11 @@ func runAction(c *cli.Context) error {
 		cfg = loaded
 	}
 
+	// Warn if adapter config is present but adapter feature is not yet available
+	if cfg != nil && cfg.Adapter.Type != "" {
+		fmt.Fprintf(os.Stderr, "Warning: adapter config in YAML is not yet supported and will be ignored\n")
+	}
+
 	// Resolve values with precedence: CLI flag > config file > flag default
 	source := resolveString(c, "source", configVal(cfg, func(c *quarryconfig.Config) string { return c.Source }))
 	category := resolveString(c, "category", configVal(cfg, func(c *quarryconfig.Config) string { return c.Category }))

@@ -69,6 +69,35 @@ func TestExpandEnv_NoVars(t *testing.T) {
 	}
 }
 
+func TestExpandEnv_DollarWithoutBraces(t *testing.T) {
+	t.Setenv("SOME_VAR", "value")
+
+	// $VAR (no braces) must not be expanded — only ${VAR} is supported.
+	got := ExpandEnv("path: $SOME_VAR/suffix")
+	want := "path: $SOME_VAR/suffix"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestExpandEnv_EmptyDefault(t *testing.T) {
+	// ${VAR:-} with empty default expands to empty string when unset.
+	got := ExpandEnv("value: ${UNSET_VAR_99999:-}")
+	want := "value: "
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestExpandEnv_DefaultWithSpecialChars(t *testing.T) {
+	// Default value containing colons, slashes, and port numbers.
+	got := ExpandEnv("url: ${UNSET_VAR_99999:-http://localhost:8080/path}")
+	want := "url: http://localhost:8080/path"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestExpandEnv_NestedInYAML(t *testing.T) {
 	t.Setenv("PROXY_USER", "admin")
 	t.Setenv("PROXY_PASS", "secret")
