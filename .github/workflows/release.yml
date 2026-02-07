@@ -282,8 +282,6 @@ jobs:
         uses: jdx/mise-action@v2
       - name: "📦 Install dependencies"
         run: pnpm install
-      - name: "🏗️ Build SDK"
-        run: pnpm -C sdk run build
       - name: "📦 Publish"
         working-directory: sdk
         run: |
