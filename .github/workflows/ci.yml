@@ -72,6 +72,26 @@ jobs:
       - name: "🧪 Test"
         run: task test
 
+  bundle-freshness:
+    name: "📦 Bundle Freshness"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🧰 Setup"
+        uses: jdx/mise-action@v2
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "📦 Regenerate bundle"
+        run: task executor:bundle
+      - name: "🔍 Check for drift"
+        run: |
+          if ! git diff --exit-code quarry/executor/bundle/executor.mjs; then
+            echo "::error::Embedded executor bundle is stale. Run 'task executor:bundle' and commit the result."
+            exit 1
+          fi
+          echo "✅ Bundle is fresh"
+
   build:
     name: "🏗️ Build"
     runs-on: ubuntu-latest

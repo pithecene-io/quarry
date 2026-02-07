@@ -38,13 +38,17 @@ async function bundle() {
   const version = getQuarryVersion()
   console.log(`Bundling executor v${version}...`)
 
+  // Write directly to go:embed source path — single canonical location
+  const embedDir = join(root, '..', 'quarry', 'executor', 'bundle')
+  const bundlePath = join(embedDir, 'executor.mjs')
+
   const result = await esbuild.build({
     entryPoints: [join(root, 'src', 'bin', 'executor.ts')],
     bundle: true,
     platform: 'node',
     target: 'node22',
     format: 'esm',
-    outfile: join(root, 'dist', 'bundle', 'executor.mjs'),
+    outfile: bundlePath,
     external: [
       'puppeteer',
       'puppeteer-extra',
@@ -56,7 +60,7 @@ async function bundle() {
     banner: {
       js: `// Quarry Executor Bundle v${version}
 // This is a bundled version for embedding in the quarry binary.
-// Do not edit directly - regenerate with: pnpm run bundle
+// Do not edit directly - regenerate with: task executor:bundle
 `
     },
     define: {
@@ -65,11 +69,10 @@ async function bundle() {
     metafile: true
   })
 
-  // Write metafile for analysis
+  // Write metafile for analysis (stays in dist/)
   writeFileSync(join(root, 'dist', 'bundle', 'meta.json'), JSON.stringify(result.metafile, null, 2))
 
   // Ensure bundle has exactly one shebang at the start for direct execution
-  const bundlePath = join(root, 'dist', 'bundle', 'executor.mjs')
   let bundleContent = readFileSync(bundlePath, 'utf-8')
   // Remove any shebangs that might be in the middle (from source)
   bundleContent = bundleContent.replace(/^#!.*\n/gm, '')
@@ -81,7 +84,7 @@ async function bundle() {
   const stats = readFileSync(bundlePath)
   const sizeKB = (stats.length / 1024).toFixed(1)
 
-  console.log(`Bundle created: dist/bundle/executor.mjs (${sizeKB} KB)`)
+  console.log(`Bundle created: quarry/executor/bundle/executor.mjs (${sizeKB} KB)`)
   console.log(`Version: ${version}`)
 }
 
