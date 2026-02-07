@@ -391,7 +391,10 @@ the workflow orchestrates extraction (Quarry activity) and notification
 (webhook/SNS activity) as independent steps, each with Temporal's
 at-least-once guarantees.
 
-If Temporal ships first, the outbox pattern may never be needed.
+Temporal eliminates the need for the outbox in orchestrated deployments,
+but standalone CLI usage remains a first-class paradigm. The outbox
+pattern is still relevant for users running Quarry directly (cron, CI,
+shell scripts) without an external orchestrator.
 
 #### Open questions
 - Retry ownership: CLI command, background process, or next-run piggyback?
