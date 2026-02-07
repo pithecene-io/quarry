@@ -45,7 +45,12 @@ async function bundle() {
     target: 'node22',
     format: 'esm',
     outfile: join(root, 'dist', 'bundle', 'executor.mjs'),
-    external: ['puppeteer'], // Peer dependency
+    external: [
+      'puppeteer',
+      'puppeteer-extra',
+      'puppeteer-extra-plugin-stealth',
+      'puppeteer-extra-plugin-adblocker'
+    ],
     minify: false, // Keep readable for debugging
     sourcemap: false, // No sourcemaps in embedded bundle
     banner: {

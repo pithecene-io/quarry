@@ -164,7 +164,11 @@ async function main(): Promise<never> {
       // Disable sandbox in containerized environments
       args:
         process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
-    }
+    },
+    // Stealth on by default; disable with QUARRY_STEALTH=0
+    stealth: process.env.QUARRY_STEALTH !== '0',
+    // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
+    adblocker: process.env.QUARRY_ADBLOCKER === '1'
   })
 
   // Map outcome to exit code
