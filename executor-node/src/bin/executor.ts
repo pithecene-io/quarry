@@ -27,6 +27,14 @@ import type { ProxyEndpoint } from '@justapithecus/quarry-sdk'
 import { execute, parseRunMeta } from '../executor.js'
 
 /**
+ * Write an error message to stderr and exit with code 3 (invalid input).
+ */
+function fatalError(message: string): never {
+  process.stderr.write(`Error: ${message}\n`)
+  process.exit(3)
+}
+
+/**
  * Parse optional proxy endpoint from input.
  * Returns undefined if no proxy is configured.
  */
@@ -107,19 +115,15 @@ async function main(): Promise<never> {
   try {
     const stdinData = await readStdin()
     if (stdinData.trim() === '') {
-      process.stderr.write('Error: stdin is empty, expected JSON input\n')
-      process.exit(3)
+      fatalError('stdin is empty, expected JSON input')
     }
     input = JSON.parse(stdinData)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`Error parsing stdin JSON: ${message}\n`)
-    process.exit(3)
+    fatalError(`parsing stdin JSON: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   if (input === null || typeof input !== 'object') {
-    process.stderr.write('Error: stdin must be a JSON object\n')
-    process.exit(3)
+    fatalError('stdin must be a JSON object')
   }
 
   const inputObj = input as Record<string, unknown>
@@ -129,15 +133,12 @@ async function main(): Promise<never> {
   try {
     run = parseRunMeta(inputObj)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`Error parsing run metadata: ${message}\n`)
-    process.exit(3)
+    fatalError(`parsing run metadata: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Extract job payload
   if (!('job' in inputObj)) {
-    process.stderr.write('Error: missing "job" field in input\n')
-    process.exit(3)
+    fatalError('missing "job" field in input')
   }
   const job = inputObj.job
 
@@ -146,9 +147,7 @@ async function main(): Promise<never> {
   try {
     proxy = parseProxy(inputObj)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`Error parsing proxy: ${message}\n`)
-    process.exit(3)
+    fatalError(`parsing proxy: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Execute

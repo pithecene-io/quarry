@@ -95,17 +95,11 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
   }
 
   // Validate optional hooks
-  if (!isOptionalFunction(mod.beforeRun)) {
-    throw new ScriptLoadError(scriptPath, 'beforeRun hook is not a function')
-  }
-  if (!isOptionalFunction(mod.afterRun)) {
-    throw new ScriptLoadError(scriptPath, 'afterRun hook is not a function')
-  }
-  if (!isOptionalFunction(mod.onError)) {
-    throw new ScriptLoadError(scriptPath, 'onError hook is not a function')
-  }
-  if (!isOptionalFunction(mod.cleanup)) {
-    throw new ScriptLoadError(scriptPath, 'cleanup hook is not a function')
+  const HOOK_NAMES = ['beforeRun', 'afterRun', 'onError', 'cleanup'] as const
+  for (const name of HOOK_NAMES) {
+    if (!isOptionalFunction(mod[name])) {
+      throw new ScriptLoadError(scriptPath, `${name} hook is not a function`)
+    }
   }
 
   // Cast through unknown since we've validated the shape above
