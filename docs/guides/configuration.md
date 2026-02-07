@@ -7,18 +7,21 @@ For command details, see `docs/guides/cli.md`. For proxy setup, see `docs/guides
 
 ## Configuration Layers
 
-Quarry configuration lives in three distinct layers:
+Quarry configuration lives in four distinct layers:
 
 | Layer | Where | What it controls |
 |-------|-------|------------------|
 | **CLI flags** | `quarry run --flag` | Run execution, storage, policy, proxy selection |
-| **Config files** | JSON files on disk | Proxy pool definitions |
+| **YAML config file** | `--config quarry.yaml` | Project-level defaults for all run flags |
+| **JSON config files** | `--proxy-config` (deprecated) | Proxy pool definitions |
 | **Environment variables** | Process environment | Executor/browser behavior |
 
-These layers are intentionally separate. CLI flags control the Go runtime
-(orchestration, storage, policy). Environment variables control the Node
-executor (browser hardening, plugin behavior). Config files define static
-resources referenced by flags.
+**Precedence:** CLI flags > YAML config file > flag defaults.
+
+CLI flags control the Go runtime (orchestration, storage, policy).
+Environment variables control the Node executor (browser hardening, plugin
+behavior). The YAML config file provides reusable project-level defaults
+to reduce flag repetition across invocations.
 
 ---
 
@@ -26,6 +29,14 @@ resources referenced by flags.
 
 All flags are passed to `quarry run`. See `docs/guides/cli.md` for full
 command reference.
+
+### Config File
+
+| Flag | Type | Purpose |
+|------|------|---------|
+| `--config` | path | Path to YAML config file with project-level defaults |
+
+See [YAML Config File](#yaml-config-file) below for schema and examples.
 
 ### Required
 
@@ -36,6 +47,10 @@ command reference.
 | `--source` | string | Source identifier (Lode partition key) |
 | `--storage-backend` | `fs` or `s3` | Storage backend |
 | `--storage-path` | string | `fs`: directory path; `s3`: `bucket/prefix` |
+
+> **Note:** `--source`, `--storage-backend`, and `--storage-path` can be
+> provided via `--config` file instead of CLI flags. They are required at
+> runtime but do not need to appear on the CLI if set in the config.
 
 ### Run Metadata
 
@@ -74,8 +89,8 @@ Buffered policy requires at least one of `--buffer-events` or `--buffer-bytes` t
 
 | Flag | Type | Purpose |
 |------|------|---------|
-| `--proxy-config` | path | Path to JSON proxy pools config |
-| `--proxy-pool` | string | Pool name to select from (requires `--proxy-config`) |
+| `--proxy-config` | path | Path to JSON proxy pools config (**deprecated**: use `proxies:` in YAML config) |
+| `--proxy-pool` | string | Pool name to select from |
 | `--proxy-strategy` | `round_robin`, `random`, `sticky` | Override pool's default strategy |
 | `--proxy-sticky-key` | string | Explicit sticky key (overrides derivation) |
 | `--proxy-domain` | string | Domain for sticky derivation (scope=domain) |
@@ -92,11 +107,11 @@ See `docs/guides/proxy.md` for pool configuration format and selection behavior.
 | `--tui` | bool | `false` | Interactive TUI (inspect/stats only) |
 | `--quiet` | bool | `false` | Suppress run result output |
 
-### Advanced
+### Advanced (development only)
 
 | Flag | Type | Purpose |
 |------|------|---------|
-| `--executor` | path | Override executor binary (auto-resolved by default) |
+| `--executor` | path | Override executor binary (auto-resolved in bundled binary; only needed for local development builds) |
 
 ---
 
@@ -135,11 +150,117 @@ rather than per-run configuration, so they live outside the run protocol.
 
 ---
 
-## Config Files
+## YAML Config File
 
-### Proxy Pools
+The `--config` flag loads a YAML config file providing project-level defaults
+for `quarry run`. This reduces repetition when the same source, storage,
+policy, and proxy settings are used across multiple invocations.
 
-Proxy pool definitions are static JSON files referenced via `--proxy-config`.
+### Quick Start
+
+```yaml
+# quarry.yaml
+source: my-source
+storage:
+  backend: fs
+  path: ./quarry-data
+```
+
+```bash
+quarry run --config quarry.yaml --script ./script.ts --run-id run-001
+```
+
+### Full Schema
+
+```yaml
+# quarry.yaml — project defaults for quarry run
+# All values are overridden by explicit CLI flags.
+
+source: my-source
+category: default
+
+# Executor path override (development only).
+# The bundled binary auto-resolves the executor; only needed for local dev builds.
+# executor: ./executor-node/dist/bin/executor.js
+
+storage:
+  dataset: quarry
+  backend: s3
+  path: my-bucket/quarry-data
+  region: us-east-1
+  endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
+  s3_path_style: true
+
+policy:
+  name: buffered
+  flush_mode: at_least_once
+  buffer_events: 1000
+  buffer_bytes: 10485760
+
+proxies:
+  iproyal_nyc:
+    strategy: round_robin
+    endpoints:
+      - protocol: https
+        host: geo.iproyal.com
+        port: 12321
+        username: ${IPROYAL_USER}
+        password: ${IPROYAL_PASS}
+
+  residential_sticky:
+    strategy: sticky
+    sticky:
+      scope: domain
+      ttl_ms: 3600000
+    endpoints:
+      - protocol: http
+        host: proxy.example.com
+        port: 8080
+
+proxy:
+  pool: iproyal_nyc
+  strategy: round_robin
+
+adapter:
+  type: webhook
+  url: https://hooks.example.com/quarry
+  headers:
+    Authorization: Bearer ${WEBHOOK_TOKEN}
+  timeout: 10s
+  retries: 3
+```
+
+### Environment Variable Expansion
+
+The config file supports `${VAR}` and `${VAR:-default}` syntax. Expansion
+is applied to the raw YAML text before parsing.
+
+- `${VAR}` — expands to the value of `VAR`, or empty string if unset
+- `${VAR:-default}` — expands to `default` if `VAR` is unset or empty
+
+Unset variables without defaults are not errors. Required secrets will
+fail at downstream validation (e.g., proxy endpoint auth pair validation).
+
+### Proxy Pools in Config
+
+Proxy pools are defined inline under `proxies:`, keyed by pool name. This
+replaces the deprecated `--proxy-config` JSON file. Using both
+`--proxy-config` and config `proxies:` in the same invocation is an error.
+
+### No Auto-Discovery
+
+Config files are loaded only via explicit `--config <path>`. There is no
+implicit search for `quarry.yaml` in the working directory.
+
+---
+
+## Config Files (Legacy)
+
+### Proxy Pools (deprecated)
+
+Proxy pool definitions were previously static JSON files referenced via
+`--proxy-config`. This method still works but emits a deprecation warning.
+Prefer defining pools in the YAML config file under `proxies:`.
 
 ```json
 [
@@ -149,20 +270,6 @@ Proxy pool definitions are static JSON files referenced via `--proxy-config`.
     "endpoints": [
       { "protocol": "http", "host": "proxy1.example.com", "port": 8080 },
       { "protocol": "http", "host": "proxy2.example.com", "port": 8080 }
-    ]
-  },
-  {
-    "name": "sticky-pool",
-    "strategy": "sticky",
-    "sticky": { "scope": "domain", "ttl_ms": 3600000 },
-    "endpoints": [
-      {
-        "protocol": "http",
-        "host": "proxy3.example.com",
-        "port": 8080,
-        "username": "user",
-        "password": "pass"
-      }
     ]
   }
 ]
@@ -206,24 +313,40 @@ variables and use `--storage-endpoint` to point at the provider's endpoint.
 
 ```
 quarry run (Go runtime)
-  ├── CLI flags → run metadata, storage, policy, proxy selection
-  ├── Config files → proxy pool definitions (--proxy-config)
+  ├── CLI flags (highest precedence)
+  ├── YAML config file (--config, project defaults)
+  ├── Flag defaults (lowest precedence)
   └── Spawns executor subprocess
         ├── stdin JSON → run_id, attempt, job, proxy endpoint
         └── env vars → QUARRY_STEALTH, QUARRY_ADBLOCKER, QUARRY_NO_SANDBOX
               └── Controls Puppeteer browser behavior
 ```
 
-The Go runtime resolves all configuration, selects a proxy endpoint (if
-configured), and passes a fully resolved run context to the executor via
-stdin. The executor reads only its own environment variables for browser
-hardening — it does not access CLI flags or config files.
+The Go runtime merges CLI flags and config file values (CLI wins), resolves
+all configuration, selects a proxy endpoint (if configured), and passes a
+fully resolved run context to the executor via stdin. The executor reads
+only its own environment variables for browser hardening — it does not
+access CLI flags or config files.
 
 ---
 
 ## Common Recipes
 
-### Minimal local run
+### Minimal local run (with config)
+
+```yaml
+# quarry.yaml
+source: my-source
+storage:
+  backend: fs
+  path: ./data
+```
+
+```bash
+quarry run --config quarry.yaml --script ./my-script.ts --run-id run-001
+```
+
+### Minimal local run (flags only)
 
 ```bash
 quarry run \

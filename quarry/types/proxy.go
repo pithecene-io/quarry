@@ -41,15 +41,15 @@ const (
 // Emitted by runtime in run requests.
 type ProxyEndpoint struct {
 	// Protocol is the proxy protocol.
-	Protocol ProxyProtocol `json:"protocol" msgpack:"protocol"`
+	Protocol ProxyProtocol `json:"protocol" msgpack:"protocol" yaml:"protocol"`
 	// Host is the proxy host.
-	Host string `json:"host" msgpack:"host"`
+	Host string `json:"host" msgpack:"host" yaml:"host"`
 	// Port is the proxy port (1-65535).
-	Port int `json:"port" msgpack:"port"`
+	Port int `json:"port" msgpack:"port" yaml:"port"`
 	// Username is the optional username for authentication.
-	Username *string `json:"username,omitempty" msgpack:"username,omitempty"`
+	Username *string `json:"username,omitempty" msgpack:"username,omitempty" yaml:"username,omitempty"`
 	// Password is the optional password for authentication.
-	Password *string `json:"password,omitempty" msgpack:"password,omitempty"`
+	Password *string `json:"password,omitempty" msgpack:"password,omitempty" yaml:"password,omitempty"`
 }
 
 // Validate validates a proxy endpoint per CONTRACT_PROXY.md hard validation rules.
@@ -99,22 +99,22 @@ type ProxyEndpointRedacted struct {
 // ProxySticky is sticky configuration for a proxy pool.
 type ProxySticky struct {
 	// Scope is the scope for sticky key derivation.
-	Scope ProxyStickyScope `json:"scope" msgpack:"scope"`
+	Scope ProxyStickyScope `json:"scope" msgpack:"scope" yaml:"scope"`
 	// TTLMs is the optional TTL in milliseconds for sticky entries.
-	TTLMs *int64 `json:"ttl_ms,omitempty" msgpack:"ttl_ms,omitempty"`
+	TTLMs *int64 `json:"ttl_ms,omitempty" msgpack:"ttl_ms,omitempty" yaml:"ttl_ms,omitempty"`
 }
 
 // ProxyPool defines a pool and rotation policy.
 // Parsed and validated by runtime.
 type ProxyPool struct {
 	// Name is the pool name (unique identifier).
-	Name string `json:"name" msgpack:"name"`
+	Name string `json:"name" msgpack:"name" yaml:"name"`
 	// Strategy is the selection strategy.
-	Strategy ProxyStrategy `json:"strategy" msgpack:"strategy"`
+	Strategy ProxyStrategy `json:"strategy" msgpack:"strategy" yaml:"strategy"`
 	// Endpoints is the list of available endpoints (must have at least one).
-	Endpoints []ProxyEndpoint `json:"endpoints" msgpack:"endpoints"`
+	Endpoints []ProxyEndpoint `json:"endpoints" msgpack:"endpoints" yaml:"endpoints"`
 	// Sticky is the optional sticky configuration.
-	Sticky *ProxySticky `json:"sticky,omitempty" msgpack:"sticky,omitempty"`
+	Sticky *ProxySticky `json:"sticky,omitempty" msgpack:"sticky,omitempty" yaml:"sticky,omitempty"`
 }
 
 // Validate validates a proxy pool per CONTRACT_PROXY.md hard validation rules.

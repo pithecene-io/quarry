@@ -1,0 +1,113 @@
+package config
+
+import (
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/justapithecus/quarry/types"
+)
+
+// Config represents a quarry.yaml configuration file.
+// All values are optional and act as defaults for quarry run flags.
+// CLI flags always override config values.
+type Config struct {
+	Source   string                       `yaml:"source"`
+	Category string                      `yaml:"category"`
+	Executor string                      `yaml:"executor"`
+	Storage  StorageConfig               `yaml:"storage"`
+	Policy   PolicyConfig                `yaml:"policy"`
+	Proxies  map[string]ProxyPoolConfig  `yaml:"proxies"`
+	Proxy    ProxySelection              `yaml:"proxy"`
+	Adapter  AdapterConfig               `yaml:"adapter"`
+}
+
+// StorageConfig holds storage defaults from the config file.
+type StorageConfig struct {
+	Dataset    string `yaml:"dataset"`
+	Backend    string `yaml:"backend"`
+	Path       string `yaml:"path"`
+	Region     string `yaml:"region"`
+	Endpoint   string `yaml:"endpoint"`
+	S3PathStyle bool  `yaml:"s3_path_style"`
+}
+
+// PolicyConfig holds policy defaults from the config file.
+type PolicyConfig struct {
+	Name         string `yaml:"name"`
+	FlushMode    string `yaml:"flush_mode"`
+	BufferEvents int    `yaml:"buffer_events"`
+	BufferBytes  int64  `yaml:"buffer_bytes"`
+}
+
+// ProxyPoolConfig is a proxy pool definition within the config file.
+// Name is derived from the map key, not stored in the struct.
+type ProxyPoolConfig struct {
+	Strategy  types.ProxyStrategy `yaml:"strategy"`
+	Endpoints []types.ProxyEndpoint `yaml:"endpoints"`
+	Sticky    *types.ProxySticky    `yaml:"sticky,omitempty"`
+}
+
+// ProxySelection holds proxy selection defaults from the config file.
+type ProxySelection struct {
+	Pool     string `yaml:"pool"`
+	Strategy string `yaml:"strategy"`
+}
+
+// AdapterConfig holds adapter defaults from the config file.
+type AdapterConfig struct {
+	Type    string            `yaml:"type"`
+	URL     string            `yaml:"url"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Timeout Duration          `yaml:"timeout,omitempty"`
+	Retries *int              `yaml:"retries,omitempty"`
+}
+
+// Duration wraps time.Duration for YAML string parsing (e.g. "10s", "5m").
+type Duration struct {
+	time.Duration
+}
+
+// UnmarshalYAML parses a duration string like "10s" or "5m30s".
+func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	if s == "" {
+		return nil
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	d.Duration = parsed
+	return nil
+}
+
+// ProxyPools converts the map-keyed proxy pool config into a sorted slice
+// of types.ProxyPool. Sorting by name ensures deterministic ordering.
+func (c *Config) ProxyPools() []types.ProxyPool {
+	if len(c.Proxies) == 0 {
+		return nil
+	}
+
+	// Collect and sort names for deterministic order
+	names := make([]string, 0, len(c.Proxies))
+	for name := range c.Proxies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	pools := make([]types.ProxyPool, 0, len(names))
+	for _, name := range names {
+		pc := c.Proxies[name]
+		pools = append(pools, types.ProxyPool{
+			Name:      name,
+			Strategy:  pc.Strategy,
+			Endpoints: pc.Endpoints,
+			Sticky:    pc.Sticky,
+		})
+	}
+	return pools
+}
