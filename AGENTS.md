@@ -165,8 +165,10 @@ Quarry uses **lockstep versioning**:
 When releasing:
 1. Update `quarry/types/version.go`
 2. Update `sdk/package.json` version field to match
-3. Rebuild SDK (`pnpm exec tsdown` in sdk/)
-4. Commit as a single version bump
+3. Update `sdk/src/types/events.ts` `CONTRACT_VERSION` to match
+4. Rebuild SDK (`pnpm exec tsdown` in sdk/)
+5. Rebuild executor bundle (`task executor:bundle`)
+6. Commit as a single version bump
 
 ---
 
