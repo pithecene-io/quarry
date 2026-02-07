@@ -68,7 +68,7 @@ async function resolveModule(name: string, scriptPath: string): Promise<Record<s
 /**
  * Extract a human-readable message from an unknown error value.
  */
-function errorMessage(err: unknown): string {
+export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 

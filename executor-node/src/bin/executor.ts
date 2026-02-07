@@ -24,7 +24,7 @@
  * @module
  */
 import type { ProxyEndpoint } from '@justapithecus/quarry-sdk'
-import { execute, parseRunMeta } from '../executor.js'
+import { errorMessage, execute, parseRunMeta } from '../executor.js'
 
 /**
  * Write an error message to stderr and exit with code 3 (invalid input).
@@ -119,7 +119,7 @@ async function main(): Promise<never> {
     }
     input = JSON.parse(stdinData)
   } catch (err) {
-    fatalError(`parsing stdin JSON: ${err instanceof Error ? err.message : String(err)}`)
+    fatalError(`parsing stdin JSON: ${errorMessage(err)}`)
   }
 
   if (input === null || typeof input !== 'object') {
@@ -133,7 +133,7 @@ async function main(): Promise<never> {
   try {
     run = parseRunMeta(inputObj)
   } catch (err) {
-    fatalError(`parsing run metadata: ${err instanceof Error ? err.message : String(err)}`)
+    fatalError(`parsing run metadata: ${errorMessage(err)}`)
   }
 
   // Extract job payload
@@ -147,7 +147,7 @@ async function main(): Promise<never> {
   try {
     proxy = parseProxy(inputObj)
   } catch (err) {
-    fatalError(`parsing proxy: ${err instanceof Error ? err.message : String(err)}`)
+    fatalError(`parsing proxy: ${errorMessage(err)}`)
   }
 
   // Execute
@@ -191,6 +191,6 @@ async function main(): Promise<never> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`Unexpected error: ${err instanceof Error ? err.message : String(err)}\n`)
+  process.stderr.write(`Unexpected error: ${errorMessage(err)}\n`)
   process.exit(2)
 })
