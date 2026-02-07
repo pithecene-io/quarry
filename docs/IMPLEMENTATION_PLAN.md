@@ -360,6 +360,34 @@ to poll Lode or wire external plumbing.
 - NATS
 - SNS
 
+### Future: At-Least-Once Delivery (Outbox Pattern)
+
+v0.5.0 delivery is best-effort with retries. If all retries exhaust, the
+notification is lost. For workloads that require at-least-once guarantees,
+a Lode-backed outbox pattern can be added without breaking the existing
+contract (strengthening from best-effort to at-least-once is additive).
+
+#### Design sketch
+1. Write a `notification_pending` record to Lode **before** attempting
+   publish (durable intent).
+2. Attempt publish with retries (existing webhook logic).
+3. On success, mark the record `delivered`.
+4. Undelivered records are retryable via a CLI command
+   (`quarry adapter drain`) or detected by the next run.
+
+Outbox records would live at:
+```
+datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
+```
+
+#### Open questions
+- Retry ownership: CLI command, background process, or next-run piggyback?
+- TTL for stale outbox entries (when to give up permanently).
+- Whether `quarry adapter drain` should be a new CLI command or a
+  subcommand of `quarry run`.
+
+This is deferred until best-effort proves insufficient in production.
+
 ---
 
 ## v0.6.0 Roadmap — Advanced Proxy Rotation
