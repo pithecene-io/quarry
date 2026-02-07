@@ -205,9 +205,9 @@ Rules:
 - Shares ordering and fail-fast with `emit.*`
 - Cannot be called after a terminal event (`run_complete` / `run_error`)
 
-Files land at Hive-partitioned paths:
+Files land at Hive-partitioned paths under the storage root:
 ```
-<storage-path>/source=<s>/category=<c>/day=<d>/run_id=<r>/files/<filename>
+<storage-path>/datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/files/<filename>
 ```
 
 ---
