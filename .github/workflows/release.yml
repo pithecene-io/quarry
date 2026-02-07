@@ -268,27 +268,24 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm publish --access restricted --no-git-checks
 
-  publish_npmjs:
-    name: "📦 Publish SDK (npmjs.org)"
+  publish_jsr:
+    name: "📦 Publish SDK (JSR)"
     runs-on: ubuntu-latest
     needs: [hold]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
-      - name: "🧰 Setup Node for npmjs"
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24.13.0"  # Matches mise.toml pin
-          registry-url: "https://registry.npmjs.org"
-          scope: "@justapithecus"
-      - name: "📦 Setup pnpm via Corepack"
-        run: |
-          EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
-          echo "🔧 Preparing pnpm@${EXPECTED_PNPM} via Corepack"
-          corepack enable
-          corepack prepare "pnpm@${EXPECTED_PNPM}" --activate
+      - name: "🧰 Setup"
+        uses: jdx/mise-action@v2
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "🏗️ Build SDK"
+        run: pnpm -C sdk run build
       - name: "📦 Publish"
         working-directory: sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm publish --access public --registry https://registry.npmjs.org --no-git-checks
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npx jsr publish --set-version "$VERSION"

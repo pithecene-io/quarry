@@ -1,0 +1,7 @@
+{
+  "name": "@justapithecus/quarry-sdk",
+  "exports": "./dist/index.mjs",
+  "publish": {
+    "include": ["dist/", "README.md"]
+  }
+}
