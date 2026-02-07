@@ -125,6 +125,12 @@
           "required": false,
           "description": "Origin for sticky scope derivation (when scope=origin, format: scheme://host:port)"
         },
+        "storage-dataset": {
+          "type": "string",
+          "required": false,
+          "default": "quarry",
+          "description": "Lode dataset ID (overrides default \"quarry\")"
+        },
         "storage-backend": {
           "type": "string",
           "required": true,
@@ -365,6 +371,12 @@
         },
         "metrics": {
           "flags": {
+            "storage-dataset": {
+              "type": "string",
+              "required": false,
+              "default": "quarry",
+              "description": "Lode dataset ID (default: \"quarry\")"
+            },
             "format": {
               "type": "string",
               "aliases": ["f"],

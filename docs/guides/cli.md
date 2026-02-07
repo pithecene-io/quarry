@@ -115,7 +115,8 @@ Optional flags:
 - `--proxy-domain <domain>` (when sticky scope = domain)
 - `--proxy-origin <origin>` (when sticky scope = origin, format: scheme://host:port)
 
-Storage flags (S3 / S3-compatible):
+Storage flags:
+- `--storage-dataset <name>` (Lode dataset ID, default: `"quarry"`)
 - `--storage-region <region>` (AWS region, uses default chain if omitted)
 - `--storage-endpoint <url>` (custom S3 endpoint for R2, MinIO, etc.)
 - `--storage-s3-path-style` (force path-style addressing, required by R2/MinIO)

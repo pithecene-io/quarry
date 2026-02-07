@@ -260,6 +260,7 @@ Response must include:
 Returns the most recent metrics snapshot.
 
 Optional flags:
+- `--storage-dataset=<name>` — Lode dataset ID (default: `"quarry"`)
 - `--storage-backend=fs|s3` — storage backend for Lode reads
 - `--storage-path=<path>` — storage path (fs: directory, s3: bucket/prefix)
 - `--storage-region=<region>` — AWS region for S3 backend

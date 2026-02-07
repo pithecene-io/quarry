@@ -19,10 +19,13 @@ func DeriveDay(startTime time.Time) string {
 	return startTime.UTC().Format("2006-01-02")
 }
 
+// DefaultDataset is the default Lode dataset name.
+const DefaultDataset = "quarry"
+
 // Config holds Lode sink configuration.
 // All partition keys are required per CONTRACT_LODE.md.
 type Config struct {
-	// Dataset is the Lode dataset ID (fixed to "quarry").
+	// Dataset is the Lode dataset ID (default: "quarry", overridable via --storage-dataset).
 	Dataset string
 	// Source is the partition key for origin system/provider.
 	Source string

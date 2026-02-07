@@ -145,6 +145,7 @@ func statsMetricsCommand() *cli.Command {
 		Name:  "metrics",
 		Usage: "Show contract metrics (run lifecycle, ingestion, executor, storage)",
 		Flags: append(TUIReadOnlyFlags(),
+			&cli.StringFlag{Name: "storage-dataset", Usage: "Lode dataset ID (default: \"quarry\")", Value: lode.DefaultDataset},
 			&cli.StringFlag{Name: "storage-backend", Usage: "Storage backend: fs or s3"},
 			&cli.StringFlag{Name: "storage-path", Usage: "Storage path (fs: directory, s3: bucket/prefix)"},
 			&cli.StringFlag{Name: "storage-region", Usage: "AWS region for S3 backend"},
@@ -163,7 +164,7 @@ func statsMetricsAction(c *cli.Context) error {
 
 	if backend != "" && path != "" {
 		// Build Lode dataset for reading
-		ds, err := buildReadDataset(backend, path, c.String("storage-region"))
+		ds, err := buildReadDataset(c.String("storage-dataset"), backend, path, c.String("storage-region"))
 		if err != nil {
 			return fmt.Errorf("failed to initialize storage reader: %w", err)
 		}
@@ -201,13 +202,13 @@ func statsMetricsAction(c *cli.Context) error {
 }
 
 // buildReadDataset creates a Lode Dataset for reading based on CLI flags.
-func buildReadDataset(backend, path, region string) (lodelibrary.Dataset, error) {
+func buildReadDataset(dataset, backend, path, region string) (lodelibrary.Dataset, error) {
 	switch backend {
 	case "fs":
-		return lode.NewReadDatasetFS(path)
+		return lode.NewReadDatasetFS(dataset, path)
 	case "s3":
 		bucket, prefix := lode.ParseS3Path(path)
-		return lode.NewReadDatasetS3(lode.S3Config{Bucket: bucket, Prefix: prefix, Region: region})
+		return lode.NewReadDatasetS3(dataset, lode.S3Config{Bucket: bucket, Prefix: prefix, Region: region})
 	default:
 		return nil, fmt.Errorf("unsupported storage-backend: %s (must be fs or s3)", backend)
 	}
