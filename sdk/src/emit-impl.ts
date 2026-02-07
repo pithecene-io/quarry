@@ -114,15 +114,22 @@ export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
     }
   }
 
+  /**
+   * Emit a non-terminal event: serialize → assert → envelope → write.
+   */
+  function emitEvent<T extends EventType>(type: T, payload: PayloadMap[T]): Promise<void> {
+    return serialize(async () => {
+      assertNotTerminal()
+      const envelope = createEnvelope(type, payload)
+      await writeEnvelope(envelope)
+    })
+  }
+
   const emit: EmitAPI = {
     item(options: EmitItemOptions): Promise<void> {
-      return serialize(async () => {
-        assertNotTerminal()
-        const envelope = createEnvelope('item', {
-          item_type: options.item_type,
-          data: options.data
-        })
-        await writeEnvelope(envelope)
+      return emitEvent('item', {
+        item_type: options.item_type,
+        data: options.data
       })
     },
 
@@ -153,46 +160,30 @@ export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
     },
 
     checkpoint(options: EmitCheckpointOptions): Promise<void> {
-      return serialize(async () => {
-        assertNotTerminal()
-        const envelope = createEnvelope('checkpoint', {
-          checkpoint_id: options.checkpoint_id,
-          ...(options.note !== undefined && { note: options.note })
-        })
-        await writeEnvelope(envelope)
+      return emitEvent('checkpoint', {
+        checkpoint_id: options.checkpoint_id,
+        ...(options.note !== undefined && { note: options.note })
       })
     },
 
     enqueue(options: EmitEnqueueOptions): Promise<void> {
-      return serialize(async () => {
-        assertNotTerminal()
-        const envelope = createEnvelope('enqueue', {
-          target: options.target,
-          params: options.params
-        })
-        await writeEnvelope(envelope)
+      return emitEvent('enqueue', {
+        target: options.target,
+        params: options.params
       })
     },
 
     rotateProxy(options?: EmitRotateProxyOptions): Promise<void> {
-      return serialize(async () => {
-        assertNotTerminal()
-        const envelope = createEnvelope('rotate_proxy', {
-          ...(options?.reason !== undefined && { reason: options.reason })
-        })
-        await writeEnvelope(envelope)
+      return emitEvent('rotate_proxy', {
+        ...(options?.reason !== undefined && { reason: options.reason })
       })
     },
 
     log(options: EmitLogOptions): Promise<void> {
-      return serialize(async () => {
-        assertNotTerminal()
-        const envelope = createEnvelope('log', {
-          level: options.level,
-          message: options.message,
-          ...(options.fields !== undefined && { fields: options.fields })
-        })
-        await writeEnvelope(envelope)
+      return emitEvent('log', {
+        level: options.level,
+        message: options.message,
+        ...(options.fields !== undefined && { fields: options.fields })
       })
     },
 

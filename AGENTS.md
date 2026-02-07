@@ -93,9 +93,22 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 
 ---
 
+## Code Style & Composition
+
+- **Declarative over imperative**: extract repeated imperative patterns into named helpers
+- **Group code at similar abstraction levels**: high-level orchestration should not inline low-level mechanics
+- **Extract when a pattern repeats ≥ 3 times**: error formatting, validation, resource cleanup, etc.
+- **Wrap mutable or chainable behavior**: use return structs, factory functions, or monadic interfaces so callers stay declarative
+- **Validation factories over object literals**: when constructing many similar objects (errors, warnings, records), extract a factory function
+- **Functional iteration over imperative loops**: prefer `map`/`flatMap`/`filter` (TypeScript) or table-driven patterns (Go) over index-based loops when the intent is transformation
+- **One level of nesting per function**: if a function has nested try/catch or if/else, consider extracting the inner block
+- **Helpers are file-local unless shared**: do not export helpers that serve only one call site
+
+---
+
 ## Control Flow & Async
 
-- Prefer pure functions
+- Pure functions where practical (not a hard requirement)
 - Expression-oriented code
 - Early returns over nesting
 - No implicit mutation unless justified
