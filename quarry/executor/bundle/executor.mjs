@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Quarry Executor Bundle v0.3.1
 // This is a bundled version for embedding in the quarry binary.
-// Do not edit directly - regenerate with: pnpm run bundle
+// Do not edit directly - regenerate with: task executor:bundle
 
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -1802,14 +1802,17 @@ function createEmitAPI(run, sink) {
   function assertNotTerminal() {
     if (terminalEmitted) throw new TerminalEventError();
   }
+  function emitEvent(type, payload) {
+    return serialize(async () => {
+      assertNotTerminal();
+      await writeEnvelope(createEnvelope(type, payload));
+    });
+  }
   const emit = {
     item(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("item", {
-          item_type: options.item_type,
-          data: options.data
-        }));
+      return emitEvent("item", {
+        item_type: options.item_type,
+        data: options.data
       });
     },
     artifact(options) {
@@ -1828,37 +1831,25 @@ function createEmitAPI(run, sink) {
       });
     },
     checkpoint(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("checkpoint", {
-          checkpoint_id: options.checkpoint_id,
-          ...options.note !== void 0 && { note: options.note }
-        }));
+      return emitEvent("checkpoint", {
+        checkpoint_id: options.checkpoint_id,
+        ...options.note !== void 0 && { note: options.note }
       });
     },
     enqueue(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("enqueue", {
-          target: options.target,
-          params: options.params
-        }));
+      return emitEvent("enqueue", {
+        target: options.target,
+        params: options.params
       });
     },
     rotateProxy(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("rotate_proxy", { ...options?.reason !== void 0 && { reason: options.reason } }));
-      });
+      return emitEvent("rotate_proxy", { ...options?.reason !== void 0 && { reason: options.reason } });
     },
     log(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("log", {
-          level: options.level,
-          message: options.message,
-          ...options.fields !== void 0 && { fields: options.fields }
-        }));
+      return emitEvent("log", {
+        level: options.level,
+        message: options.message,
+        ...options.fields !== void 0 && { fields: options.fields }
       });
     },
     async debug(message, fields) {
@@ -2222,17 +2213,11 @@ async function loadScript(scriptPath) {
   if (!isFunction(mod.default)) {
     throw new ScriptLoadError(scriptPath, "default export is not a function");
   }
-  if (!isOptionalFunction(mod.beforeRun)) {
-    throw new ScriptLoadError(scriptPath, "beforeRun hook is not a function");
-  }
-  if (!isOptionalFunction(mod.afterRun)) {
-    throw new ScriptLoadError(scriptPath, "afterRun hook is not a function");
-  }
-  if (!isOptionalFunction(mod.onError)) {
-    throw new ScriptLoadError(scriptPath, "onError hook is not a function");
-  }
-  if (!isOptionalFunction(mod.cleanup)) {
-    throw new ScriptLoadError(scriptPath, "cleanup hook is not a function");
+  const HOOK_NAMES = ["beforeRun", "afterRun", "onError", "cleanup"];
+  for (const name of HOOK_NAMES) {
+    if (!isOptionalFunction(mod[name])) {
+      throw new ScriptLoadError(scriptPath, `${name} hook is not a function`);
+    }
   }
   const validatedModule = mod;
   return {
@@ -2258,68 +2243,60 @@ async function resolveModule(name, scriptPath) {
   }
   return await import(name);
 }
+function errorMessage(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+async function resolveModuleOrThrow(name, scriptPath, hint) {
+  try {
+    return await resolveModule(name, scriptPath);
+  } catch (err) {
+    const scriptDir = dirname(resolve2(scriptPath));
+    throw new Error(
+      `Failed to load ${name}: ${errorMessage(err)}
+${hint}
+Install it in your project (${scriptDir}): npm install ${name}`
+    );
+  }
+}
 var puppeteerModule = null;
 var cachedPluginConfig = null;
 async function getPuppeteer(scriptPath, plugins) {
-  if (puppeteerModule) {
-    if (cachedPluginConfig && (cachedPluginConfig.stealth !== plugins.stealth || cachedPluginConfig.adblocker !== plugins.adblocker)) {
-      process.stderr.write(
-        "Warning: puppeteer plugin config changed after initialization; using original config\n"
-      );
-    }
-    return puppeteerModule;
+  if (puppeteerModule && cachedPluginConfig) {
+    const configChanged = cachedPluginConfig.stealth !== plugins.stealth || cachedPluginConfig.adblocker !== plugins.adblocker;
+    if (!configChanged) return puppeteerModule;
+    puppeteerModule = null;
+    cachedPluginConfig = null;
   }
-  const absoluteScriptPath = resolve2(scriptPath);
-  const scriptDir = dirname(absoluteScriptPath);
-  let vanillaPuppeteer;
-  try {
-    const mod = await resolveModule("puppeteer", scriptPath);
-    vanillaPuppeteer = mod.default;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to load puppeteer: ${message}
-Puppeteer is a peer dependency of quarry-executor. Install it in your project (${scriptDir}): npm install puppeteer`
-    );
-  }
-  let pptr;
-  try {
-    const extraMod = await resolveModule("puppeteer-extra", scriptPath);
-    const { addExtra } = extraMod;
-    pptr = addExtra(vanillaPuppeteer);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to load puppeteer-extra: ${message}
-puppeteer-extra is a peer dependency of quarry-executor. Install it in your project (${scriptDir}): npm install puppeteer-extra`
-    );
-  }
+  const puppeteerMod = await resolveModuleOrThrow(
+    "puppeteer",
+    scriptPath,
+    "Puppeteer is a peer dependency of quarry-executor."
+  );
+  const vanillaPuppeteer = puppeteerMod.default;
+  const extraMod = await resolveModuleOrThrow(
+    "puppeteer-extra",
+    scriptPath,
+    "puppeteer-extra is a peer dependency of quarry-executor."
+  );
+  const { addExtra } = extraMod;
+  const pptr = addExtra(vanillaPuppeteer);
   if (plugins.stealth) {
-    try {
-      const stealthMod = await resolveModule("puppeteer-extra-plugin-stealth", scriptPath);
-      const StealthPlugin = stealthMod.default;
-      pptr.use(StealthPlugin());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Failed to load puppeteer-extra-plugin-stealth: ${message}
-Stealth is enabled by default. Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-stealth
-Or disable stealth with QUARRY_STEALTH=0`
-      );
-    }
+    const stealthMod = await resolveModuleOrThrow(
+      "puppeteer-extra-plugin-stealth",
+      scriptPath,
+      "Stealth is enabled by default.\nOr disable stealth with QUARRY_STEALTH=0"
+    );
+    const StealthPlugin = stealthMod.default;
+    pptr.use(StealthPlugin());
   }
   if (plugins.adblocker) {
-    try {
-      const adblockerMod = await resolveModule("puppeteer-extra-plugin-adblocker", scriptPath);
-      const AdblockerPlugin = adblockerMod.default;
-      pptr.use(AdblockerPlugin({ blockTrackers: true }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Failed to load puppeteer-extra-plugin-adblocker: ${message}
-Adblocker was enabled but the plugin is not installed. Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-adblocker`
-      );
-    }
+    const adblockerMod = await resolveModuleOrThrow(
+      "puppeteer-extra-plugin-adblocker",
+      scriptPath,
+      "Adblocker was enabled but the plugin is not installed."
+    );
+    const AdblockerPlugin = adblockerMod.default;
+    pptr.use(AdblockerPlugin({ blockTrackers: true }));
   }
   cachedPluginConfig = plugins;
   puppeteerModule = pptr;
@@ -2363,14 +2340,23 @@ function buildPuppeteerLaunchOptions(baseOptions, proxy) {
     args: [...existingArgs, ...proxyArgs]
   };
 }
+async function emitRunResult(stdioSink, outcome, proxy) {
+  try {
+    const runResultOutcome = toRunResultOutcome(outcome);
+    const proxyUsed = proxy ? redactProxy(proxy) : void 0;
+    await stdioSink.writeRunResult(runResultOutcome, proxyUsed);
+  } catch {
+  }
+}
+async function safeClose(resource) {
+  if (!resource) return;
+  try {
+    await resource.close();
+  } catch {
+  }
+}
 function isSinkFailure(err) {
-  if (err instanceof TerminalEventError) {
-    return false;
-  }
-  if (err instanceof SinkAlreadyFailedError) {
-    return true;
-  }
-  return true;
+  return !(err instanceof TerminalEventError);
 }
 function toRunResultOutcome(outcome) {
   switch (outcome.status) {
@@ -2415,7 +2401,7 @@ async function execute(config) {
   function determineOutcome(sinkState) {
     if (sinkState.isSinkFailed()) {
       const failure = sinkState.getSinkFailure();
-      const message = failure instanceof Error ? failure.message : String(failure);
+      const message = errorMessage(failure);
       return {
         outcome: { status: "crash", message },
         terminalEmitted: sinkState.getTerminalState() !== null
@@ -2500,7 +2486,7 @@ async function execute(config) {
     } catch (err) {
       scriptThrew = true;
       scriptError = {
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage(err),
         stack: err instanceof Error ? err.stack : void 0
       };
       if (script.hooks.onError && sink.getTerminalState() === null) {
@@ -2533,49 +2519,29 @@ async function execute(config) {
       }
     }
     const result = determineOutcome(sink);
-    try {
-      const runResultOutcome = toRunResultOutcome(result.outcome);
-      const proxyUsed = config.proxy ? redactProxy(config.proxy) : void 0;
-      await stdioSink.writeRunResult(runResultOutcome, proxyUsed);
-    } catch {
-    }
+    await emitRunResult(stdioSink, result.outcome, config.proxy);
     return result;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     const crashOutcome = { status: "crash", message };
-    try {
-      const runResultOutcome = toRunResultOutcome(crashOutcome);
-      const proxyUsed = config.proxy ? redactProxy(config.proxy) : void 0;
-      await stdioSink.writeRunResult(runResultOutcome, proxyUsed);
-    } catch {
-    }
+    await emitRunResult(stdioSink, crashOutcome, config.proxy);
     return {
       outcome: crashOutcome,
       terminalEmitted: false
     };
   } finally {
-    if (page) {
-      try {
-        await page.close();
-      } catch {
-      }
-    }
-    if (browserContext) {
-      try {
-        await browserContext.close();
-      } catch {
-      }
-    }
-    if (browser) {
-      try {
-        await browser.close();
-      } catch {
-      }
-    }
+    await safeClose(page);
+    await safeClose(browserContext);
+    await safeClose(browser);
   }
 }
 
 // src/bin/executor.ts
+function fatalError(message) {
+  process.stderr.write(`Error: ${message}
+`);
+  process.exit(3);
+}
 function parseProxy(input) {
   if (!("proxy" in input) || input.proxy === null || input.proxy === void 0) {
     return void 0;
@@ -2626,43 +2592,31 @@ async function main() {
   try {
     const stdinData = await readStdin();
     if (stdinData.trim() === "") {
-      process.stderr.write("Error: stdin is empty, expected JSON input\n");
-      process.exit(3);
+      fatalError("stdin is empty, expected JSON input");
     }
     input = JSON.parse(stdinData);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error parsing stdin JSON: ${message}
-`);
-    process.exit(3);
+    fatalError(`parsing stdin JSON: ${errorMessage(err)}`);
   }
   if (input === null || typeof input !== "object") {
-    process.stderr.write("Error: stdin must be a JSON object\n");
-    process.exit(3);
+    fatalError("stdin must be a JSON object");
   }
   const inputObj = input;
   let run;
   try {
     run = parseRunMeta(inputObj);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error parsing run metadata: ${message}
-`);
-    process.exit(3);
+    fatalError(`parsing run metadata: ${errorMessage(err)}`);
   }
   if (!("job" in inputObj)) {
-    process.stderr.write('Error: missing "job" field in input\n');
-    process.exit(3);
+    fatalError('missing "job" field in input');
   }
   const job = inputObj.job;
   let proxy;
   try {
     proxy = parseProxy(inputObj);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error parsing proxy: ${message}
-`);
-    process.exit(3);
+    fatalError(`parsing proxy: ${errorMessage(err)}`);
   }
   const result = await execute({
     scriptPath,
@@ -2700,7 +2654,7 @@ async function main() {
   }
 }
 main().catch((err) => {
-  process.stderr.write(`Unexpected error: ${err instanceof Error ? err.message : String(err)}
+  process.stderr.write(`Unexpected error: ${errorMessage(err)}
 `);
   process.exit(2);
 });
