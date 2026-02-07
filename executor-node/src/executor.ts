@@ -78,12 +78,23 @@ async function resolveModule(name: string, scriptPath: string): Promise<Record<s
  * model (Go binary extracts executor.mjs to a temp dir).
  */
 let puppeteerModule: { launch: (options?: LaunchOptions) => Promise<Browser> } | null = null
+let cachedPluginConfig: PluginConfig | null = null
 
 async function getPuppeteer(
   scriptPath: string,
   plugins: PluginConfig
 ): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
   if (puppeteerModule) {
+    // Warn if subsequent call requests different plugin config
+    if (
+      cachedPluginConfig &&
+      (cachedPluginConfig.stealth !== plugins.stealth ||
+        cachedPluginConfig.adblocker !== plugins.adblocker)
+    ) {
+      process.stderr.write(
+        'Warning: puppeteer plugin config changed after initialization; using original config\n'
+      )
+    }
     return puppeteerModule
   }
 
@@ -155,6 +166,7 @@ async function getPuppeteer(
     }
   }
 
+  cachedPluginConfig = plugins
   puppeteerModule = pptr
   return pptr
 }
@@ -165,6 +177,7 @@ async function getPuppeteer(
  */
 export function _resetPuppeteerForTesting(): void {
   puppeteerModule = null
+  cachedPluginConfig = null
 }
 
 /**
