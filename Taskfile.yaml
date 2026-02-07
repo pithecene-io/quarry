@@ -87,6 +87,19 @@ tasks:
     cmds:
       - pnpm -C executor-node run bundle
 
+  go:cross:
+    desc: Cross-compile quarry for all platforms
+    deps: [executor:bundle]
+    dir: quarry
+    cmds:
+      - |
+        mkdir -p dist
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}" GOARCH="${pair#*/}" CGO_ENABLED=0 \
+            go build -o "dist/quarry_${GOOS}_${GOARCH}" ./cmd/quarry
+          echo "✅ ${pair}"
+        done
+
   go:lint:
     desc: Lint Go module
     aliases: [go:l]

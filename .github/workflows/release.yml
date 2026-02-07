@@ -109,17 +109,63 @@ jobs:
         env:
           QUARRY_NO_SANDBOX: "1"
 
-  package:
-    name: "📦 Package"
+  cross-compile:
+    name: "🔨 Build (${{ matrix.goos }}/${{ matrix.goarch }})"
     runs-on: ubuntu-latest
     needs: [version_lockstep, lint, test, build, examples]
     if: ${{ needs.version_lockstep.result == 'success' }}
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v4
       - name: "🧰 Setup"
         uses: jdx/mise-action@v2
-      - name: "📦 Package"
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "📦 Bundle executor"
+        run: task executor:bundle
+      - name: "🔨 Build"
+        working-directory: quarry
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o quarry ./cmd/quarry
+      - name: "📦 Archive"
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME}"
+          ARCHIVE="quarry_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          tar -czf "dist/${ARCHIVE}" -C quarry quarry
+          sha256sum "dist/${ARCHIVE}" > "dist/${ARCHIVE}.sha256"
+      - name: "⬆️ Upload"
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  package:
+    name: "📦 Package"
+    runs-on: ubuntu-latest
+    needs: [cross-compile]
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🧰 Setup"
+        uses: jdx/mise-action@v2
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "📦 Package source & SDK"
         run: |
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME}"
@@ -131,6 +177,17 @@ jobs:
           cd ..
           mv "sdk/${SDK_TARBALL}" "dist/quarry-sdk-${VERSION}.tgz"
           sha256sum "dist/quarry-sdk-${VERSION}.tgz" > "dist/quarry-sdk-${VERSION}.tgz.sha256"
+      - name: "⬇️ Download platform binaries"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist/
+          merge-multiple: true
+      - name: "📋 Generate checksums manifest"
+        run: |
+          cd dist
+          sha256sum quarry_*.tar.gz > checksums.txt
+          cat checksums.txt
       - name: "⬆️ Upload Artifacts"
         uses: actions/upload-artifact@v4
         with:
@@ -164,7 +221,7 @@ jobs:
           generate_release_notes: true
           files: dist/*
 
-  publish_npm:
+  publish_ghpr:
     name: "📦 Publish SDK (GitHub Packages)"
     runs-on: ubuntu-latest
     needs: [hold]
@@ -210,3 +267,28 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm publish --access restricted --no-git-checks
+
+  publish_npmjs:
+    name: "📦 Publish SDK (npmjs.org)"
+    runs-on: ubuntu-latest
+    needs: [hold]
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🧰 Setup Node for npmjs"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.13.0"  # Matches mise.toml pin
+          registry-url: "https://registry.npmjs.org"
+          scope: "@justapithecus"
+      - name: "📦 Setup pnpm via Corepack"
+        run: |
+          EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
+          echo "🔧 Preparing pnpm@${EXPECTED_PNPM} via Corepack"
+          corepack enable
+          corepack prepare "pnpm@${EXPECTED_PNPM}" --activate
+      - name: "📦 Publish"
+        working-directory: sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --registry https://registry.npmjs.org --no-git-checks
