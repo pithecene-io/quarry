@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/justapithecus/quarry/ipc"
+	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/log"
 	"github.com/justapithecus/quarry/metrics"
 	"github.com/justapithecus/quarry/policy"
@@ -80,6 +82,7 @@ type IngestionEngine struct {
 	decoder       *ipc.FrameDecoder
 	policy        policy.Policy
 	artifacts     *ArtifactManager
+	fileWriter    lode.FileWriter // sidecar file writes, may be nil
 	logger        *log.Logger
 	runMeta       *types.RunMeta // for envelope validation
 	collector     *metrics.Collector
@@ -90,10 +93,12 @@ type IngestionEngine struct {
 }
 
 // NewIngestionEngine creates a new ingestion engine.
+// The fileWriter parameter may be nil if sidecar file writes are not supported.
 func NewIngestionEngine(
 	reader io.Reader,
 	pol policy.Policy,
 	artifacts *ArtifactManager,
+	fileWriter lode.FileWriter,
 	logger *log.Logger,
 	runMeta *types.RunMeta,
 	collector *metrics.Collector,
@@ -102,6 +107,7 @@ func NewIngestionEngine(
 		decoder:    ipc.NewFrameDecoder(reader),
 		policy:     pol,
 		artifacts:  artifacts,
+		fileWriter: fileWriter,
 		logger:     logger,
 		runMeta:    runMeta,
 		collector:  collector,
@@ -196,6 +202,8 @@ func (e *IngestionEngine) processFrame(ctx context.Context, payload []byte) erro
 		return e.processEvent(ctx, frame)
 	case *types.RunResultFrame:
 		return e.processRunResult(frame)
+	case *types.FileWriteFrame:
+		return e.processFileWrite(ctx, frame)
 	default:
 		return &IngestionError{
 			Kind: IngestionErrorStream,
@@ -449,6 +457,65 @@ func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
 	e.logger.Debug("run_result frame received", map[string]any{
 		"status":    frame.Outcome.Status,
 		"has_proxy": frame.ProxyUsed != nil,
+	})
+
+	return nil
+}
+
+// processFileWrite processes a file_write frame.
+// File writes bypass seq numbering and the policy pipeline.
+// File write errors are stream errors (same category as artifact chunk errors).
+func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.FileWriteFrame) error {
+	// Validate filename: no path separators, no ".."
+	if frame.Filename == "" {
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  errors.New("file_write: empty filename"),
+		}
+	}
+	if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  fmt.Errorf("file_write: filename contains path separator: %s", frame.Filename),
+		}
+	}
+	if strings.Contains(frame.Filename, "..") {
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  fmt.Errorf("file_write: filename contains '..': %s", frame.Filename),
+		}
+	}
+
+	// Validate data size (same 8 MiB limit as artifact chunks)
+	if len(frame.Data) > ipc.MaxChunkSize {
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  fmt.Errorf("file_write: data size %d exceeds max %d", len(frame.Data), ipc.MaxChunkSize),
+		}
+	}
+
+	if e.fileWriter == nil {
+		e.logger.Warn("file_write received but no FileWriter configured, ignoring", map[string]any{
+			"filename": frame.Filename,
+		})
+		return nil
+	}
+
+	if err := e.fileWriter.PutFile(ctx, frame.Filename, frame.ContentType, frame.Data); err != nil {
+		e.logger.Error("file_write failed", map[string]any{
+			"filename": frame.Filename,
+			"error":    err.Error(),
+		})
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  fmt.Errorf("file_write failed: %w", err),
+		}
+	}
+
+	e.logger.Debug("file written", map[string]any{
+		"filename":     frame.Filename,
+		"content_type": frame.ContentType,
+		"size_bytes":   len(frame.Data),
 	})
 
 	return nil

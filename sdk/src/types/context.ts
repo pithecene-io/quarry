@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
-import type { EmitAPI } from '../emit'
+import type { EmitAPI, StorageAPI } from '../emit'
 import type { JobId, RunId } from './events'
 
 /**
@@ -59,6 +59,13 @@ export interface QuarryContext<Job = unknown> {
    * This is the sole output mechanism.
    */
   readonly emit: EmitAPI
+
+  /**
+   * Storage API for sidecar file uploads.
+   * Files land at Hive-partitioned paths under files/, bypassing
+   * Dataset segment/manifest machinery.
+   */
+  readonly storage: StorageAPI
 }
 
 /**

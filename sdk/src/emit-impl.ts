@@ -9,7 +9,9 @@ import type {
   EmitRotateProxyOptions,
   EmitRunCompleteOptions,
   EmitRunErrorOptions,
-  EmitSink
+  EmitSink,
+  StorageAPI,
+  StoragePutOptions
 } from './emit'
 import type { RunMeta } from './types/context'
 import type { ArtifactId, EventEnvelope, EventId, EventType, PayloadMap } from './types/events'
@@ -37,24 +39,34 @@ export class SinkFailedError extends Error {
 }
 
 /**
- * Create an EmitAPI implementation backed by an EmitSink.
+ * Error thrown when a storage filename is invalid.
+ */
+export class StorageFilenameError extends Error {
+  constructor(filename: string, reason: string) {
+    super(`Invalid storage filename "${filename}": ${reason}`)
+    this.name = 'StorageFilenameError'
+  }
+}
+
+/**
+ * Create both EmitAPI and StorageAPI backed by a shared EmitSink.
  *
- * Emission is serialized via promise chain to ensure ordering and
- * correct terminal state handling. Fail-fast: after any sink failure,
- * subsequent emits will throw SinkFailedError.
+ * Both APIs share a single promise chain for ordering and fail-fast.
+ * Emission is serialized to ensure strict ordering and correct
+ * terminal state handling.
  *
  * @internal
  */
-export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
+export function createAPIs(run: RunMeta, sink: EmitSink): { emit: EmitAPI; storage: StorageAPI } {
   let seq = 0
   let terminalEmitted = false
   let sinkFailed: unknown = null
   let chain = Promise.resolve()
 
   /**
-   * Serialize an emit operation through the promise chain.
+   * Serialize an operation through the promise chain.
    * Ensures strict ordering and prevents concurrent interleaving.
-   * Fail-fast: after first sink failure, all subsequent emits fail.
+   * Fail-fast: after first sink failure, all subsequent operations fail.
    */
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = chain.then(async () => {
@@ -228,5 +240,40 @@ export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
     }
   }
 
-  return emit
+  /**
+   * Validate storage filename: no path separators, no "..".
+   */
+  function validateFilename(filename: string): void {
+    if (!filename) {
+      throw new StorageFilenameError(filename, 'filename must not be empty')
+    }
+    if (filename.includes('/') || filename.includes('\\')) {
+      throw new StorageFilenameError(filename, 'filename must not contain path separators')
+    }
+    if (filename.includes('..')) {
+      throw new StorageFilenameError(filename, 'filename must not contain ".."')
+    }
+  }
+
+  const storage: StorageAPI = {
+    put(options: StoragePutOptions): Promise<void> {
+      return serialize(async () => {
+        validateFilename(options.filename)
+        await sink.writeFile(options.filename, options.content_type, options.data)
+      })
+    }
+  }
+
+  return { emit, storage }
+}
+
+/**
+ * Create an EmitAPI implementation backed by an EmitSink.
+ *
+ * Convenience wrapper around createAPIs for callers that only need EmitAPI.
+ *
+ * @internal
+ */
+export function createEmitAPI(run: RunMeta, sink: EmitSink): EmitAPI {
+  return createAPIs(run, sink).emit
 }

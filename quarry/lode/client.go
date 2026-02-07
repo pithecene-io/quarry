@@ -30,22 +30,28 @@ var ErrMissingArtifactID = errors.New("artifact commit rejected: missing or empt
 // LodeClient is a real Lode-backed implementation of Client.
 // Uses Lode's HiveLayout with partition keys: source/category/day/run_id/event_type.
 type LodeClient struct { //nolint:revive // intentional naming for clarity
-	dataset lode.Dataset
-	config  Config
+	dataset      lode.Dataset
+	config       Config
+	storeFactory lode.StoreFactory // for sidecar file writes via FileWriter
 
 	mu         sync.Mutex          // guards offsets and chunksSeen
 	offsets    map[string]int64    // cumulative offset per artifact across batches
 	chunksSeen map[string]struct{} // tracks artifacts that have had chunks written
+
+	storeOnce sync.Once  // lazy store initialization for FileWriter
+	store     lode.Store // lazily created from storeFactory
+	storeErr  error      // error from lazy store creation
 }
 
-// newClient creates a LodeClient from a dataset and config.
+// newClient creates a LodeClient from a dataset, config, and store factory.
 // All constructors must use this to ensure consistent initialization.
-func newClient(ds lode.Dataset, cfg Config) *LodeClient {
+func newClient(ds lode.Dataset, cfg Config, factory lode.StoreFactory) *LodeClient {
 	return &LodeClient{
-		dataset:    ds,
-		config:     cfg,
-		offsets:    make(map[string]int64),
-		chunksSeen: make(map[string]struct{}),
+		dataset:      ds,
+		config:       cfg,
+		storeFactory: factory,
+		offsets:      make(map[string]int64),
+		chunksSeen:   make(map[string]struct{}),
 	}
 }
 
@@ -68,7 +74,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 		return nil, WrapInitError(err, cfg.Dataset)
 	}
 
-	return newClient(ds, cfg), nil
+	return newClient(ds, cfg, factory), nil
 }
 
 // WriteEvents writes a batch of events to Lode.

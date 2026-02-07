@@ -20,6 +20,7 @@ import type { ArtifactId, EmitSink, EventEnvelope } from '@justapithecus/quarry-
 import {
   encodeArtifactChunks,
   encodeEventFrame,
+  encodeFileWriteFrame,
   encodeRunResultFrame,
   type ProxyEndpointRedactedFrame,
   type RunResultOutcome
@@ -140,6 +141,20 @@ export class StdioSink implements EmitSink {
     proxyUsed?: ProxyEndpointRedactedFrame
   ): Promise<void> {
     const frame = encodeRunResultFrame(outcome, proxyUsed)
+    await writeWithBackpressure(this.output, frame)
+  }
+
+  /**
+   * Write a sidecar file via file_write frame.
+   * Bypasses seq numbering and the policy pipeline.
+   * Blocks on backpressure per CONTRACT_IPC.md.
+   *
+   * @param filename - Target filename (no path separators, no "..")
+   * @param contentType - MIME content type
+   * @param data - Raw binary data (max 8 MiB)
+   */
+  async writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void> {
+    const frame = encodeFileWriteFrame(filename, contentType, data)
     await writeWithBackpressure(this.output, frame)
   }
 }

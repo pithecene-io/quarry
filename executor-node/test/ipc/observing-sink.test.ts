@@ -8,15 +8,19 @@ import { ObservingSink, SinkAlreadyFailedError } from '../../src/ipc/observing-s
 function createMockSink(): EmitSink & {
   writeEventMock: ReturnType<typeof vi.fn>
   writeArtifactDataMock: ReturnType<typeof vi.fn>
+  writeFileMock: ReturnType<typeof vi.fn>
 } {
   const writeEventMock = vi.fn().mockResolvedValue(undefined)
   const writeArtifactDataMock = vi.fn().mockResolvedValue(undefined)
+  const writeFileMock = vi.fn().mockResolvedValue(undefined)
 
   return {
     writeEvent: writeEventMock,
     writeArtifactData: writeArtifactDataMock,
+    writeFile: writeFileMock,
     writeEventMock,
-    writeArtifactDataMock
+    writeArtifactDataMock,
+    writeFileMock
   }
 }
 

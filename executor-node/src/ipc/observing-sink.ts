@@ -162,6 +162,27 @@ export class ObservingSink implements EmitSink, SinkState {
   }
 
   /**
+   * Write a sidecar file, tracking failures.
+   * @throws SinkAlreadyFailedError if the sink has previously failed
+   */
+  async writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void> {
+    // Fail-fast: don't attempt writes after failure
+    if (this.sinkFailure !== null) {
+      throw new SinkAlreadyFailedError(this.sinkFailure)
+    }
+
+    try {
+      await this.inner.writeFile(filename, contentType, data)
+    } catch (err) {
+      // First failure wins: only set if not already set
+      if (this.sinkFailure === null) {
+        this.sinkFailure = err
+      }
+      throw err
+    }
+  }
+
+  /**
    * Extract terminal state from type and payload.
    * Type alone is authoritative; payload fields are best-effort.
    */
