@@ -13,6 +13,28 @@ _No unreleased changes._
 
 ---
 
+## [0.4.0] - 2026-02-07
+
+### Added
+
+- **Storage**: `ctx.storage.put()` — sidecar file uploads via Lode Store, enabling scripts to write files directly to addressable storage paths outside the event pipeline (#99)
+- **IPC**: New `file_write` IPC frame type for executor→runtime file transfer (#99)
+- **SDK**: `StorageAPI` on `QuarryContext` — `put({ filename, content_type, data })` (#99)
+- **Storage**: Content type persistence via companion `.meta.json` files (#99)
+- **SDK**: Terminal guard enforcement on `storage.put()` — writes rejected after `run_complete` / `run_error` (#99)
+- **Contracts**: Updated CONTRACT_IPC.md and CONTRACT_EMIT.md for storage mechanics (#99)
+
+---
+
+## [0.3.5] - 2026-02-07
+
+### Added
+
+- **CLI**: `--storage-dataset` flag to override Lode dataset ID (#98)
+- **Docs**: Recency window contract documentation and v0.4.0 roadmap (#95)
+
+---
+
 ## [0.3.4] - 2026-02-07
 
 ### Fixed
@@ -205,6 +227,8 @@ _No unreleased changes._
 
 ---
 
+[0.4.0]: https://github.com/justapithecus/quarry/releases/tag/v0.4.0
+[0.3.5]: https://github.com/justapithecus/quarry/releases/tag/v0.3.5
 [0.3.4]: https://github.com/justapithecus/quarry/releases/tag/v0.3.4
 [0.3.3]: https://github.com/justapithecus/quarry/releases/tag/v0.3.3
 [0.3.2]: https://github.com/justapithecus/quarry/releases/tag/v0.3.2

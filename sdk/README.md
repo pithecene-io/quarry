@@ -73,6 +73,7 @@ The context object passed to your script.
 | `browser` | `Browser` | Puppeteer Browser |
 | `browserContext` | `BrowserContext` | Puppeteer BrowserContext |
 | `emit` | `EmitAPI` | Sole output mechanism |
+| `storage` | `StorageAPI` | Sidecar file upload interface |
 
 ### EmitAPI
 

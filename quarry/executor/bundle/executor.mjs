@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.3.5
+// Quarry Executor Bundle v0.4.0
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: task executor:bundle
 
@@ -1744,7 +1744,7 @@ import { dirname, resolve as resolve2 } from "node:path";
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
-var CONTRACT_VERSION = "0.3.5";
+var CONTRACT_VERSION = "0.4.0";
 var TerminalEventError = class extends Error {
   constructor() {
     super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
@@ -1758,7 +1758,13 @@ var SinkFailedError = class extends Error {
     this.cause = cause;
   }
 };
-function createEmitAPI(run, sink) {
+var StorageFilenameError = class extends Error {
+  constructor(filename, reason) {
+    super(`Invalid storage filename "${filename}": ${reason}`);
+    this.name = "StorageFilenameError";
+  }
+};
+function createAPIs(run, sink) {
   let seq = 0;
   let terminalEmitted = false;
   let sinkFailed = null;
@@ -1899,17 +1905,32 @@ function createEmitAPI(run, sink) {
       });
     }
   };
-  return emit;
+  function validateFilename(filename) {
+    if (!filename) throw new StorageFilenameError(filename, "filename must not be empty");
+    if (filename.includes("/") || filename.includes("\\")) throw new StorageFilenameError(filename, "filename must not contain path separators");
+    if (filename.includes("..")) throw new StorageFilenameError(filename, 'filename must not contain ".."');
+  }
+  return {
+    emit,
+    storage: { put(options) {
+      return serialize(async () => {
+        assertNotTerminal();
+        validateFilename(options.filename);
+        await sink.writeFile(options.filename, options.content_type, options.data);
+      });
+    } }
+  };
 }
 function createContext(options) {
-  const emit = createEmitAPI(options.run, options.sink);
+  const { emit, storage } = createAPIs(options.run, options.sink);
   const ctx = {
     job: options.job,
     run: Object.freeze(options.run),
     page: options.page,
     browser: options.browser,
     browserContext: options.browserContext,
-    emit
+    emit,
+    storage
   };
   return Object.freeze(ctx);
 }
@@ -1965,6 +1986,23 @@ var ObservingSink = class {
     }
     try {
       await this.inner.writeArtifactData(artifactId, data);
+    } catch (err) {
+      if (this.sinkFailure === null) {
+        this.sinkFailure = err;
+      }
+      throw err;
+    }
+  }
+  /**
+   * Write a sidecar file, tracking failures.
+   * @throws SinkAlreadyFailedError if the sink has previously failed
+   */
+  async writeFile(filename, contentType, data) {
+    if (this.sinkFailure !== null) {
+      throw new SinkAlreadyFailedError(this.sinkFailure);
+    }
+    try {
+      await this.inner.writeFile(filename, contentType, data);
     } catch (err) {
       if (this.sinkFailure === null) {
         this.sinkFailure = err;
@@ -2094,6 +2132,21 @@ function encodeRunResultFrame(outcome, proxyUsed) {
   const payload = (0, import_msgpack.encode)(frame);
   return encodeFrame(payload);
 }
+function encodeFileWriteFrame(filename, contentType, data) {
+  if (data.length > MAX_CHUNK_SIZE) {
+    throw new ChunkValidationError(
+      `file data size ${data.length} exceeds MAX_CHUNK_SIZE ${MAX_CHUNK_SIZE}`
+    );
+  }
+  const frame = {
+    type: "file_write",
+    filename,
+    content_type: contentType,
+    data
+  };
+  const payload = (0, import_msgpack.encode)(frame);
+  return encodeFrame(payload);
+}
 
 // src/ipc/sink.ts
 var StreamClosedError = class extends Error {
@@ -2172,6 +2225,19 @@ var StdioSink = class {
    */
   async writeRunResult(outcome, proxyUsed) {
     const frame = encodeRunResultFrame(outcome, proxyUsed);
+    await writeWithBackpressure(this.output, frame);
+  }
+  /**
+   * Write a sidecar file via file_write frame.
+   * Bypasses seq numbering and the policy pipeline.
+   * Blocks on backpressure per CONTRACT_IPC.md.
+   *
+   * @param filename - Target filename (no path separators, no "..")
+   * @param contentType - MIME content type
+   * @param data - Raw binary data (max 8 MiB)
+   */
+  async writeFile(filename, contentType, data) {
+    const frame = encodeFileWriteFrame(filename, contentType, data);
     await writeWithBackpressure(this.output, frame);
   }
 };

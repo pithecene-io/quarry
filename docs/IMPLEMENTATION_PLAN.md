@@ -13,10 +13,10 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.3.4)
-- Latest release: v0.3.4 (see CHANGELOG.md).
+## Current Status (as of v0.4.0)
+- Latest release: v0.4.0 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.3.4 adds S3-compatible provider support (R2, MinIO).
+- v0.4.0 adds `ctx.storage.put()` for sidecar file uploads via Lode Store.
 
 ---
 
@@ -309,7 +309,30 @@ before adding event bus integrations.
 
 ---
 
-## v0.4.0 Roadmap — Advanced Proxy Rotation
+## v0.4.0 Roadmap — Storage Mechanics
+
+### Goal
+Expose sidecar file upload capabilities to scripts via `ctx.storage.put()`,
+enabling direct writes to addressable storage paths outside the event pipeline.
+
+### Deliverables
+- `StorageAPI` on `QuarryContext` with `put()` method
+- `file_write` IPC frame type for executor→runtime file transfer
+- Content type persistence via companion `.meta.json`
+- Terminal guard enforcement on `storage.put()`
+- Contract updates (CONTRACT_IPC.md, CONTRACT_EMIT.md)
+
+### Mini-milestones
+- [x] SDK `StorageAPI` type and `storage.put()` implementation
+- [x] `file_write` IPC frame in executor and runtime
+- [x] Lode file writer for sidecar persistence
+- [x] Terminal guard prevents writes after run completion
+- [x] Contract and guide updates
+- [x] Tests: SDK, executor IPC, runtime ingestion
+
+---
+
+## v0.5.0 Roadmap — Advanced Proxy Rotation
 
 ### Goal
 Harden proxy selection for production workloads that require recency-aware
