@@ -13,6 +13,22 @@ _No unreleased changes._
 
 ---
 
+## [0.3.4] - 2026-02-07
+
+### Fixed
+
+- **Lode**: Fixed nil-map panic in S3 client constructor — `NewLodeS3Client` failed to initialize artifact offset and chunk-tracking maps, causing runtime panic on first `WriteChunks` call (#92)
+
+### Changed
+
+- **Lode**: Extracted shared `newClient()` constructor helper to prevent future initialization drift between FS and S3 client paths (#92)
+
+### Added
+
+- **Testing**: Regression test `TestNewClient_InitializesMaps` guards against nil-map constructor bugs (#92)
+
+---
+
 ## [0.3.3] - 2026-02-07
 
 ### Added
@@ -189,6 +205,7 @@ _No unreleased changes._
 
 ---
 
+[0.3.4]: https://github.com/justapithecus/quarry/releases/tag/v0.3.4
 [0.3.3]: https://github.com/justapithecus/quarry/releases/tag/v0.3.3
 [0.3.2]: https://github.com/justapithecus/quarry/releases/tag/v0.3.2
 [0.3.1]: https://github.com/justapithecus/quarry/releases/tag/v0.3.1
