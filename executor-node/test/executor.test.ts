@@ -721,20 +721,23 @@ describe('puppeteer-extra plugin setup', () => {
     expect(mockUse).toHaveBeenCalledWith(mockAdblockerInstance)
   })
 
-  it('warns when subsequent call has different plugin config', async () => {
+  it('reinitializes when subsequent call has different plugin config', async () => {
     ;(loadScript as Mock).mockResolvedValue(createMockScript())
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
     // First call initializes with stealth: true (default)
     await execute(createConfig())
+    expect(mockUse).toHaveBeenCalledWith(mockStealthInstance)
 
-    // Second call requests different config (stealth: false) — should warn
+    const callsAfterFirst = mockUse.mock.calls.length
+
+    // Second call requests different config (stealth: false) — should reinitialize
     // Do NOT reset singleton between calls
     await execute(createConfig({ stealth: false }))
 
-    expect(stderrSpy).toHaveBeenCalledWith(
-      'Warning: puppeteer plugin config changed after initialization; using original config\n'
-    )
-    stderrSpy.mockRestore()
+    // mockUse should NOT have been called again with stealth (stealth: false)
+    const stealthCallsAfterSecond = mockUse.mock.calls
+      .slice(callsAfterFirst)
+      .filter((args: unknown[]) => args[0] === mockStealthInstance)
+    expect(stealthCallsAfterSecond).toHaveLength(0)
   })
 })

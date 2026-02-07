@@ -23,6 +23,7 @@
   "peerDependencies": {
     "puppeteer": "^24",
     "puppeteer-extra": "^3",
+    "puppeteer-extra-plugin-adblocker": "^2",
     "puppeteer-extra-plugin-stealth": "^2"
   },
   "peerDependenciesMeta": {

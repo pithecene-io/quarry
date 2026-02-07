@@ -85,17 +85,17 @@ async function getPuppeteer(
   plugins: PluginConfig
 ): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
   if (puppeteerModule) {
-    // Warn if subsequent call requests different plugin config
+    // Reinitialize if plugin config changed since last call
     if (
       cachedPluginConfig &&
       (cachedPluginConfig.stealth !== plugins.stealth ||
         cachedPluginConfig.adblocker !== plugins.adblocker)
     ) {
-      process.stderr.write(
-        'Warning: puppeteer plugin config changed after initialization; using original config\n'
-      )
+      puppeteerModule = null
+      cachedPluginConfig = null
+    } else {
+      return puppeteerModule
     }
-    return puppeteerModule
   }
 
   const absoluteScriptPath = resolve(scriptPath)
