@@ -158,6 +158,38 @@
           "required": false,
           "description": "Force path-style addressing for S3 (required by R2, MinIO)",
           "dependsOn": ["storage-backend=s3"]
+        },
+        "adapter": {
+          "type": "string",
+          "required": false,
+          "description": "Event-bus adapter type (webhook)",
+          "validation": "Must be one of: webhook"
+        },
+        "adapter-url": {
+          "type": "string",
+          "required": false,
+          "description": "Adapter endpoint URL (required when --adapter is set)",
+          "dependsOn": ["adapter"]
+        },
+        "adapter-header": {
+          "type": "string_slice",
+          "required": false,
+          "description": "Custom HTTP header as key=value (repeatable)",
+          "dependsOn": ["adapter"]
+        },
+        "adapter-timeout": {
+          "type": "duration",
+          "required": false,
+          "default": "10s",
+          "description": "Adapter notification timeout",
+          "dependsOn": ["adapter"]
+        },
+        "adapter-retries": {
+          "type": "int",
+          "required": false,
+          "default": 3,
+          "description": "Adapter retry attempts",
+          "dependsOn": ["adapter"]
         }
       }
     },

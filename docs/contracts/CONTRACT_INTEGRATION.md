@@ -22,9 +22,21 @@ Non-goals:
 
 ## Adapter Model
 
-- Adapters are in-repo modules.
+- Adapters are in-repo modules under `quarry/adapter/`.
 - The runtime owns adapter lifecycle and selection.
 - Users do not write runtime code; users only provide configuration.
+- Adapter notification is **best-effort**: failures are logged to stderr
+  but do not fail the run. Run data is already persisted before the
+  adapter is invoked.
+
+### Runtime Adapters (v0.5.0+)
+
+| Adapter | Package | Status |
+|---------|---------|--------|
+| Webhook (HTTP POST) | `quarry/adapter/webhook` | Available |
+| Temporal | — | Planned |
+| NATS | — | Planned |
+| SNS | — | Planned |
 
 ---
 
@@ -32,13 +44,24 @@ Non-goals:
 
 ### Selection
 - Adapter selection is runtime-owned and CLI/config-driven.
-- Per-run selection via `quarry run` flags is the baseline.
+- Per-run selection via `quarry run --adapter <type>` flags is the baseline.
 - Global defaults via config are optional and additive.
 - No silent fallback to a different adapter is permitted.
+- If `--adapter` is not set, no notification is sent.
 
 ### Configuration
 - Adapters must accept configuration only from CLI/config inputs.
 - Sensitive fields must be redacted from logs and output.
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--adapter <type>` | Adapter type (`webhook`) |
+| `--adapter-url <url>` | Endpoint URL (required when `--adapter` is set) |
+| `--adapter-header <key=value>` | Custom HTTP header (repeatable) |
+| `--adapter-timeout <duration>` | Notification timeout (default `10s`) |
+| `--adapter-retries <n>` | Retry attempts (default `3`) |
 
 ---
 
@@ -74,9 +97,22 @@ Ordering and fan-out strategies are explicitly out of scope for now.
 
 ---
 
+## Invocation Ordering
+
+The adapter is invoked **after** all of the following:
+1. Run execution completes (success or failure)
+2. Policy flush completes
+3. Metrics are persisted to Lode
+
+This ensures consumers can read the data referenced in the event payload.
+Adapter publish is the last step before CLI output and exit.
+
+---
+
 ## Failure and Backpressure
 
-- Adapter failures must be observable via metrics and CLI stats.
+- Adapter failures must be observable via stderr warnings.
+- Adapter failure does not change the run exit code.
 - Backpressure must block or fail explicitly; no silent loss is permitted.
 
 ---

@@ -332,7 +332,37 @@ enabling direct writes to addressable storage paths outside the event pipeline.
 
 ---
 
-## v0.5.0 Roadmap — Advanced Proxy Rotation
+## v0.5.0 Roadmap — Event Bus Adapters
+
+### Goal
+Provide runtime-integrated downstream notification so consumers do not need
+to poll Lode or wire external plumbing.
+
+### Deliverables
+- `Adapter` interface and `RunCompletedEvent` type (`quarry/adapter/`)
+- Webhook adapter: HTTP POST with retries, custom headers, timeout (`quarry/adapter/webhook/`)
+- CLI flags: `--adapter`, `--adapter-url`, `--adapter-header`, `--adapter-timeout`, `--adapter-retries`
+- Hook in `runAction()` after metrics persist (best-effort, does not fail run)
+- Contract and guide updates
+
+### Mini-milestones
+- [x] Adapter interface and event type (`quarry/adapter/adapter.go`)
+- [x] Webhook adapter implementation (`quarry/adapter/webhook/webhook.go`)
+- [x] Webhook tests with httptest (`quarry/adapter/webhook/webhook_test.go`)
+- [x] CLI flags and hook in `quarry/cli/cmd/run.go`
+- [x] CONTRACT_INTEGRATION.md updated with runtime adapter reference
+- [x] CONTRACT_CLI.md updated with adapter flags
+- [x] Integration guide updated with webhook example
+- [x] CLI_PARITY.json updated
+
+### Future adapters (separate PRs)
+- Temporal
+- NATS
+- SNS
+
+---
+
+## v0.6.0 Roadmap — Advanced Proxy Rotation
 
 ### Goal
 Harden proxy selection for production workloads that require recency-aware
@@ -380,13 +410,11 @@ Phase 2 is deferred until Phase 1 is validated in production.
 
 ---
 
-## Post-v0.3.0 — Event Bus Integrations (Staggered)
+## Post-v0.5.0 — Additional Event Bus Adapters (Staggered)
 
 Order of support:
 - Temporal.io
 - NATS
-- Kafka
-- Rabbit
 - SNS/SQS
 
 Principles:

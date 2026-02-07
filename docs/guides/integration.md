@@ -93,6 +93,75 @@ Include enough information for consumers to:
 
 4. **Dead letter queue**: Route failed events to a DLQ for manual inspection.
 
+### Webhook Adapter (v0.5.0+)
+
+Quarry ships a built-in webhook adapter that POSTs a JSON event to a
+configurable URL after each run completes.
+
+```bash
+quarry run \
+  --script ./script.ts \
+  --run-id run-001 \
+  --source my-source \
+  --storage-backend fs \
+  --storage-path ./data \
+  --adapter webhook \
+  --adapter-url https://hooks.example.com/quarry \
+  --adapter-header "Authorization=Bearer $TOKEN"
+```
+
+The adapter publishes after storage commit and metrics persist. If the
+webhook fails (after retries), the warning is logged to stderr but the
+run exits with its normal outcome code.
+
+#### Webhook Payload
+
+```json
+{
+  "contract_version": "0.4.0",
+  "event_type": "run_completed",
+  "run_id": "run-001",
+  "source": "my-source",
+  "category": "default",
+  "day": "2026-02-07",
+  "outcome": "success",
+  "storage_path": "file:///data/datasets/quarry/partitions/source=my-source/category=default/day=2026-02-07/run_id=run-001",
+  "timestamp": "2026-02-07T12:00:00Z",
+  "attempt": 1,
+  "event_count": 42,
+  "duration_ms": 1500
+}
+```
+
+#### Adapter Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--adapter-timeout` | `10s` | Per-request timeout |
+| `--adapter-retries` | `3` | Retry attempts with exponential backoff |
+| `--adapter-header` | | Custom header (repeatable, `key=value` format) |
+
+### Interim Pattern (v0.4.x)
+
+Before v0.5.0, use a shell wrapper to trigger downstream notifications:
+
+```bash
+#!/bin/bash
+# Wrapper: run + notify
+quarry run ... "$@"
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then OUTCOME="success"; else OUTCOME="failure"; fi
+
+curl -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d "{\"event_type\":\"run_completed\",\"run_id\":\"$RUN_ID\",\"outcome\":\"$OUTCOME\"}"
+
+exit $EXIT_CODE
+```
+
+This is superseded by `--adapter webhook` in v0.5.0.
+
 ### Provider Examples (Optional)
 
 The patterns above are provider-agnostic. This section shows concrete examples

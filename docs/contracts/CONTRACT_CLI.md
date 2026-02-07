@@ -135,6 +135,22 @@ CONTRACT_EMIT.md and CONTRACT_POLICY.md.
 
 No other command may initiate or control execution.
 
+### Adapter Flags (v0.5.0+)
+
+`quarry run` supports optional event-bus adapter notification.
+See CONTRACT_INTEGRATION.md for semantics.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--adapter` | string | | Adapter type (`webhook`) |
+| `--adapter-url` | string | | Endpoint URL (required when `--adapter` set) |
+| `--adapter-header` | string (repeatable) | | Custom header as `key=value` |
+| `--adapter-timeout` | duration | `10s` | Per-request timeout |
+| `--adapter-retries` | int | `3` | Retry attempts |
+
+Adapter invocation is best-effort. Failures are logged to stderr.
+The run exit code is determined by execution outcome, never by adapter status.
+
 ---
 
 ## `inspect` (single-entity introspection)

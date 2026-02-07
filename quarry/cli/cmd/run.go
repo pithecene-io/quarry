@@ -10,11 +10,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/justapithecus/quarry/adapter"
+	"github.com/justapithecus/quarry/adapter/webhook"
 	"github.com/justapithecus/quarry/executor"
 	"github.com/justapithecus/quarry/lode"
 	"github.com/justapithecus/quarry/metrics"
@@ -203,6 +206,29 @@ ADVANCED:
 				Name:  "storage-s3-path-style",
 				Usage: "Force path-style addressing for S3 (required by R2, MinIO)",
 			},
+			// Adapter flags (event-bus notification)
+			&cli.StringFlag{
+				Name:  "adapter",
+				Usage: "Event-bus adapter type (webhook)",
+			},
+			&cli.StringFlag{
+				Name:  "adapter-url",
+				Usage: "Adapter endpoint URL (required when --adapter is set)",
+			},
+			&cli.StringSliceFlag{
+				Name:  "adapter-header",
+				Usage: "Custom HTTP header as key=value (repeatable)",
+			},
+			&cli.DurationFlag{
+				Name:  "adapter-timeout",
+				Usage: "Adapter notification timeout",
+				Value: webhook.DefaultTimeout,
+			},
+			&cli.IntFlag{
+				Name:  "adapter-retries",
+				Usage: "Adapter retry attempts",
+				Value: webhook.DefaultRetries,
+			},
 		},
 		Action: runAction,
 	}
@@ -233,6 +259,15 @@ type storageChoice struct {
 	region       string // AWS region for S3 (optional)
 	endpoint     string // custom S3 endpoint for S3-compatible providers (optional)
 	usePathStyle bool   // force path-style addressing for S3 (optional)
+}
+
+// adapterChoice holds parsed adapter configuration.
+type adapterChoice struct {
+	adapterType string
+	url         string
+	headers     map[string]string
+	timeout     time.Duration
+	retries     int
 }
 
 func runAction(c *cli.Context) error {
@@ -368,6 +403,28 @@ func runAction(c *cli.Context) error {
 			fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", writeErr)
 		}
 		metricsCancel()
+	}
+
+	// Notify adapter (if configured) per CONTRACT_INTEGRATION.md.
+	// Adapter failure does NOT fail the run — data is already persisted.
+	if adapterType := c.String("adapter"); adapterType != "" {
+		adptConfig, err := parseAdapterConfig(c)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: adapter config error: %v\n", err)
+		} else {
+			adpt, err := buildAdapter(adptConfig)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
+			} else {
+				event := buildRunCompletedEvent(result, storageConfig, c.String("storage-dataset"), c.String("source"), c.String("category"), lode.DeriveDay(startTime), duration)
+				notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
+				if err := adpt.Publish(notifyCtx, event); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
+				}
+				notifyCancel()
+				_ = adpt.Close()
+			}
+		}
 	}
 
 	// Print result
@@ -713,6 +770,101 @@ func buildStorageSink(storageConfig storageChoice, dataset, source, category, ru
 		return lode.NewInstrumentedSink(sink, collector), client, nil
 	}
 	return sink, client, nil
+}
+
+// parseAdapterConfig parses adapter flags from the CLI context.
+func parseAdapterConfig(c *cli.Context) (adapterChoice, error) {
+	ac := adapterChoice{
+		adapterType: c.String("adapter"),
+		url:         c.String("adapter-url"),
+		timeout:     c.Duration("adapter-timeout"),
+		retries:     c.Int("adapter-retries"),
+		headers:     make(map[string]string),
+	}
+
+	switch ac.adapterType {
+	case "webhook":
+		if ac.url == "" {
+			return ac, fmt.Errorf("--adapter-url is required when --adapter=webhook")
+		}
+	default:
+		return ac, fmt.Errorf("unknown adapter type: %q (supported: webhook)", ac.adapterType)
+	}
+
+	for _, h := range c.StringSlice("adapter-header") {
+		k, v, ok := strings.Cut(h, "=")
+		if !ok || k == "" {
+			return ac, fmt.Errorf("invalid --adapter-header %q: expected key=value", h)
+		}
+		ac.headers[k] = v
+	}
+
+	return ac, nil
+}
+
+// buildAdapter creates an adapter from parsed config.
+func buildAdapter(ac adapterChoice) (adapter.Adapter, error) {
+	switch ac.adapterType {
+	case "webhook":
+		return webhook.New(webhook.Config{
+			URL:     ac.url,
+			Headers: ac.headers,
+			Timeout: ac.timeout,
+			Retries: ac.retries,
+		})
+	default:
+		return nil, fmt.Errorf("unknown adapter type: %q", ac.adapterType)
+	}
+}
+
+// buildRunCompletedEvent constructs the adapter event from run result and config.
+func buildRunCompletedEvent(
+	result *runtime.RunResult,
+	storageConfig storageChoice,
+	dataset, source, category, day string,
+	duration time.Duration,
+) *adapter.RunCompletedEvent {
+	event := &adapter.RunCompletedEvent{
+		ContractVersion: types.ContractVersion,
+		EventType:       "run_completed",
+		RunID:           result.RunMeta.RunID,
+		Source:          source,
+		Category:        category,
+		Day:             day,
+		Outcome:         string(result.Outcome.Status),
+		StoragePath:     buildStoragePath(storageConfig, dataset, source, category, day, result.RunMeta.RunID),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		Attempt:         result.RunMeta.Attempt,
+		EventCount:      result.EventCount,
+		DurationMs:      duration.Milliseconds(),
+	}
+	if result.RunMeta.JobID != nil {
+		event.JobID = *result.RunMeta.JobID
+	}
+	return event
+}
+
+// buildStoragePath constructs a human-readable storage path for the event payload.
+func buildStoragePath(storageConfig storageChoice, dataset, source, category, day, runID string) string {
+	partitions := fmt.Sprintf("datasets/%s/partitions/source=%s/category=%s/day=%s/run_id=%s",
+		dataset, source, category, day, runID)
+
+	switch storageConfig.backend {
+	case "fs":
+		absPath, err := filepath.Abs(storageConfig.path)
+		if err != nil {
+			absPath = storageConfig.path
+		}
+		return fmt.Sprintf("file://%s/%s", absPath, partitions)
+	case "s3":
+		bucket, prefix := lode.ParseS3Path(storageConfig.path)
+		if prefix != "" {
+			return fmt.Sprintf("s3://%s/%s/%s", bucket, prefix, partitions)
+		}
+		return fmt.Sprintf("s3://%s/%s", bucket, partitions)
+	default:
+		return partitions
+	}
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {
