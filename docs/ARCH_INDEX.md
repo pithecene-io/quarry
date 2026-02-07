@@ -34,6 +34,7 @@ User-facing guides (informational).
 - `guides/policy.md` — user-facing ingestion policy guide
 - `guides/lode.md` — user-facing storage expectations
 - `guides/cli.md` — user-facing CLI overview
+- `guides/configuration.md` — consolidated configuration reference (flags, env vars, config files)
 - `guides/proxy.md` — user-facing proxy guide
 - `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
 
