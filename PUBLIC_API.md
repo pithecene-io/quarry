@@ -350,7 +350,7 @@ task build
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
 3. **No streaming reads**: Artifacts must fit in memory
-4. **S3 is experimental**: Requires explicit opt-in; no transactional guarantees across writes
+4. **S3 is experimental**: S3 and S3-compatible providers (R2, MinIO) are supported but experimental; no transactional guarantees across writes
 5. **No job scheduling**: Quarry is an execution runtime, not a scheduler
 6. **Puppeteer required**: All scripts run in a browser context
 

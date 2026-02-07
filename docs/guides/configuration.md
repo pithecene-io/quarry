@@ -55,6 +55,8 @@ command reference.
 | `--storage-backend` | `fs` or `s3` | Backend type |
 | `--storage-path` | string | `fs`: local directory; `s3`: `bucket/optional-prefix` |
 | `--storage-region` | string | AWS region (S3 only; uses default credential chain) |
+| `--storage-endpoint` | string | Custom S3 endpoint URL (for R2, MinIO, etc.) |
+| `--storage-s3-path-style` | bool | Force path-style addressing (required by R2, MinIO) |
 
 ### Policy
 
@@ -194,6 +196,9 @@ Resolution order:
 
 Set `--storage-region` if the bucket is not in your SDK's default region.
 
+For S3-compatible providers (R2, MinIO), set credentials via environment
+variables and use `--storage-endpoint` to point at the provider's endpoint.
+
 ---
 
 ## Configuration Flow
@@ -241,6 +246,25 @@ quarry run \
   --policy buffered \
   --buffer-events 500 \
   --buffer-bytes 10485760
+```
+
+### S3-compatible provider (Cloudflare R2)
+
+```bash
+quarry run \
+  --script ./my-script.ts \
+  --run-id run-001 \
+  --source my-source \
+  --storage-backend s3 \
+  --storage-path my-bucket/quarry \
+  --storage-endpoint https://ACCOUNT_ID.r2.cloudflarestorage.com \
+  --storage-s3-path-style
+```
+
+Credentials via environment variables:
+```bash
+export AWS_ACCESS_KEY_ID=<r2-access-key>
+export AWS_SECRET_ACCESS_KEY=<r2-secret-key>
 ```
 
 ### Proxy with stealth in CI
