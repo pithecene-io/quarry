@@ -121,7 +121,7 @@ type errorPattern struct {
 // ErrAccessDenied appears before ErrPermissionDenied so that
 // "AccessDenied"/"Forbidden"/"403" is not shadowed by "access denied".
 var classifierTable = []errorPattern{
-	{[]string{"AccessDenied", "Forbidden", "403"}, ErrAccessDenied},
+	{[]string{"AccessDenied", "access denied", "Forbidden", "403"}, ErrAccessDenied},
 	{[]string{"permission denied", "EACCES"}, ErrPermissionDenied},
 	{[]string{"no such file", "does not exist", "not found", "ENOENT", "404", "NoSuchKey"}, ErrNotFound},
 	{[]string{"no space left", "disk full", "ENOSPC", "quota exceeded"}, ErrDiskFull},
