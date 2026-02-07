@@ -20,6 +20,12 @@ type S3Config struct {
 	Prefix string
 	// Region is the AWS region (optional, uses default chain if empty).
 	Region string
+	// Endpoint is a custom S3 endpoint URL for S3-compatible providers
+	// (e.g. Cloudflare R2, MinIO). Empty uses the default AWS endpoint.
+	Endpoint string
+	// UsePathStyle forces path-style addressing (bucket in path, not subdomain).
+	// Required by most S3-compatible providers (R2, MinIO, etc.).
+	UsePathStyle bool
 }
 
 // Validate checks that required S3 configuration is present.
@@ -59,8 +65,20 @@ func NewLodeS3Client(cfg Config, s3cfg S3Config) (*LodeClient, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// Create S3 client
-	s3Client := s3.NewFromConfig(awsConfig)
+	// Create S3 client with optional endpoint and path-style overrides
+	var s3Opts []func(*s3.Options)
+	if s3cfg.Endpoint != "" {
+		endpoint := s3cfg.Endpoint
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.BaseEndpoint = &endpoint
+		})
+	}
+	if s3cfg.UsePathStyle {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.UsePathStyle = true
+		})
+	}
+	s3Client := s3.NewFromConfig(awsConfig, s3Opts...)
 
 	// Create Lode S3 store factory
 	// StoreFactory is func() (Store, error)

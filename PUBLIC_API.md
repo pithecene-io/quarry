@@ -222,11 +222,13 @@ quarry run [options]
 |------|-------------|
 | `--executor <path>` | Override executor path (auto-resolved by default) |
 
-**Storage flags (S3):**
+**Storage flags (S3 / S3-compatible):**
 
 | Flag | Description |
 |------|-------------|
 | `--storage-region <region>` | AWS region (uses default chain if omitted) |
+| `--storage-endpoint <url>` | Custom S3 endpoint URL (e.g. Cloudflare R2, MinIO) |
+| `--storage-s3-path-style` | Force path-style addressing (required by R2, MinIO) |
 
 ### Inspect Command
 
@@ -388,6 +390,23 @@ Uses AWS default credential chain. IAM permissions required:
 - `s3:PutObject`
 - `s3:GetObject`
 - `s3:ListBucket`
+
+### S3-Compatible Providers (R2, MinIO)
+
+Quarry supports S3-compatible storage providers via custom endpoint and path-style flags:
+
+```bash
+--storage-backend s3 \
+--storage-path my-bucket/quarry-data \
+--storage-endpoint https://ACCOUNT_ID.r2.cloudflarestorage.com \
+--storage-s3-path-style
+```
+
+Set credentials via environment variables:
+```bash
+export AWS_ACCESS_KEY_ID=<access-key>
+export AWS_SECRET_ACCESS_KEY=<secret-key>
+```
 
 ---
 
