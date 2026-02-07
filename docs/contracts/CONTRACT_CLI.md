@@ -151,6 +151,36 @@ See CONTRACT_INTEGRATION.md for semantics.
 Adapter invocation is best-effort. Failures are logged to stderr.
 The run exit code is determined by execution outcome, never by adapter status.
 
+### Config File (v0.4.x+)
+
+`quarry run` supports an optional `--config <path>` flag that loads a YAML
+config file providing project-level defaults for run flags.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--config` | string | | Path to YAML config file |
+
+**Precedence rules:**
+1. CLI flags (explicitly set) always win.
+2. Config file values are used if the CLI flag was not explicitly set.
+3. urfave flag defaults apply if neither CLI nor config provides a value.
+
+**Required field handling:**
+- `--source`, `--storage-backend`, and `--storage-path` are no longer
+  `Required` on the flag definition. They are validated after config merge.
+  If missing from both CLI and config, an actionable error is returned.
+- `--script` and `--run-id` remain `Required: true` (per-invocation, never
+  in config).
+
+**Proxy pool migration:**
+- Proxy pools may be defined inline under `proxies:` in the config file,
+  replacing the need for a separate `--proxy-config` JSON file.
+- `--proxy-config` and config `proxies:` cannot both be present (config error).
+- `--proxy-config` used alone still works but emits a deprecation warning.
+
+**No auto-discovery:** Config files are loaded only via explicit `--config`.
+There is no implicit `quarry.yaml` search in the working directory.
+
 ---
 
 ## `inspect` (single-entity introspection)

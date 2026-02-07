@@ -5,6 +5,11 @@
     "run": {
       "description": "Execute a script run (the only execution entrypoint)",
       "flags": {
+        "config": {
+          "type": "string",
+          "required": false,
+          "description": "Path to YAML config file (project-level defaults for quarry run)"
+        },
         "script": {
           "type": "string",
           "required": true,
@@ -57,8 +62,9 @@
         },
         "source": {
           "type": "string",
-          "required": true,
-          "description": "Source identifier for partitioning (required)"
+          "required": false,
+          "description": "Source identifier for partitioning (required)",
+          "notes": "Required at runtime; can be provided via --config file instead of CLI flag"
         },
         "category": {
           "type": "string",
@@ -97,7 +103,8 @@
           "type": "string",
           "required": false,
           "description": "Path to proxy pools config file (JSON)",
-          "dependsOn": ["proxy-pool"]
+          "dependsOn": ["proxy-pool"],
+          "notes": "Deprecated: define proxy pools in quarry.yaml under the proxies: key instead"
         },
         "proxy-pool": {
           "type": "string",
@@ -133,14 +140,16 @@
         },
         "storage-backend": {
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "Storage backend: fs (filesystem) or s3 (Amazon S3)",
-          "validation": "Must be one of: fs, s3"
+          "validation": "Must be one of: fs, s3",
+          "notes": "Required at runtime; can be provided via --config file instead of CLI flag"
         },
         "storage-path": {
           "type": "string",
-          "required": true,
-          "description": "Storage path (fs: writable directory, s3: bucket/prefix)"
+          "required": false,
+          "description": "Storage path (fs: writable directory, s3: bucket/prefix)",
+          "notes": "Required at runtime; can be provided via --config file instead of CLI flag"
         },
         "storage-region": {
           "type": "string",

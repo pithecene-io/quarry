@@ -220,6 +220,14 @@ Files land at Hive-partitioned paths under the storage root:
 quarry run [options]
 ```
 
+**Config file:**
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Path to YAML config file with project-level defaults (see `docs/guides/configuration.md`) |
+
+CLI flags always override config file values.
+
 **Required flags:**
 
 | Flag | Description |
@@ -229,6 +237,10 @@ quarry run [options]
 | `--source <name>` | Source identifier for partitioning |
 | `--storage-backend <fs\|s3>` | Storage backend |
 | `--storage-path <path>` | Storage location |
+
+> **Note:** `--source`, `--storage-backend`, and `--storage-path` can also
+> be provided via `--config` file. They are required at runtime but do not
+> need to appear on the CLI if set in the config.
 
 **Optional flags:**
 
@@ -253,11 +265,11 @@ quarry run [options]
 | `--adapter-timeout <duration>` | `10s` | Notification timeout |
 | `--adapter-retries <n>` | `3` | Retry attempts |
 
-**Advanced flags:**
+**Advanced flags (development only):**
 
 | Flag | Description |
 |------|-------------|
-| `--executor <path>` | Override executor path (auto-resolved by default) |
+| `--executor <path>` | Override executor path (auto-resolved in bundled binary; only needed for local development builds) |
 
 **Storage flags (S3 / S3-compatible):**
 

@@ -124,6 +124,7 @@ Go module root. Contains runtime, CLI, and core types.
 - `types/events.go` — event envelope and payload types
 - `proxy/selector.go` — proxy pool selection/rotation
 - `lode/sink.go` — Lode storage sink interface
+- `cli/config/` — YAML config file loader (env expansion, struct parsing)
 - `cli/reader/` — CLI read-side data access layer
 
 ---
