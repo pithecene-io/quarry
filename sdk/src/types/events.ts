@@ -2,7 +2,7 @@
  * Event envelope and payload types per CONTRACT_EMIT.md
  */
 
-export const CONTRACT_VERSION = '0.3.2' as const
+export const CONTRACT_VERSION = '0.3.3' as const
 export type ContractVersion = typeof CONTRACT_VERSION
 
 // ============================================
