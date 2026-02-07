@@ -44,6 +44,29 @@ const MAX_PORT = 65535
 const LARGE_POOL_THRESHOLD = 100
 
 // ============================================
+// Validation Helpers
+// ============================================
+
+function validationError(field: string, message: string): ProxyValidationError {
+  return { field, message }
+}
+
+function validationWarning(field: string, message: string): ProxyValidationWarning {
+  return { field, message }
+}
+
+function isPresent(value: string | undefined): boolean {
+  return value !== undefined && value !== ''
+}
+
+function buildValidationResult(
+  errors: ProxyValidationError[],
+  warnings: ProxyValidationWarning[]
+): ProxyValidationResult {
+  return { valid: errors.length === 0, errors, warnings }
+}
+
+// ============================================
 // Validation Functions
 // ============================================
 
@@ -62,10 +85,12 @@ export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): Pro
 
   // Protocol validation
   if (!VALID_PROTOCOLS.includes(endpoint.protocol)) {
-    errors.push({
-      field: `${fieldPrefix}protocol`,
-      message: `Invalid protocol "${endpoint.protocol}". Must be one of: ${VALID_PROTOCOLS.join(', ')}`
-    })
+    errors.push(
+      validationError(
+        `${fieldPrefix}protocol`,
+        `Invalid protocol "${endpoint.protocol}". Must be one of: ${VALID_PROTOCOLS.join(', ')}`
+      )
+    )
   }
 
   // Port validation
@@ -75,35 +100,32 @@ export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): Pro
     endpoint.port < MIN_PORT ||
     endpoint.port > MAX_PORT
   ) {
-    errors.push({
-      field: `${fieldPrefix}port`,
-      message: `Invalid port ${endpoint.port}. Must be integer between ${MIN_PORT} and ${MAX_PORT}`
-    })
+    errors.push(
+      validationError(
+        `${fieldPrefix}port`,
+        `Invalid port ${endpoint.port}. Must be integer between ${MIN_PORT} and ${MAX_PORT}`
+      )
+    )
   }
 
   // Auth pair validation
-  const hasUsername = endpoint.username !== undefined && endpoint.username !== ''
-  const hasPassword = endpoint.password !== undefined && endpoint.password !== ''
-  if (hasUsername !== hasPassword) {
-    errors.push({
-      field: `${fieldPrefix}username/${fieldPrefix}password`,
-      message: 'Username and password must be provided together'
-    })
+  if (isPresent(endpoint.username) !== isPresent(endpoint.password)) {
+    errors.push(
+      validationError(
+        `${fieldPrefix}username/${fieldPrefix}password`,
+        'Username and password must be provided together'
+      )
+    )
   }
 
   // Soft warning: socks5 with Puppeteer
   if (endpoint.protocol === 'socks5') {
-    warnings.push({
-      field: `${fieldPrefix}protocol`,
-      message: 'socks5 usage with Puppeteer is best-effort'
-    })
+    warnings.push(
+      validationWarning(`${fieldPrefix}protocol`, 'socks5 usage with Puppeteer is best-effort')
+    )
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  }
+  return buildValidationResult(errors, warnings)
 }
 
 /**
@@ -123,76 +145,68 @@ export function validateProxyPool(pool: ProxyPool): ProxyValidationResult {
 
   // Name validation
   if (!pool.name || typeof pool.name !== 'string') {
-    errors.push({
-      field: 'name',
-      message: 'Pool name is required'
-    })
+    errors.push(validationError('name', 'Pool name is required'))
   }
 
   // Strategy validation
   if (!VALID_STRATEGIES.includes(pool.strategy)) {
-    errors.push({
-      field: 'strategy',
-      message: `Invalid strategy "${pool.strategy}". Must be one of: ${VALID_STRATEGIES.join(', ')}`
-    })
+    errors.push(
+      validationError(
+        'strategy',
+        `Invalid strategy "${pool.strategy}". Must be one of: ${VALID_STRATEGIES.join(', ')}`
+      )
+    )
   }
 
   // Endpoints validation
   if (!pool.endpoints || pool.endpoints.length === 0) {
-    errors.push({
-      field: 'endpoints',
-      message: 'Pool must have at least one endpoint'
-    })
+    errors.push(validationError('endpoints', 'Pool must have at least one endpoint'))
   } else {
     // Validate each endpoint
-    for (let i = 0; i < pool.endpoints.length; i++) {
-      const endpointResult = validateProxyEndpoint(pool.endpoints[i], `endpoints[${i}]`)
-      errors.push(...endpointResult.errors)
-      warnings.push(...endpointResult.warnings)
-    }
+    const endpointResults = pool.endpoints.map((endpoint, i) =>
+      validateProxyEndpoint(endpoint, `endpoints[${i}]`)
+    )
+    errors.push(...endpointResults.flatMap((r) => r.errors))
+    warnings.push(...endpointResults.flatMap((r) => r.warnings))
 
     // Soft warning: large pool with round_robin
     if (pool.strategy === 'round_robin' && pool.endpoints.length > LARGE_POOL_THRESHOLD) {
-      warnings.push({
-        field: 'strategy',
-        message: `Large endpoint list (${pool.endpoints.length}) with round_robin strategy; consider using random`
-      })
+      warnings.push(
+        validationWarning(
+          'strategy',
+          `Large endpoint list (${pool.endpoints.length}) with round_robin strategy; consider using random`
+        )
+      )
     }
   }
 
   // Sticky validation
   if (pool.sticky) {
     if (pool.strategy !== 'sticky') {
-      warnings.push({
-        field: 'sticky',
-        message: 'Sticky configuration provided but strategy is not "sticky"'
-      })
+      warnings.push(
+        validationWarning('sticky', 'Sticky configuration provided but strategy is not "sticky"')
+      )
     }
 
     const validScopes = ['job', 'domain', 'origin']
     if (!validScopes.includes(pool.sticky.scope)) {
-      errors.push({
-        field: 'sticky.scope',
-        message: `Invalid sticky scope "${pool.sticky.scope}". Must be one of: ${validScopes.join(', ')}`
-      })
+      errors.push(
+        validationError(
+          'sticky.scope',
+          `Invalid sticky scope "${pool.sticky.scope}". Must be one of: ${validScopes.join(', ')}`
+        )
+      )
     }
 
     if (
       pool.sticky.ttlMs !== undefined &&
       (typeof pool.sticky.ttlMs !== 'number' || pool.sticky.ttlMs <= 0)
     ) {
-      errors.push({
-        field: 'sticky.ttlMs',
-        message: 'Sticky TTL must be a positive number'
-      })
+      errors.push(validationError('sticky.ttlMs', 'Sticky TTL must be a positive number'))
     }
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  }
+  return buildValidationResult(errors, warnings)
 }
 
 /**
