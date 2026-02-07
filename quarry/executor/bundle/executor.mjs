@@ -1744,7 +1744,7 @@ import { dirname, resolve as resolve2 } from "node:path";
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
-var CONTRACT_VERSION = "0.3.1";
+var CONTRACT_VERSION = "0.3.2";
 var TerminalEventError = class extends Error {
   constructor() {
     super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
