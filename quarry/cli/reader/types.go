@@ -46,6 +46,8 @@ type ProxySticky struct {
 type ProxyRuntime struct {
 	RoundRobinIndex int        `json:"round_robin_index"`
 	StickyEntries   int        `json:"sticky_entries"`
+	RecencyWindow   int        `json:"recency_window"`
+	RecencyFill     int        `json:"recency_fill"`
 	LastUsedAt      *time.Time `json:"last_used_at"`
 }
 

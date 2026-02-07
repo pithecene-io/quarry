@@ -80,6 +80,9 @@ export type ProxyPool = {
   readonly endpoints: readonly ProxyEndpoint[]
   /** Optional sticky configuration (only valid when strategy is 'sticky') */
   readonly sticky?: ProxySticky
+  /** Number of recently-used endpoints to exclude from random selection.
+   *  Only meaningful when strategy is 'random'. */
+  readonly recencyWindow?: number
 }
 
 // ============================================

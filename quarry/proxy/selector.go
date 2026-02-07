@@ -25,6 +25,11 @@ type poolState struct {
 	pool      *types.ProxyPool
 	rrIndex   int64                   // round-robin counter
 	stickyMap map[string]*stickyEntry // sticky key -> entry
+
+	// Recency tracking for random strategy (nil when RecencyWindow unset).
+	recencyRing []int // circular buffer of recently-used endpoint indices
+	recencyPos  int   // next write position in the ring
+	recencyLen  int   // number of valid entries (grows from 0 to cap)
 }
 
 // stickyEntry holds a sticky assignment with optional TTL.
@@ -57,11 +62,22 @@ func (s *Selector) RegisterPool(pool *types.ProxyPool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.pools[pool.Name] = &poolState{
+	state := &poolState{
 		pool:      pool,
 		rrIndex:   0,
 		stickyMap: make(map[string]*stickyEntry),
 	}
+
+	// Allocate recency ring buffer when configured.
+	// Sentinel value -1 distinguishes empty slots from valid index 0.
+	if pool.RecencyWindow != nil {
+		state.recencyRing = make([]int, *pool.RecencyWindow)
+		for i := range state.recencyRing {
+			state.recencyRing[i] = -1
+		}
+	}
+
+	s.pools[pool.Name] = state
 
 	return nil
 }
@@ -110,7 +126,7 @@ func (s *Selector) Select(req SelectRequest) (*types.ProxyEndpoint, error) {
 	case types.ProxyStrategyRoundRobin:
 		idx = s.selectRoundRobin(state, req.Commit)
 	case types.ProxyStrategyRandom:
-		idx, err = s.selectRandom(state)
+		idx, err = s.selectRandom(state, req.Commit)
 		if err != nil {
 			return nil, err
 		}
@@ -139,19 +155,66 @@ func (s *Selector) selectRoundRobin(state *poolState, commit bool) int {
 }
 
 // selectRandom selects uniformly at random.
-func (s *Selector) selectRandom(state *poolState) (int, error) {
+// When the pool has a recency window, recently-used indices are excluded.
+// Ring buffer is advanced only when commit is true.
+func (s *Selector) selectRandom(state *poolState, commit bool) (int, error) {
 	n := len(state.pool.Endpoints)
 	if n == 1 {
 		return 0, nil
 	}
 
-	// Secure random selection
-	bigN := big.NewInt(int64(n))
-	bigIdx, err := rand.Int(rand.Reader, bigN)
+	// No recency tracking — pure random (original behavior)
+	if state.recencyRing == nil {
+		return s.randInt(n)
+	}
+
+	// Build exclusion set from ring buffer
+	excluded := make(map[int]bool, state.recencyLen)
+	for i := range state.recencyLen {
+		if idx := state.recencyRing[i]; idx >= 0 {
+			excluded[idx] = true
+		}
+	}
+
+	// Build candidates not in exclusion set
+	candidates := make([]int, 0, n-len(excluded))
+	for i := range n {
+		if !excluded[i] {
+			candidates = append(candidates, i)
+		}
+	}
+
+	var selectedIdx int
+
+	if len(candidates) == 0 {
+		// All endpoints excluded (window >= endpoint count).
+		// Pick the LRU: oldest entry in the ring at the next write position.
+		selectedIdx = state.recencyRing[state.recencyPos]
+	} else {
+		ci, err := s.randInt(len(candidates))
+		if err != nil {
+			return 0, err
+		}
+		selectedIdx = candidates[ci]
+	}
+
+	if commit {
+		state.recencyRing[state.recencyPos] = selectedIdx
+		state.recencyPos = (state.recencyPos + 1) % len(state.recencyRing)
+		if state.recencyLen < len(state.recencyRing) {
+			state.recencyLen++
+		}
+	}
+
+	return selectedIdx, nil
+}
+
+// randInt returns a cryptographically random int in [0, n).
+func (s *Selector) randInt(n int) (int, error) {
+	bigIdx, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
 	if err != nil {
 		return 0, fmt.Errorf("random selection failed: %w", err)
 	}
-
 	return int(bigIdx.Int64()), nil
 }
 
@@ -176,8 +239,9 @@ func (s *Selector) selectSticky(state *poolState, req SelectRequest, commit bool
 		delete(state.stickyMap, stickyKey)
 	}
 
-	// Select new endpoint (use random for new assignments)
-	idx, err := s.selectRandom(state)
+	// Select new endpoint (use random for new assignments).
+	// Pass commit=false: sticky has its own persistence; don't pollute recency ring.
+	idx, err := s.selectRandom(state, false)
 	if err != nil {
 		return 0, err
 	}
@@ -229,6 +293,8 @@ func (s *Selector) deriveStickyKey(state *poolState, req SelectRequest) string {
 type PoolStats struct {
 	RoundRobinIndex int64
 	StickyEntries   int
+	RecencyWindow   int // configured window size (0 if not set)
+	RecencyFill     int // how many ring slots are currently occupied
 }
 
 // Stats returns statistics for a pool.
@@ -241,10 +307,17 @@ func (s *Selector) Stats(poolName string) (*PoolStats, error) {
 		return nil, fmt.Errorf("pool %q not found", poolName)
 	}
 
-	return &PoolStats{
+	stats := &PoolStats{
 		RoundRobinIndex: state.rrIndex,
 		StickyEntries:   len(state.stickyMap),
-	}, nil
+	}
+
+	if state.recencyRing != nil {
+		stats.RecencyWindow = len(state.recencyRing)
+		stats.RecencyFill = state.recencyLen
+	}
+
+	return stats, nil
 }
 
 // CleanExpiredSticky removes expired sticky entries from all pools.

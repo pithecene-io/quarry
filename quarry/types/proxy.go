@@ -115,6 +115,9 @@ type ProxyPool struct {
 	Endpoints []ProxyEndpoint `json:"endpoints" msgpack:"endpoints"`
 	// Sticky is the optional sticky configuration.
 	Sticky *ProxySticky `json:"sticky,omitempty" msgpack:"sticky,omitempty"`
+	// RecencyWindow is the number of recently-used endpoints to exclude
+	// from random selection. Only meaningful for the "random" strategy.
+	RecencyWindow *int `json:"recency_window,omitempty" msgpack:"recency_window,omitempty"`
 }
 
 // Validate validates a proxy pool per CONTRACT_PROXY.md hard validation rules.
@@ -151,6 +154,10 @@ func (p *ProxyPool) Validate() error {
 		if p.Sticky.TTLMs != nil && *p.Sticky.TTLMs <= 0 {
 			return errors.New("sticky TTL must be positive")
 		}
+	}
+
+	if p.RecencyWindow != nil && *p.RecencyWindow <= 0 {
+		return errors.New("recency_window must be positive")
 	}
 
 	return nil
@@ -203,6 +210,10 @@ func (p *ProxyPool) Warnings() []string {
 	}
 	if hasSocks5 {
 		warnings = append(warnings, fmt.Sprintf("pool %q contains socks5 endpoints; socks5 is best-effort with Puppeteer", p.Name))
+	}
+
+	if p.RecencyWindow != nil && p.Strategy != ProxyStrategyRandom {
+		warnings = append(warnings, fmt.Sprintf("pool %q has recency_window set but strategy is %q; recency_window only applies to random strategy", p.Name, p.Strategy))
 	}
 
 	return warnings

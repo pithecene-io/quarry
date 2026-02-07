@@ -127,3 +127,107 @@ func TestProxyPool_Warnings_NoWarnings(t *testing.T) {
 		t.Errorf("expected 0 warnings for normal pool, got %d", len(warnings))
 	}
 }
+
+func TestProxyPool_Validate_RecencyWindowZero(t *testing.T) {
+	w := 0
+	pool := &ProxyPool{
+		Name:          "test",
+		Strategy:      ProxyStrategyRandom,
+		Endpoints:     []ProxyEndpoint{{Protocol: ProxyProtocolHTTP, Host: "p.example.com", Port: 8080}},
+		RecencyWindow: &w,
+	}
+
+	err := pool.Validate()
+	if err == nil {
+		t.Error("expected validation error for recency_window = 0")
+	}
+}
+
+func TestProxyPool_Validate_RecencyWindowNegative(t *testing.T) {
+	w := -1
+	pool := &ProxyPool{
+		Name:          "test",
+		Strategy:      ProxyStrategyRandom,
+		Endpoints:     []ProxyEndpoint{{Protocol: ProxyProtocolHTTP, Host: "p.example.com", Port: 8080}},
+		RecencyWindow: &w,
+	}
+
+	err := pool.Validate()
+	if err == nil {
+		t.Error("expected validation error for recency_window = -1")
+	}
+}
+
+func TestProxyPool_Validate_RecencyWindowValid(t *testing.T) {
+	w := 3
+	pool := &ProxyPool{
+		Name:     "test",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p2.example.com", Port: 8081},
+			{Protocol: ProxyProtocolHTTP, Host: "p3.example.com", Port: 8082},
+		},
+		RecencyWindow: &w,
+	}
+
+	if err := pool.Validate(); err != nil {
+		t.Errorf("unexpected validation error: %v", err)
+	}
+}
+
+func TestProxyPool_Warnings_RecencyWindowNonRandom(t *testing.T) {
+	w := 2
+	pool := &ProxyPool{
+		Name:          "test",
+		Strategy:      ProxyStrategyRoundRobin,
+		Endpoints:     []ProxyEndpoint{{Protocol: ProxyProtocolHTTP, Host: "p.example.com", Port: 8080}},
+		RecencyWindow: &w,
+	}
+
+	warnings := pool.Warnings()
+	found := false
+	for _, msg := range warnings {
+		if msg != "" && contains(msg, "recency_window") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected warning for recency_window on non-random strategy")
+	}
+}
+
+func TestProxyPool_Warnings_RecencyWindowRandom(t *testing.T) {
+	w := 2
+	pool := &ProxyPool{
+		Name:     "test",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p2.example.com", Port: 8081},
+		},
+		RecencyWindow: &w,
+	}
+
+	warnings := pool.Warnings()
+	for _, msg := range warnings {
+		if contains(msg, "recency_window") {
+			t.Errorf("unexpected recency_window warning for random strategy: %s", msg)
+		}
+	}
+}
+
+// contains checks if substr is in s (avoids importing strings in test).
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

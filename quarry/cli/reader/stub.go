@@ -64,6 +64,8 @@ func (r *StubReader) InspectProxy(poolName string) *InspectProxyPoolResponse {
 		Runtime: ProxyRuntime{
 			RoundRobinIndex: 1,
 			StickyEntries:   5,
+			RecencyWindow:   3,
+			RecencyFill:     2,
 			LastUsedAt:      &now,
 		},
 	}

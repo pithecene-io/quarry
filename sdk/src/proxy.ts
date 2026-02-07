@@ -206,6 +206,26 @@ export function validateProxyPool(pool: ProxyPool): ProxyValidationResult {
     }
   }
 
+  // Recency window validation
+  if (pool.recencyWindow !== undefined) {
+    if (
+      typeof pool.recencyWindow !== 'number' ||
+      !Number.isInteger(pool.recencyWindow) ||
+      pool.recencyWindow <= 0
+    ) {
+      errors.push(validationError('recencyWindow', 'Recency window must be a positive integer'))
+    }
+
+    if (pool.strategy !== 'random') {
+      warnings.push(
+        validationWarning(
+          'recencyWindow',
+          'recency_window is set but strategy is not "random"; recency_window only applies to random strategy'
+        )
+      )
+    }
+  }
+
   return buildValidationResult(errors, warnings)
 }
 
