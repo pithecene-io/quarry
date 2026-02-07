@@ -59,6 +59,7 @@ Required fields:
 
 Optional fields:
 - `sticky` (ProxySticky)
+- `recency_window` (integer): number of recently-used endpoints to exclude from random selection. Only meaningful when strategy is `random`.
 
 ### JobProxyRequest
 Job-level selection of a pool and optional overrides.
@@ -79,10 +80,12 @@ Hard validation (must reject):
 - `port` is within 1–65535
 - `protocol` is one of `http|https|socks5`
 - `username` and `password` must be provided together if either is set
+- `recency_window` must be positive if set
 
 Soft warnings (must surface):
 - `socks5` usage with Puppeteer is best-effort
 - very large endpoint lists with `round_robin` (recommend `random`)
+- `recency_window` set on non-random strategy (has no effect)
 
 ---
 
@@ -125,6 +128,13 @@ Owns:
 ### Random
 - Select uniformly at random.
 - Secure RNG optional; deterministic RNG allowed.
+
+### Random with Recency Window
+- When `recency_window` is set on a pool with `random` strategy, maintain a ring buffer of the last N selected endpoint indices.
+- Exclude ring buffer entries from the candidate pool before random selection.
+- If all endpoints are excluded (window >= endpoint count), select the least-recently-used (oldest in ring). Never blocks.
+- Ring buffer is updated only on committed selections (peek does not advance).
+- Recency state is in-memory only; does not persist across process restarts.
 
 ### Sticky
 - Maintain a map from **sticky key** → endpoint.

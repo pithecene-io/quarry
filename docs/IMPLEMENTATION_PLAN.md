@@ -309,6 +309,54 @@ before adding event bus integrations.
 
 ---
 
+## v0.4.0 Roadmap — Advanced Proxy Rotation
+
+### Goal
+Harden proxy selection for production workloads that require recency-aware
+rotation to reduce endpoint reuse and improve scraping reliability.
+
+### Phase 1: In-Memory Recency Window
+
+Add an opt-in `recency_window` pool option that maintains a ring buffer of
+recently-used endpoint indices and excludes them from random selection.
+
+#### Deliverables
+- `RecencyWindow *int` field on `ProxyPool` (Go types + SDK types)
+- Ring buffer in selector `poolState`, recency-aware `selectRandom`
+- LRU fallback when window >= endpoint count (never blocks)
+- Peek/commit semantics (peek does not advance ring)
+- Validation: hard-reject if <= 0; soft-warn if set on non-random strategy
+- Contract, guide, and SDK validation updates
+
+#### Implementation scope
+- `quarry/types/proxy.go` — field, validation, warnings
+- `quarry/proxy/selector.go` — ring buffer, modified `selectRandom`, stats
+- `sdk/src/types/proxy.ts` — `recencyWindow` field
+- `sdk/src/proxy.ts` — validation in `validateProxyPool`
+- `quarry/cli/reader/types.go` — `RecencyWindow`/`RecencyFill` in `ProxyRuntime`
+
+#### Mini-milestones
+- [ ] Contract updated (`CONTRACT_PROXY.md` — recency semantics)
+- [ ] Guide updated (`docs/guides/proxy.md` — user-facing docs)
+- [ ] Go types and validation (`quarry/types/proxy.go`)
+- [ ] Selector ring buffer and recency-aware random (`quarry/proxy/selector.go`)
+- [ ] SDK types and validation (`sdk/src/types/proxy.ts`, `sdk/src/proxy.ts`)
+- [ ] Tests: type validation, selector avoidance, LRU fallback, peek semantics
+
+### Phase 2: Pluggable Recency Backend (Future)
+
+Replace in-memory ring buffer with a pluggable backend interface to enable
+cross-run, cross-process proxy coordination.
+
+- Interface: `RecencyStore` with `Mark(idx)` / `Exclude() []int` / `LRU() int`
+- In-memory implementation (default, matches Phase 1)
+- Redis implementation (atomic choose+mark via Lua script)
+- Enables concurrent workers sharing proxy state
+
+Phase 2 is deferred until Phase 1 is validated in production.
+
+---
+
 ## Post-v0.3.0 — Event Bus Integrations (Staggered)
 
 Order of support:

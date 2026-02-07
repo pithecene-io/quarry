@@ -107,6 +107,39 @@ corresponding input, the CLI will warn and fall back to other sticky inputs.
 - Secure RNG used
 - Suitable for large pools
 
+#### Recency Window (optional)
+
+Set `recency_window` on a pool to avoid immediately reusing endpoints:
+
+```yaml
+proxies:
+  rotating_pool:
+    strategy: random
+    recency_window: 3
+    endpoints:
+      - protocol: http
+        host: proxy1.example.com
+        port: 8080
+      - protocol: http
+        host: proxy2.example.com
+        port: 8080
+      - protocol: http
+        host: proxy3.example.com
+        port: 8080
+      - protocol: http
+        host: proxy4.example.com
+        port: 8080
+      - protocol: http
+        host: proxy5.example.com
+        port: 8080
+```
+
+With `recency_window: 3`, the last 3 selected endpoints are excluded from the candidate pool. This prevents immediate reuse without sacrificing randomness.
+
+If the window is >= the number of endpoints, selection degrades to LRU (least-recently-used) ordering — effectively round-robin-like but without a fixed sequence.
+
+Only applies to the `random` strategy; ignored for `round_robin` and `sticky`.
+
 ### Sticky
 
 - Stable mapping by sticky key
