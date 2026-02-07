@@ -10,7 +10,13 @@ import type {
 } from '@justapithecus/quarry-sdk'
 import { decode as msgpackDecode } from '@msgpack/msgpack'
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
-import { type ExecutorConfig, type ExecutorResult, execute, parseRunMeta } from '../src/executor.js'
+import {
+  _resetPuppeteerForTesting,
+  type ExecutorConfig,
+  type ExecutorResult,
+  execute,
+  parseRunMeta
+} from '../src/executor.js'
 import type { RunResultFrame } from '../src/ipc/frame.js'
 import { ObservingSink, SinkAlreadyFailedError } from '../src/ipc/observing-sink.js'
 import type { LoadedScript } from '../src/loader.js'
@@ -33,6 +39,24 @@ vi.mock('puppeteer', () => ({
   default: {
     launch: vi.fn()
   }
+}))
+
+const mockUse = vi.fn()
+vi.mock('puppeteer-extra', () => ({
+  addExtra: vi.fn((puppeteer: Record<string, unknown>) => ({
+    ...puppeteer,
+    use: mockUse
+  }))
+}))
+
+const mockStealthInstance = { _type: 'stealth-plugin' }
+vi.mock('puppeteer-extra-plugin-stealth', () => ({
+  default: vi.fn(() => mockStealthInstance)
+}))
+
+const mockAdblockerInstance = { _type: 'adblocker-plugin' }
+vi.mock('puppeteer-extra-plugin-adblocker', () => ({
+  default: vi.fn(() => mockAdblockerInstance)
 }))
 
 import puppeteer from 'puppeteer'
@@ -625,5 +649,95 @@ describe('run_result frame emission', () => {
     const runResult = extractRunResultFrame(mockOutput)
     expect(runResult).not.toBeNull()
     expect(runResult!.proxy_used).toBeUndefined()
+  })
+})
+
+describe('puppeteer-extra plugin setup', () => {
+  let mockPuppeteer: ReturnType<typeof createMockPuppeteer>
+  let mockOutput: PassThrough
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Reset singleton so each test gets a fresh getPuppeteer() call
+    _resetPuppeteerForTesting()
+
+    mockPuppeteer = createMockPuppeteer()
+    ;(puppeteer.launch as Mock).mockResolvedValue(mockPuppeteer.browser)
+
+    mockOutput = createMockOutput()
+  })
+
+  function createConfig(overrides: Partial<ExecutorConfig> = {}): ExecutorConfig {
+    return {
+      scriptPath: '/path/to/script.js',
+      job: { test: true },
+      run: {
+        run_id: 'run-123' as RunId,
+        attempt: 1
+      },
+      output: mockOutput,
+      ...overrides
+    }
+  }
+
+  function createMockScript(overrides: Partial<LoadedScript> = {}): LoadedScript {
+    return {
+      script: vi.fn().mockResolvedValue(undefined),
+      hooks: {},
+      module: { default: vi.fn() },
+      ...overrides
+    }
+  }
+
+  it('applies stealth plugin by default', async () => {
+    ;(loadScript as Mock).mockResolvedValue(createMockScript())
+
+    await execute(createConfig())
+
+    expect(mockUse).toHaveBeenCalledWith(mockStealthInstance)
+  })
+
+  it('does not apply stealth when stealth: false', async () => {
+    ;(loadScript as Mock).mockResolvedValue(createMockScript())
+
+    await execute(createConfig({ stealth: false }))
+
+    expect(mockUse).not.toHaveBeenCalledWith(mockStealthInstance)
+  })
+
+  it('does not apply adblocker by default', async () => {
+    ;(loadScript as Mock).mockResolvedValue(createMockScript())
+
+    await execute(createConfig())
+
+    expect(mockUse).not.toHaveBeenCalledWith(mockAdblockerInstance)
+  })
+
+  it('applies adblocker when adblocker: true', async () => {
+    ;(loadScript as Mock).mockResolvedValue(createMockScript())
+
+    await execute(createConfig({ adblocker: true }))
+
+    expect(mockUse).toHaveBeenCalledWith(mockAdblockerInstance)
+  })
+
+  it('reinitializes when subsequent call has different plugin config', async () => {
+    ;(loadScript as Mock).mockResolvedValue(createMockScript())
+
+    // First call initializes with stealth: true (default)
+    await execute(createConfig())
+    expect(mockUse).toHaveBeenCalledWith(mockStealthInstance)
+
+    const callsAfterFirst = mockUse.mock.calls.length
+
+    // Second call requests different config (stealth: false) — should reinitialize
+    // Do NOT reset singleton between calls
+    await execute(createConfig({ stealth: false }))
+
+    // mockUse should NOT have been called again with stealth (stealth: false)
+    const stealthCallsAfterSecond = mockUse.mock.calls
+      .slice(callsAfterFirst)
+      .filter((args: unknown[]) => args[0] === mockStealthInstance)
+    expect(stealthCallsAfterSecond).toHaveLength(0)
   })
 })

@@ -21,10 +21,21 @@
     "@msgpack/msgpack": "^3.0.0"
   },
   "peerDependencies": {
-    "puppeteer": "^24"
+    "puppeteer": "^24",
+    "puppeteer-extra": "^3",
+    "puppeteer-extra-plugin-adblocker": "^2",
+    "puppeteer-extra-plugin-stealth": "^2"
+  },
+  "peerDependenciesMeta": {
+    "puppeteer-extra-plugin-adblocker": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "esbuild": "^0.27.2",
-    "puppeteer": "^24.36.1"
+    "puppeteer": "^24.36.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-adblocker": "^2.13.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }

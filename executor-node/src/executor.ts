@@ -36,46 +36,76 @@ import { StdioSink } from './ipc/sink.js'
 import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
 
 /**
- * Lazily import puppeteer to support bundled executor.
- *
- * When the executor runs from a temp directory (embedded bundle), puppeteer
- * must be resolved from the user's script location or global installation.
- * This function tries multiple resolution strategies:
- * 1. Resolve from the script's directory (for project-installed puppeteer)
- * 2. Fallback to standard import (for globally installed puppeteer)
+ * Plugin configuration for browser hardening.
  */
-let puppeteerModule: { launch: (options?: LaunchOptions) => Promise<Browser> } | null = null
+type PluginConfig = {
+  readonly stealth: boolean
+  readonly adblocker: boolean
+}
 
-async function getPuppeteer(
-  scriptPath: string
-): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
-  if (puppeteerModule) {
-    return puppeteerModule
-  }
-
-  // Try to resolve puppeteer from the script's location first
-  // This allows the bundled executor to find puppeteer in the user's project
+/**
+ * Resolve a module from the script's directory, falling back to standard import.
+ *
+ * When the executor runs from a temp directory (embedded bundle), dependencies
+ * must be resolved from the user's script location or global installation.
+ */
+async function resolveModule(name: string, scriptPath: string): Promise<Record<string, unknown>> {
   const absoluteScriptPath = resolve(scriptPath)
-  const scriptDir = dirname(absoluteScriptPath)
 
   // Strategy 1: Use createRequire to resolve from script's directory
   try {
     const require = createRequire(absoluteScriptPath)
-    const puppeteerPath = require.resolve('puppeteer')
-    const mod = await import(puppeteerPath)
-    const pptr = mod.default as { launch: (options?: LaunchOptions) => Promise<Browser> }
-    puppeteerModule = pptr
-    return pptr
+    const resolved = require.resolve(name)
+    return await import(resolved)
   } catch {
     // Fall through to strategy 2
   }
 
-  // Strategy 2: Standard import (may work if puppeteer is globally installed)
+  // Strategy 2: Standard import (may work if globally installed)
+  return await import(name)
+}
+
+/**
+ * Lazily import puppeteer with puppeteer-extra plugin support.
+ *
+ * Resolution strategy:
+ * 1. Resolve vanilla puppeteer from the script's directory
+ * 2. Resolve puppeteer-extra and wrap with addExtra()
+ * 3. Apply configured plugins (stealth, adblocker)
+ *
+ * Uses addExtra() rather than puppeteer-extra's default export to avoid
+ * a top-level require('puppeteer') that would fail in the bundled executor
+ * model (Go binary extracts executor.mjs to a temp dir).
+ */
+let puppeteerModule: { launch: (options?: LaunchOptions) => Promise<Browser> } | null = null
+let cachedPluginConfig: PluginConfig | null = null
+
+async function getPuppeteer(
+  scriptPath: string,
+  plugins: PluginConfig
+): Promise<{ launch: (options?: LaunchOptions) => Promise<Browser> }> {
+  if (puppeteerModule) {
+    // Reinitialize if plugin config changed since last call
+    if (
+      cachedPluginConfig &&
+      (cachedPluginConfig.stealth !== plugins.stealth ||
+        cachedPluginConfig.adblocker !== plugins.adblocker)
+    ) {
+      puppeteerModule = null
+      cachedPluginConfig = null
+    } else {
+      return puppeteerModule
+    }
+  }
+
+  const absoluteScriptPath = resolve(scriptPath)
+  const scriptDir = dirname(absoluteScriptPath)
+
+  // 1. Resolve vanilla puppeteer
+  let vanillaPuppeteer: { launch: (options?: LaunchOptions) => Promise<Browser> }
   try {
-    const mod = await import('puppeteer')
-    const pptr = mod.default as { launch: (options?: LaunchOptions) => Promise<Browser> }
-    puppeteerModule = pptr
-    return pptr
+    const mod = await resolveModule('puppeteer', scriptPath)
+    vanillaPuppeteer = mod.default as typeof vanillaPuppeteer
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(
@@ -84,6 +114,70 @@ async function getPuppeteer(
         `Install it in your project (${scriptDir}): npm install puppeteer`
     )
   }
+
+  // 2. Resolve puppeteer-extra and wrap vanilla puppeteer
+  let pptr: {
+    launch: (options?: LaunchOptions) => Promise<Browser>
+    use: (plugin: unknown) => void
+  }
+  try {
+    const extraMod = await resolveModule('puppeteer-extra', scriptPath)
+    const { addExtra } = extraMod as { addExtra: (puppeteer: unknown) => typeof pptr }
+    pptr = addExtra(vanillaPuppeteer)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Failed to load puppeteer-extra: ${message}\n` +
+        'puppeteer-extra is a peer dependency of quarry-executor. ' +
+        `Install it in your project (${scriptDir}): npm install puppeteer-extra`
+    )
+  }
+
+  // 3. Apply stealth plugin (on by default)
+  if (plugins.stealth) {
+    try {
+      const stealthMod = await resolveModule('puppeteer-extra-plugin-stealth', scriptPath)
+      const StealthPlugin = stealthMod.default as () => unknown
+      pptr.use(StealthPlugin())
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `Failed to load puppeteer-extra-plugin-stealth: ${message}\n` +
+          'Stealth is enabled by default. ' +
+          `Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-stealth\n` +
+          'Or disable stealth with QUARRY_STEALTH=0'
+      )
+    }
+  }
+
+  // 4. Apply adblocker plugin (off by default)
+  if (plugins.adblocker) {
+    try {
+      const adblockerMod = await resolveModule('puppeteer-extra-plugin-adblocker', scriptPath)
+      const AdblockerPlugin = adblockerMod.default as (opts?: Record<string, unknown>) => unknown
+      pptr.use(AdblockerPlugin({ blockTrackers: true }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `Failed to load puppeteer-extra-plugin-adblocker: ${message}\n` +
+          'Adblocker was enabled but the plugin is not installed. ' +
+          `Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-adblocker`
+      )
+    }
+  }
+
+  cachedPluginConfig = plugins
+  puppeteerModule = pptr
+  return pptr
+}
+
+/**
+ * Reset cached puppeteer module. For testing only.
+ * @internal
+ */
+export function _resetPuppeteerForTesting(): void {
+  puppeteerModule = null
+  cachedPluginConfig = null
 }
 
 /**
@@ -102,6 +196,10 @@ export interface ExecutorConfig<Job = unknown> {
   readonly puppeteerOptions?: LaunchOptions
   /** Optional resolved proxy endpoint per CONTRACT_PROXY.md */
   readonly proxy?: ProxyEndpoint
+  /** Enable puppeteer-extra stealth plugin (default: true) */
+  readonly stealth?: boolean
+  /** Enable puppeteer-extra adblocker plugin (default: false) */
+  readonly adblocker?: boolean
 }
 
 /**
@@ -370,8 +468,12 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       throw err
     }
 
-    // 2. Launch Puppeteer (with proxy if configured)
-    const puppeteer = await getPuppeteer(config.scriptPath)
+    // 2. Launch Puppeteer (with proxy if configured, with stealth/adblocker plugins)
+    const plugins: PluginConfig = {
+      stealth: config.stealth !== false,
+      adblocker: config.adblocker === true
+    }
+    const puppeteer = await getPuppeteer(config.scriptPath, plugins)
     const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy)
     browser = await puppeteer.launch(launchOptions)
     browserContext = await browser.createBrowserContext()

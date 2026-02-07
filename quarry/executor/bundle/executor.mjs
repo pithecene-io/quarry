@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.2.2
+// Quarry Executor Bundle v0.3.1
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: pnpm run bundle
 
@@ -1744,7 +1744,7 @@ import { dirname, resolve as resolve2 } from "node:path";
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
-var CONTRACT_VERSION = "0.2.2";
+var CONTRACT_VERSION = "0.3.1";
 var TerminalEventError = class extends Error {
   constructor() {
     super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
@@ -2248,27 +2248,33 @@ async function loadScript(scriptPath) {
 }
 
 // src/executor.ts
+async function resolveModule(name, scriptPath) {
+  const absoluteScriptPath = resolve2(scriptPath);
+  try {
+    const require2 = createRequire(absoluteScriptPath);
+    const resolved = require2.resolve(name);
+    return await import(resolved);
+  } catch {
+  }
+  return await import(name);
+}
 var puppeteerModule = null;
-async function getPuppeteer(scriptPath) {
+var cachedPluginConfig = null;
+async function getPuppeteer(scriptPath, plugins) {
   if (puppeteerModule) {
+    if (cachedPluginConfig && (cachedPluginConfig.stealth !== plugins.stealth || cachedPluginConfig.adblocker !== plugins.adblocker)) {
+      process.stderr.write(
+        "Warning: puppeteer plugin config changed after initialization; using original config\n"
+      );
+    }
     return puppeteerModule;
   }
   const absoluteScriptPath = resolve2(scriptPath);
   const scriptDir = dirname(absoluteScriptPath);
+  let vanillaPuppeteer;
   try {
-    const require2 = createRequire(absoluteScriptPath);
-    const puppeteerPath = require2.resolve("puppeteer");
-    const mod = await import(puppeteerPath);
-    const pptr = mod.default;
-    puppeteerModule = pptr;
-    return pptr;
-  } catch {
-  }
-  try {
-    const mod = await import("puppeteer");
-    const pptr = mod.default;
-    puppeteerModule = pptr;
-    return pptr;
+    const mod = await resolveModule("puppeteer", scriptPath);
+    vanillaPuppeteer = mod.default;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -2276,6 +2282,48 @@ async function getPuppeteer(scriptPath) {
 Puppeteer is a peer dependency of quarry-executor. Install it in your project (${scriptDir}): npm install puppeteer`
     );
   }
+  let pptr;
+  try {
+    const extraMod = await resolveModule("puppeteer-extra", scriptPath);
+    const { addExtra } = extraMod;
+    pptr = addExtra(vanillaPuppeteer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to load puppeteer-extra: ${message}
+puppeteer-extra is a peer dependency of quarry-executor. Install it in your project (${scriptDir}): npm install puppeteer-extra`
+    );
+  }
+  if (plugins.stealth) {
+    try {
+      const stealthMod = await resolveModule("puppeteer-extra-plugin-stealth", scriptPath);
+      const StealthPlugin = stealthMod.default;
+      pptr.use(StealthPlugin());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to load puppeteer-extra-plugin-stealth: ${message}
+Stealth is enabled by default. Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-stealth
+Or disable stealth with QUARRY_STEALTH=0`
+      );
+    }
+  }
+  if (plugins.adblocker) {
+    try {
+      const adblockerMod = await resolveModule("puppeteer-extra-plugin-adblocker", scriptPath);
+      const AdblockerPlugin = adblockerMod.default;
+      pptr.use(AdblockerPlugin({ blockTrackers: true }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to load puppeteer-extra-plugin-adblocker: ${message}
+Adblocker was enabled but the plugin is not installed. Install it in your project (${scriptDir}): npm install puppeteer-extra-plugin-adblocker`
+      );
+    }
+  }
+  cachedPluginConfig = plugins;
+  puppeteerModule = pptr;
+  return pptr;
 }
 function parseRunMeta(input) {
   if (input === null || typeof input !== "object") {
@@ -2418,7 +2466,11 @@ async function execute(config) {
       }
       throw err;
     }
-    const puppeteer = await getPuppeteer(config.scriptPath);
+    const plugins = {
+      stealth: config.stealth !== false,
+      adblocker: config.adblocker === true
+    };
+    const puppeteer = await getPuppeteer(config.scriptPath, plugins);
     const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy);
     browser = await puppeteer.launch(launchOptions);
     browserContext = await browser.createBrowserContext();
@@ -2623,7 +2675,11 @@ async function main() {
       headless: true,
       // Disable sandbox in containerized environments
       args: process.env.QUARRY_NO_SANDBOX === "1" ? ["--no-sandbox", "--disable-setuid-sandbox"] : []
-    }
+    },
+    // Stealth on by default; disable with QUARRY_STEALTH=0
+    stealth: process.env.QUARRY_STEALTH !== "0",
+    // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
+    adblocker: process.env.QUARRY_ADBLOCKER === "1"
   });
   switch (result.outcome.status) {
     case "completed":
