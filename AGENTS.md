@@ -108,7 +108,7 @@ Quarry is **TypeScript-first, ESM-only, modern by default**.
 
 ## Control Flow & Async
 
-- Prefer pure functions
+- Pure functions where practical (not a hard requirement)
 - Expression-oriented code
 - Early returns over nesting
 - No implicit mutation unless justified
