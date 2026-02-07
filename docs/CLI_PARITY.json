@@ -171,8 +171,8 @@
         "adapter": {
           "type": "string",
           "required": false,
-          "description": "Event-bus adapter type (webhook)",
-          "validation": "Must be one of: webhook"
+          "description": "Event-bus adapter type (webhook, redis)",
+          "validation": "Must be one of: webhook, redis"
         },
         "adapter-url": {
           "type": "string",
@@ -199,6 +199,12 @@
           "default": 3,
           "description": "Adapter retry attempts",
           "dependsOn": ["adapter"]
+        },
+        "adapter-channel": {
+          "type": "string",
+          "required": false,
+          "description": "Pub/sub channel name for Redis adapter (default: quarry:run_completed)",
+          "dependsOn": ["adapter=redis"]
         }
       }
     },
