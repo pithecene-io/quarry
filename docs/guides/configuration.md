@@ -220,14 +220,6 @@ proxies:
 proxy:
   pool: iproyal_nyc
   strategy: round_robin
-
-adapter:
-  type: webhook
-  url: https://hooks.example.com/quarry
-  headers:
-    Authorization: Bearer ${WEBHOOK_TOKEN}
-  timeout: 10s
-  retries: 3
 ```
 
 ### Environment Variable Expansion

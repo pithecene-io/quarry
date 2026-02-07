@@ -51,14 +51,18 @@ proxies:
 
 ### Job-level selection
 
-```yaml
-job:
-  proxy:
-    pool: iproyal_nyc
-    # Optional: override pool strategy for this job
-    strategy: round_robin
-    # Optional: explicit sticky key (overrides scope-derived key)
-    sticky_key: my-custom-key
+Proxy selection is configured per invocation via CLI flags (not via the
+config file). The `proxy:` key in `quarry.yaml` provides defaults; CLI
+flags override them.
+
+```bash
+quarry run \
+  --config quarry.yaml \
+  --script ./script.ts \
+  --run-id run-001 \
+  --proxy-pool iproyal_nyc \
+  --proxy-strategy round_robin \
+  --proxy-sticky-key my-custom-key
 ```
 
 ---
