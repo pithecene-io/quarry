@@ -177,6 +177,13 @@ func TestNew_RequiresURL(t *testing.T) {
 	}
 }
 
+func TestNew_RejectsNegativeRetries(t *testing.T) {
+	_, err := New(Config{URL: "http://example.com", Retries: -1})
+	if err == nil {
+		t.Fatal("expected error for negative retries")
+	}
+}
+
 func TestNew_DefaultTimeout(t *testing.T) {
 	a, err := New(Config{URL: "http://example.com"})
 	if err != nil {

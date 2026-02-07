@@ -67,10 +67,11 @@ Non-goals:
 
 ## Delivery Semantics
 
-- Delivery is **at-least-once**.
-- Dedupe guidance for run completion notifications: consumers should use
-  `run_id` as the idempotency key. Each run produces exactly one
-  completion event; retries may deliver it more than once.
+- Delivery is **best-effort with retries**. The adapter retries on
+  transient failures (5xx, network errors) but may ultimately fail.
+  A failed publish is logged to stderr; the run outcome is unaffected.
+- On success, delivery may be duplicated (retries after ambiguous
+  failure). Consumers should use `run_id` as the idempotency key.
 
 Adapters must not:
 - alter the event payload,

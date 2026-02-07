@@ -787,6 +787,10 @@ func parseAdapterConfig(c *cli.Context) (adapterChoice, error) {
 		headers:     make(map[string]string),
 	}
 
+	if ac.retries < 0 {
+		return ac, fmt.Errorf("--adapter-retries must be >= 0, got %d", ac.retries)
+	}
+
 	switch ac.adapterType {
 	case "webhook":
 		if ac.url == "" {

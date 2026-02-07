@@ -51,7 +51,7 @@ func New(cfg Config) (*Adapter, error) {
 		cfg.Timeout = DefaultTimeout
 	}
 	if cfg.Retries < 0 {
-		cfg.Retries = DefaultRetries
+		return nil, fmt.Errorf("retries must be >= 0, got %d", cfg.Retries)
 	}
 
 	return &Adapter{
