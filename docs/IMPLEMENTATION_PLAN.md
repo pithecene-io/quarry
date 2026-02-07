@@ -380,13 +380,27 @@ Outbox records would live at:
 datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
 ```
 
+#### Relationship to Temporal adapter
+
+The outbox pattern applies only to standalone/CLI usage where no external
+orchestrator provides delivery guarantees. When Quarry runs as a Temporal
+activity, the outbox is redundant — Temporal owns durable execution and
+the downstream notification becomes a separate activity with Temporal's
+built-in retry semantics. In that paradigm, Quarry embeds naturally:
+the workflow orchestrates extraction (Quarry activity) and notification
+(webhook/SNS activity) as independent steps, each with Temporal's
+at-least-once guarantees.
+
+If Temporal ships first, the outbox pattern may never be needed.
+
 #### Open questions
 - Retry ownership: CLI command, background process, or next-run piggyback?
 - TTL for stale outbox entries (when to give up permanently).
 - Whether `quarry adapter drain` should be a new CLI command or a
   subcommand of `quarry run`.
 
-This is deferred until best-effort proves insufficient in production.
+This is deferred until best-effort proves insufficient in standalone
+production usage.
 
 ---
 
