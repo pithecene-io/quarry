@@ -379,6 +379,28 @@ func TestLoad_RedisAdapterChannelOmitted(t *testing.T) {
 	assertEqual(t, "adapter.channel", cfg.Adapter.Channel, "")
 }
 
+func TestLoad_BrowserWSEndpoint(t *testing.T) {
+	yaml := `source: my-source
+browser_ws_endpoint: ws://127.0.0.1:9222/devtools/browser/abc-123
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	assertEqual(t, "browser_ws_endpoint", cfg.BrowserWSEndpoint, "ws://127.0.0.1:9222/devtools/browser/abc-123")
+}
+
+func TestLoad_BrowserWSEndpointOmitted(t *testing.T) {
+	yaml := `source: my-source`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	assertEqual(t, "browser_ws_endpoint", cfg.BrowserWSEndpoint, "")
+}
+
 // writeTemp writes content to a temp file and returns the path.
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()

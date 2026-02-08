@@ -25,6 +25,9 @@ type ExecutorConfig struct {
 	// Proxy is the optional resolved proxy endpoint per CONTRACT_PROXY.md.
 	// If nil, executor launches without a proxy.
 	Proxy *types.ProxyEndpoint
+	// BrowserWSEndpoint is the optional WebSocket URL of an externally managed browser.
+	// When set, the executor connects instead of launching a new Chromium instance.
+	BrowserWSEndpoint string
 }
 
 // ExecutorResult represents the result of executor execution.
@@ -57,8 +60,9 @@ type executorInput struct {
 	Attempt     int                  `json:"attempt"`
 	JobID       *string              `json:"job_id,omitempty"`
 	ParentRunID *string              `json:"parent_run_id,omitempty"`
-	Job         any                  `json:"job"`
-	Proxy       *types.ProxyEndpoint `json:"proxy,omitempty"`
+	Job               any                  `json:"job"`
+	Proxy             *types.ProxyEndpoint `json:"proxy,omitempty"`
+	BrowserWSEndpoint string               `json:"browser_ws_endpoint,omitempty"`
 }
 
 // Start starts the executor process.
@@ -95,12 +99,13 @@ func (m *ExecutorManager) Start(ctx context.Context) error {
 
 	// Write run metadata and job to stdin
 	input := executorInput{
-		RunID:       m.config.RunMeta.RunID,
-		Attempt:     m.config.RunMeta.Attempt,
-		JobID:       m.config.RunMeta.JobID,
-		ParentRunID: m.config.RunMeta.ParentRunID,
-		Job:         m.config.Job,
-		Proxy:       m.config.Proxy,
+		RunID:             m.config.RunMeta.RunID,
+		Attempt:           m.config.RunMeta.Attempt,
+		JobID:             m.config.RunMeta.JobID,
+		ParentRunID:       m.config.RunMeta.ParentRunID,
+		Job:               m.config.Job,
+		Proxy:             m.config.Proxy,
+		BrowserWSEndpoint: m.config.BrowserWSEndpoint,
 	}
 
 	if err := json.NewEncoder(stdin).Encode(input); err != nil {
