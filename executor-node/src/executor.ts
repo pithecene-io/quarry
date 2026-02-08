@@ -38,7 +38,7 @@ import { type LoadedScript, loadScript, ScriptLoadError } from './loader.js'
 /**
  * Plugin configuration for browser hardening.
  */
-type PluginConfig = {
+export type PluginConfig = {
   readonly stealth: boolean
   readonly adblocker: boolean
 }
@@ -105,6 +105,8 @@ async function resolveModuleOrThrow(
  */
 let puppeteerModule: { launch: (options?: LaunchOptions) => Promise<Browser> } | null = null
 let cachedPluginConfig: PluginConfig | null = null
+
+export { getPuppeteer }
 
 async function getPuppeteer(
   scriptPath: string,
@@ -180,6 +182,24 @@ export function _resetPuppeteerForTesting(): void {
 }
 
 /**
+ * Resolve vanilla puppeteer (without puppeteer-extra wrapping) for connect mode.
+ * Used when browser-ws-endpoint is set — stealth/adblocker plugins don't apply
+ * since we're connecting to an already-running browser.
+ */
+async function getVanillaPuppeteer(
+  scriptPath: string
+): Promise<{ connect: (options: { browserWSEndpoint: string }) => Promise<Browser> }> {
+  const puppeteerMod = await resolveModuleOrThrow(
+    'puppeteer',
+    scriptPath,
+    'Puppeteer is a peer dependency of quarry-executor.'
+  )
+  return puppeteerMod.default as {
+    connect: (options: { browserWSEndpoint: string }) => Promise<Browser>
+  }
+}
+
+/**
  * Executor configuration passed from the runtime.
  */
 export interface ExecutorConfig<Job = unknown> {
@@ -199,6 +219,8 @@ export interface ExecutorConfig<Job = unknown> {
   readonly stealth?: boolean
   /** Enable puppeteer-extra adblocker plugin (default: false) */
   readonly adblocker?: boolean
+  /** Optional WebSocket URL of an externally managed browser. When set, executor connects instead of launching. */
+  readonly browserWSEndpoint?: string
 }
 
 /**
@@ -418,6 +440,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
   let ctx: ReturnType<typeof createContext<Job>> | null = null
   let scriptThrew = false
   let scriptError: { message: string; stack?: string } | null = null
+  let isConnected = false
 
   /**
    * Determine final outcome based on sink state and script behavior.
@@ -488,14 +511,22 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       throw err
     }
 
-    // 2. Launch Puppeteer (with proxy if configured, with stealth/adblocker plugins)
-    const plugins: PluginConfig = {
-      stealth: config.stealth !== false,
-      adblocker: config.adblocker === true
+    // 2. Acquire browser (connect to existing or launch new)
+    if (config.browserWSEndpoint) {
+      // Connect mode: use vanilla puppeteer (no stealth/adblocker plugins)
+      const puppeteer = await getVanillaPuppeteer(config.scriptPath)
+      browser = await puppeteer.connect({ browserWSEndpoint: config.browserWSEndpoint })
+      isConnected = true
+    } else {
+      // Launch mode: use puppeteer-extra with stealth/adblocker plugins
+      const plugins: PluginConfig = {
+        stealth: config.stealth !== false,
+        adblocker: config.adblocker === true
+      }
+      const puppeteer = await getPuppeteer(config.scriptPath, plugins)
+      const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy)
+      browser = await puppeteer.launch(launchOptions)
     }
-    const puppeteer = await getPuppeteer(config.scriptPath, plugins)
-    const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy)
-    browser = await puppeteer.launch(launchOptions)
     browserContext = await browser.createBrowserContext()
     page = await browserContext.newPage()
 
@@ -607,6 +638,15 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
   } finally {
     await safeClose(page)
     await safeClose(browserContext)
-    await safeClose(browser)
+    if (isConnected && browser) {
+      // In connect mode, disconnect without closing the shared browser
+      try {
+        browser.disconnect()
+      } catch {
+        // Ignore disconnect errors
+      }
+    } else {
+      await safeClose(browser)
+    }
   }
 }

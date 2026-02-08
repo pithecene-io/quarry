@@ -14,8 +14,9 @@ import (
 type Config struct {
 	Source   string                       `yaml:"source"`
 	Category string                      `yaml:"category"`
-	Executor string                      `yaml:"executor"`
-	Storage  StorageConfig               `yaml:"storage"`
+	Executor          string                      `yaml:"executor"`
+	BrowserWSEndpoint string                      `yaml:"browser_ws_endpoint"`
+	Storage           StorageConfig               `yaml:"storage"`
 	Policy   PolicyConfig                `yaml:"policy"`
 	Proxies  map[string]ProxyPoolConfig  `yaml:"proxies"`
 	Proxy    ProxySelection              `yaml:"proxy"`

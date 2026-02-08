@@ -55,6 +55,12 @@
           "required": false,
           "description": "Path to executor binary (advanced: auto-resolved by default)"
         },
+        "browser-ws-endpoint": {
+          "type": "string",
+          "required": false,
+          "description": "WebSocket URL of an externally managed browser (connect instead of launch)",
+          "notes": "When set, executor connects via puppeteer.connect() instead of launching a new browser. Proxy launch args are ignored; page.authenticate() still applies."
+        },
         "quiet": {
           "type": "bool",
           "required": false,

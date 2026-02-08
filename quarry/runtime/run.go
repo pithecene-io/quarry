@@ -48,6 +48,9 @@ type RunConfig struct {
 	// EnqueueObserver is an optional callback for fan-out scheduling.
 	// When set, called synchronously on each enqueue event before policy dispatch.
 	EnqueueObserver EnqueueObserver
+	// BrowserWSEndpoint is the optional WebSocket URL of an externally managed browser.
+	// When set, the executor connects instead of launching a new Chromium instance.
+	BrowserWSEndpoint string
 	// Source is the partition key for origin system/provider.
 	Source string
 	// Category is the partition key for logical data type (default: "default").
@@ -125,11 +128,12 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 
 	// Create executor
 	execConfig := &ExecutorConfig{
-		ExecutorPath: r.config.ExecutorPath,
-		ScriptPath:   r.config.ScriptPath,
-		Job:          r.config.Job,
-		RunMeta:      r.config.RunMeta,
-		Proxy:        r.config.Proxy,
+		ExecutorPath:      r.config.ExecutorPath,
+		ScriptPath:        r.config.ScriptPath,
+		Job:               r.config.Job,
+		RunMeta:           r.config.RunMeta,
+		Proxy:             r.config.Proxy,
+		BrowserWSEndpoint: r.config.BrowserWSEndpoint,
 	}
 
 	var executor Executor

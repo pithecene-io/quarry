@@ -124,6 +124,10 @@ ADVANCED:
 				Name:  "executor",
 				Usage: "Path to executor binary (advanced: auto-resolved by default)",
 			},
+			&cli.StringFlag{
+				Name:  "browser-ws-endpoint",
+				Usage: "WebSocket URL of an externally managed browser (connect instead of launch)",
+			},
 			&cli.BoolFlag{
 				Name:  "quiet",
 				Usage: "Suppress result output",
@@ -321,13 +325,14 @@ func validateFanOutConfig(choice fanOutChoice) error {
 // child runs during fan-out. Each invocation of Run builds an independent
 // policy, sink, and metrics collector for the child.
 type childFactory struct {
-	policyChoice   policyChoice
-	executorPath   string
-	storage        storageChoice
-	storageDataset string
-	source         string
-	category       string
-	proxy          *types.ProxyEndpoint
+	policyChoice      policyChoice
+	executorPath      string
+	storage           storageChoice
+	storageDataset    string
+	source            string
+	category          string
+	proxy             *types.ProxyEndpoint
+	browserWSEndpoint string
 }
 
 // Run constructs and executes a single child run for the fan-out operator.
@@ -356,17 +361,18 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 	defer func() { _ = childPol.Close() }()
 
 	config := &runtime.RunConfig{
-		ExecutorPath:    cf.executorPath,
-		ScriptPath:      item.Target,
-		Job:             item.Params,
-		RunMeta:         childMeta,
-		Policy:          childPol,
-		Proxy:           cf.proxy,
-		FileWriter:      childFileWriter,
-		EnqueueObserver: observer,
-		Source:          cf.source,
-		Category:        cf.category,
-		Collector:       childCollector,
+		ExecutorPath:      cf.executorPath,
+		ScriptPath:        item.Target,
+		Job:               item.Params,
+		RunMeta:           childMeta,
+		Policy:            childPol,
+		Proxy:             cf.proxy,
+		FileWriter:        childFileWriter,
+		EnqueueObserver:   observer,
+		BrowserWSEndpoint: cf.browserWSEndpoint,
+		Source:            cf.source,
+		Category:          cf.category,
+		Collector:         childCollector,
 	}
 
 	orchestrator, err := runtime.NewRunOrchestrator(config)
@@ -470,6 +476,7 @@ func runAction(c *cli.Context) error {
 	source := resolveString(c, "source", configVal(cfg, func(c *quarryconfig.Config) string { return c.Source }))
 	category := resolveString(c, "category", configVal(cfg, func(c *quarryconfig.Config) string { return c.Category }))
 	executor := resolveString(c, "executor", configVal(cfg, func(c *quarryconfig.Config) string { return c.Executor }))
+	browserWSEndpoint := resolveString(c, "browser-ws-endpoint", configVal(cfg, func(c *quarryconfig.Config) string { return c.BrowserWSEndpoint }))
 
 	// Manual validation for fields that were previously Required:true
 	if source == "" {
@@ -615,6 +622,11 @@ func runAction(c *cli.Context) error {
 		resolvedProxy = endpoint
 	}
 
+	// Warn if proxy and browser-ws-endpoint both set (launch args ignored; page.authenticate still applies)
+	if resolvedProxy != nil && browserWSEndpoint != "" {
+		fmt.Fprintf(os.Stderr, "Warning: --proxy-* launch args are ignored with --browser-ws-endpoint; only page.authenticate() credentials apply\n")
+	}
+
 	// Set up context with signal handling
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -642,28 +654,42 @@ func runAction(c *cli.Context) error {
 
 	// Build root run config
 	rootConfig := &runtime.RunConfig{
-		ExecutorPath: executorPath,
-		ScriptPath:   c.String("script"),
-		Job:          job,
-		RunMeta:      runMeta,
-		Policy:       pol,
-		Proxy:        resolvedProxy,
-		FileWriter:   fileWriter,
-		Source:       source,
-		Category:     category,
-		Collector:    collector,
+		ExecutorPath:      executorPath,
+		ScriptPath:        c.String("script"),
+		Job:               job,
+		RunMeta:           runMeta,
+		Policy:            pol,
+		Proxy:             resolvedProxy,
+		FileWriter:        fileWriter,
+		BrowserWSEndpoint: browserWSEndpoint,
+		Source:            source,
+		Category:          category,
+		Collector:         collector,
 	}
 
 	// Branch: fan-out or single run
 	if fanOut.depth > 0 {
+		// Auto-launch a shared browser for fan-out when no explicit endpoint is provided.
+		// This avoids N cold browser startups (one per child run).
+		if browserWSEndpoint == "" {
+			managedBrowser, err := runtime.LaunchManagedBrowser(ctx, executorPath, c.String("script"))
+			if err != nil {
+				return cli.Exit(fmt.Sprintf("failed to launch shared browser: %v", err), exitExecutorCrash)
+			}
+			defer func() { _ = managedBrowser.Close() }()
+			browserWSEndpoint = managedBrowser.WSEndpoint
+			rootConfig.BrowserWSEndpoint = browserWSEndpoint
+		}
+
 		factory := &childFactory{
-			policyChoice:   choice,
-			executorPath:   executorPath,
-			storage:        storageConfig,
-			storageDataset: storageDataset,
-			source:         source,
-			category:       category,
-			proxy:          resolvedProxy,
+			policyChoice:      choice,
+			executorPath:      executorPath,
+			storage:           storageConfig,
+			storageDataset:    storageDataset,
+			source:            source,
+			category:          category,
+			proxy:             resolvedProxy,
+			browserWSEndpoint: browserWSEndpoint,
 		}
 		return runWithFanOut(ctx, fanOut, rootConfig, factory, finalizer)
 	}

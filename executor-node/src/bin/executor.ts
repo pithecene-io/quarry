@@ -97,10 +97,57 @@ async function readStdin(): Promise<string> {
 }
 
 /**
+ * Launch a shared browser and print its WebSocket endpoint to stdout.
+ * Stays alive until stdin closes, then shuts down the browser.
+ *
+ * Used by the Go runtime to provide a managed browser for fan-out runs.
+ * The script path is used to resolve puppeteer from the user's project.
+ */
+async function launchBrowserServer(scriptPath: string): Promise<never> {
+  const { getPuppeteer: getBrowserPuppeteer } = await import('../executor.js')
+
+  const puppeteer = await getBrowserPuppeteer(scriptPath, {
+    stealth: process.env.QUARRY_STEALTH !== '0',
+    adblocker: process.env.QUARRY_ADBLOCKER === '1'
+  })
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+  })
+
+  // Print WS endpoint to stdout (Go runtime reads this line)
+  const wsEndpoint = browser.wsEndpoint()
+  process.stdout.write(`${wsEndpoint}\n`)
+
+  // Stay alive until stdin closes (Go runtime closes stdin to signal shutdown)
+  await new Promise<void>((resolve) => {
+    process.stdin.resume()
+    process.stdin.on('end', resolve)
+    process.stdin.on('close', resolve)
+    process.on('SIGTERM', resolve)
+    process.on('SIGINT', resolve)
+  })
+
+  await browser.close()
+  process.exit(0)
+}
+
+/**
  * Main entry point.
  */
 async function main(): Promise<never> {
   const args = process.argv.slice(2)
+
+  // Browser server mode: launch shared browser for fan-out
+  if (args[0] === '--launch-browser') {
+    const scriptPath = args[1]
+    if (!scriptPath) {
+      process.stderr.write('Usage: quarry-executor --launch-browser <script-path>\n')
+      process.exit(3)
+    }
+    return launchBrowserServer(scriptPath)
+  }
 
   if (args.length < 1) {
     process.stderr.write('Usage: quarry-executor <script-path>\n')
@@ -150,12 +197,19 @@ async function main(): Promise<never> {
     fatalError(`parsing proxy: ${errorMessage(err)}`)
   }
 
+  // Parse optional browser WebSocket endpoint
+  const browserWSEndpoint =
+    typeof inputObj.browser_ws_endpoint === 'string' && inputObj.browser_ws_endpoint !== ''
+      ? inputObj.browser_ws_endpoint
+      : undefined
+
   // Execute
   const result = await execute({
     scriptPath,
     job,
     run,
     proxy,
+    browserWSEndpoint,
     output: process.stdout,
     puppeteerOptions: {
       // Headless by default for executor mode
