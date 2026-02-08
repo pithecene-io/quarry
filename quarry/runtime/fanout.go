@@ -299,6 +299,8 @@ func (s *Operator) Results() FanOutResult {
 }
 
 // computeDedupKey produces a deterministic key from target + params.
+// Dedup is by (target, params) only. source/category are partition hints,
+// not work identity — the same work is not re-executed for different partitions.
 // Go's json.Marshal sorts map keys deterministically since Go 1.12.
 func computeDedupKey(target string, params map[string]any) string {
 	paramsJSON, err := json.Marshal(params)
