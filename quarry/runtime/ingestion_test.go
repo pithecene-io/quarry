@@ -560,6 +560,63 @@ func TestIngestionEngine_RunResult_NotCountedInSeq(t *testing.T) {
 	}
 }
 
+// encodeFileWriteFrame creates a framed file_write frame
+func encodeFileWriteFrame(frame *types.FileWriteFrame) []byte {
+	payload, _ := msgpack.Marshal(frame)
+	return encodeFrame(payload)
+}
+
+func TestIngestionEngine_FileWrite_NoFileWriter_FailsFast(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	// First: a valid event so ingestion is underway
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(envelope))
+
+	// Then: a file_write frame (no FileWriter configured)
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		Filename:    "screenshot.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	logger := log.NewLogger(runMeta)
+	// nil FileWriter — this should now fail fast
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+
+	err := engine.Run(t.Context())
+	if err == nil {
+		t.Fatal("expected error when file_write received without FileWriter")
+	}
+	if !IsStreamError(err) {
+		t.Errorf("expected stream error, got: %v", err)
+	}
+
+	var ingErr *IngestionError
+	if !errors.As(err, &ingErr) {
+		t.Fatalf("expected *IngestionError, got %T", err)
+	}
+	if ingErr.Kind != IngestionErrorStream {
+		t.Errorf("expected IngestionErrorStream, got %d", ingErr.Kind)
+	}
+}
+
 // pipeCloseReader simulates a pipe that returns data, then returns a pipe close error
 // (not io.EOF) - mimicking the race condition when executor exits quickly
 type pipeCloseReader struct {
