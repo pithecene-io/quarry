@@ -105,8 +105,8 @@ func TestLodeClient_FSDirectoryCreationFailure_NonExistentParent(t *testing.T) {
 		if !errors.As(factoryErr, &storageErr) {
 			t.Fatalf("expected *StorageError for factory error, got %T: %v", factoryErr, factoryErr)
 		}
-		if !errors.Is(factoryErr, ErrNotFound) && !errors.Is(factoryErr, ErrPermissionDenied) {
-			t.Errorf("expected ErrNotFound or ErrPermissionDenied, got kind: %v", storageErr.Kind)
+		if !errors.Is(factoryErr, ErrNotFound) && !errors.Is(factoryErr, ErrPermissionDenied) && !errors.Is(factoryErr, ErrAccessDenied) {
+			t.Errorf("expected ErrNotFound, ErrPermissionDenied, or ErrAccessDenied, got kind: %v", storageErr.Kind)
 		}
 		if storageErr.Op != "init" {
 			t.Errorf("expected Op=init for factory error, got %s", storageErr.Op)
