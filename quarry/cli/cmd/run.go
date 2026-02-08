@@ -381,7 +381,7 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 
 	// Persist child metrics (best effort)
 	if childLodeClient != nil {
-		metricsCtx, metricsCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		metricsCtx, metricsCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		if writeErr := childLodeClient.WriteMetrics(metricsCtx, childCollector.Snapshot(), time.Now()); writeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to persist child metrics for %s: %v\n", item.RunID, writeErr)
 		}
@@ -421,7 +421,7 @@ func (f *runFinalizer) persistMetrics(duration time.Duration) {
 		return
 	}
 	completedAt := f.startTime.Add(duration)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := f.lodeClient.WriteMetrics(ctx, f.collector.Snapshot(), completedAt); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", err)

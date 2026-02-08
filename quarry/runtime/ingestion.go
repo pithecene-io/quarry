@@ -519,10 +519,10 @@ func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.Fil
 	}
 
 	if e.fileWriter == nil {
-		e.logger.Warn("file_write received but no FileWriter configured, ignoring", map[string]any{
-			"filename": frame.Filename,
-		})
-		return nil
+		return &IngestionError{
+			Kind: IngestionErrorStream,
+			Err:  errors.New("file_write received but no FileWriter configured; ensure storage is properly configured for sidecar file support"),
+		}
 	}
 
 	if err := e.fileWriter.PutFile(ctx, frame.Filename, frame.ContentType, frame.Data); err != nil {
