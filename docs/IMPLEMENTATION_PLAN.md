@@ -13,12 +13,14 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.5.0)
-- Latest release: v0.5.0 (see CHANGELOG.md).
+## Current Status (as of v0.5.1)
+- Latest release: v0.5.1 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
+- v0.5.1 fixed published npm packages missing `dist/` directory (#110).
 - v0.5.0 adds webhook and Redis pub/sub event-bus adapters for downstream notifications.
 - v0.4.1 added `--config` for YAML project-level defaults and config package hardening.
 - v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
+- Next priority: v0.6.0 derived work execution (fan-out flags on `quarry run`) — see roadmap below.
 
 ---
 
@@ -391,21 +393,17 @@ Outbox records would live at:
 datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
 ```
 
-#### Relationship to Temporal orchestration
+#### Relationship to external orchestrators
 
 The outbox pattern applies only to standalone/CLI usage where no external
-orchestrator provides delivery guarantees. When Quarry runs as a Temporal
-activity, the outbox is redundant — Temporal owns durable execution and
-the downstream notification becomes a separate activity with Temporal's
-built-in retry semantics. In that paradigm, Quarry embeds naturally:
-the workflow orchestrates extraction (Quarry activity) and notification
-(webhook/SNS activity) as independent steps, each with Temporal's
-at-least-once guarantees.
+orchestrator provides delivery guarantees. When Quarry runs inside an
+orchestrator (Temporal, Airflow, etc.), the outbox is redundant — the
+orchestrator owns durable execution and downstream notification becomes
+a separate step with the orchestrator's built-in retry semantics.
 
-Temporal eliminates the need for the outbox in orchestrated deployments,
-but standalone CLI usage remains a first-class paradigm. The outbox
-pattern is still relevant for users running Quarry directly (cron, CI,
-shell scripts) without an external orchestrator.
+Standalone CLI usage remains a first-class paradigm. The outbox pattern
+is relevant for users running Quarry directly (cron, CI, shell scripts)
+without an external orchestrator.
 
 See `docs/guides/temporal.md` for the full Temporal integration design.
 
@@ -420,7 +418,219 @@ production usage.
 
 ---
 
-## v0.6.0 Roadmap — Advanced Proxy Rotation
+## v0.6.0 Roadmap — Derived Work Execution
+
+### Goal
+
+Enable `quarry run` to execute derived work discovered via `emit.enqueue()`,
+turning a single CLI invocation into bounded fan-out — without introducing
+new commands, modes, or abstractions.
+
+### Design Principle
+
+There is no "crawl mode." Fan-out is an **emergent runtime behavior** that
+occurs when the user provides explicit fan-out flags. No new top-level
+verbs, no umbrella "scope" or "budget" concepts. Only independent, literal
+flags that state facts about execution bounds.
+
+This preserves `CONTRACT_CLI.md`'s invariant: `quarry run` is the only
+execution entrypoint.
+
+### Motivation
+
+Discovery-driven extraction is the most common Quarry workload shape that
+the current runtime cannot serve natively. A listing script emits `enqueue`
+events for detail pages, but the runtime records them without acting — forcing
+users to build external orchestrators that read enqueue records from storage,
+loop, and spawn `quarry run` per target.
+
+Fan-out flags close this loop inside the runtime:
+
+```
+quarry run --source list.ts --job '{"url":"..."}' --depth 2 --max-runs 500 --parallel 8
+```
+
+This fills the gap between single-target `quarry run` (zero infrastructure)
+and external orchestrators (complex DAGs, heavy infrastructure):
+
+```
+Complexity of work
+──────────────────────────────────────────────────────
+Single target        Discovered fan-out      Complex DAG
+
+quarry run           quarry run              External orchestrator
+(no fan-out flags)   (with fan-out flags)    (Temporal, Airflow, etc.)
+```
+
+### Default Behavior (no fan-out flags)
+
+```bash
+quarry run --source list.ts --job '{"url":"..."}' ...
+```
+
+- Exactly one run executes.
+- `emit.enqueue()` events are persisted as normal events.
+- Enqueue events **never cause execution** of child runs.
+- Process exits deterministically.
+
+This is unchanged from current behavior. The `enqueue` event type remains
+advisory per `CONTRACT_EMIT.md`.
+
+### Fan-Out Behavior (any fan-out flag present)
+
+```bash
+quarry run --source list.ts --job '{"url":"..."}' --depth 3 --max-runs 50000 --parallel 12
+```
+
+When any fan-out flag is provided:
+
+- `emit.enqueue({ target, params })` events are **scheduled and executed**
+  as child runs in addition to being persisted.
+- Fan-out continues until the work queue is exhausted or bounds are reached.
+- The process remains one-shot: it starts, exhausts, exits.
+
+### Fan-Out Flags
+
+| Flag | Meaning | Required for fan-out |
+|------|---------|---------------------|
+| `--depth N` | Maximum derivation depth from root run | Yes (at least one fan-out flag) |
+| `--max-runs N` | Hard cap on total runs executed | No (unbounded if omitted) |
+| `--parallel N` | Maximum concurrent child runs | No (default: 1) |
+
+Flags are **bounds**, not requirements. A run with `--depth 3` that emits
+zero enqueue events completes successfully with zero fan-out.
+
+`--parallel` without any other fan-out flag is a no-op (single run has
+nothing to parallelize).
+
+### Depth Semantics
+
+Depth is **derivation depth**, not same-script recursion depth:
+
+- Root run starts at depth 0
+- Each `enqueue` spawns a child at `depth + 1`
+- `--depth N` means: do not execute runs where `depth > N`
+
+This supports heterogeneous script chains naturally:
+
+```
+list.ts (depth 0) → detail.ts (depth 1) → asset.ts (depth 2)
+```
+
+### Script Chaining
+
+Chaining is explicit in the `enqueue` payload. The `target` field identifies
+the script to execute; `params` carries the job data:
+
+```ts
+// list.ts discovers detail pages
+for (const url of discoveredUrls) {
+  emit.enqueue({ target: "detail.ts", params: { url } })
+}
+```
+
+The runtime resolves `target` and constructs a child run with
+`--source <target>` and `--job <params>`.
+
+### Deduplication
+
+When fan-out is enabled, dedup is mandatory:
+
+- Key: `(target, canonical_json(params))`
+- Canonical JSON: sorted-key serialization (deterministic key ordering)
+- Same `(target, params)` pair encountered again → silently skipped
+- Dedup is per-invocation (no cross-invocation persistence)
+
+### Scheduling Independence
+
+The scheduler intercepts `enqueue` events **before** the ingestion
+pipeline. The control path (what to execute next) is independent of
+the data path (event persistence). If ingestion policy drops an enqueue
+event from storage, the scheduler must still have received it.
+
+This ensures fan-out behavior cannot be accidentally altered by policy
+configuration.
+
+### Exit Semantics
+
+- Exit 0 if the root run succeeded and the process completed normally
+- Non-zero only for infrastructure failures (executor crash, runtime error)
+- Individual child run failures are recorded in metrics and a summary event
+- Callers who need per-child outcome granularity use `quarry inspect`
+- Summary record emitted: runs attempted, runs deduplicated, failures
+
+### Bound Exhaustion
+
+When `--max-runs` is reached mid-execution:
+
+- Runs already in-flight complete normally
+- Pending enqueue events are **not executed** but remain persisted
+- The summary records how many enqueue events were not executed due to
+  the cap
+
+### Contract Impact
+
+- CONTRACT_EMIT.md — additive: specify that when fan-out flags are
+  present, the runtime **may treat enqueue as actionable** (schedule
+  derived work). Default behavior (advisory) is unchanged.
+- CONTRACT_RUN.md — additive: `parent_run_id` and `depth` threading
+  for fan-out lineage.
+- CONTRACT_CLI.md — additive: fan-out flags on `quarry run`. No new
+  commands.
+
+### Deliverables
+
+- Fan-out flags on `quarry run`: `--depth`, `--max-runs`, `--parallel`
+- In-process scheduler: bounded work queue, dedup store, concurrency executor
+- Lineage fields: `parent_run_id`, `depth` on child run envelopes
+- Summary output: runs attempted, deduplicated, failed, not-executed
+- `quarry inspect` support for fan-out lineage trees
+- Contract and guide updates
+
+### Mini-milestones
+
+- [ ] Contract updates (CONTRACT_EMIT.md enqueue semantics, CONTRACT_RUN.md
+      lineage fields, CONTRACT_CLI.md fan-out flags)
+- [ ] In-process scheduler: enqueue event interception, dedup, depth tracking
+- [ ] Child run spawning with concurrency limiter
+- [ ] `parent_run_id` and `depth` threading through run metadata
+- [ ] Fan-out flag wiring in `quarry/cli/cmd/run.go`
+- [ ] Summary output and exit code semantics
+- [ ] `quarry inspect` fan-out lineage view
+- [ ] Tests: depth bounds, max-runs cap, concurrency, dedup, scheduling
+      independence from ingestion policy
+
+### Scope Boundary
+
+Fan-out handles bounded, discovered work. It does **not** handle:
+- Scheduling priority (depth-first vs breadth-first is implementation-chosen)
+- Cross-invocation dedup (don't re-scrape URLs seen in previous runs)
+- Per-target rate limiting beyond proxy rotation
+- Resume of interrupted fan-out
+- Conditional branching (if X then enqueue Y)
+
+These belong in external orchestrators. If fan-out starts accumulating
+these features, it has exceeded its scope.
+
+### Open Questions
+
+- **`target` resolution**: Should `target` be a file path (relative to
+  CWD, relative to root script, or absolute) or a logical name resolved
+  from `--config` YAML? Must be frozen before implementation.
+- **`--parallel` default**: 1 (sequential) is safest but may surprise
+  users who expect fan-out to be concurrent by default.
+- **Proxy pool sharing**: When N child runs execute concurrently against
+  the same proxy pool, recency tracking (v0.7.0) must be pool-aware
+  across concurrent runs. The fan-out design must not preclude this.
+
+### Design Context
+
+See `docs/ingress-models.md` for the broader analysis of ingress models
+and use case taxonomy that motivated this approach.
+
+---
+
+## v0.7.0 Roadmap — Advanced Proxy Rotation
 
 ### Goal
 Harden proxy selection for production workloads that require recency-aware
@@ -560,7 +770,7 @@ See `docs/guides/temporal.md` for detailed design and pseudocode.
 
 ---
 
-## Post-v0.5.0 — Additional Notification Adapters (Staggered)
+## Additional Event Bus Adapters (Staggered)
 
 Order of support:
 - ~~Redis Pub/Sub~~ (shipped in v0.5.0)
@@ -575,6 +785,73 @@ Principles:
 - Integrations must not change contracts.
 - Event envelope remains stable across adapters.
 - CLI/Stats/Metrics hardening is a prerequisite for each new adapter.
+
+---
+
+## Module Split — Multi-Module Restructure (Deferred)
+
+> **Status: Deferred.** The module split was originally motivated by the
+> Temporal integration (see below). With Temporal deprioritized, the split
+> is not urgent. It remains a clean-up goal for dependency hygiene but is
+> no longer on the critical path.
+
+### Goal
+
+Split the `quarry/` Go module into independent modules so that future
+integrations can depend on core runtime types without pulling in CLI,
+TUI, or unrelated dependencies.
+
+### Agreed Layout
+
+| Module | Go Module Path | Contains |
+|--------|---------------|----------|
+| `quarry-core/` | `github.com/justapithecus/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
+| `quarry-cli/` | `github.com/justapithecus/quarry-cli` | CLI commands, TUI, config, reader |
+
+### Prerequisites
+
+- [x] Decouple lode from cli/reader dependency (PR #113)
+- [ ] Zero cli/tui imports from core packages
+
+### Sequencing
+
+1. Extract `quarry-core/` — move types, runtime, policy, lode, adapter,
+   proxy, metrics, log into standalone module.
+2. Extract `quarry-cli/` — CLI, TUI, config, reader depend on
+   `quarry-core/`.
+3. Update CI — build matrix, release workflows, go.work for local dev.
+
+---
+
+## Temporal Orchestration Integration (Deferred)
+
+> **Status: Deferred.** Temporal integration is the right answer for teams
+> that already operate Temporal infrastructure and need complex DAG
+> orchestration, conditional branching, or human-in-the-loop workflows.
+> However, most Quarry users do not run Temporal, and the most common
+> gap — discovery-driven fan-out — is better served by derived work
+> execution via fan-out flags on `quarry run` (v0.6.0) with zero
+> infrastructure requirements.
+>
+> Temporal remains a valid future integration. When demand justifies it,
+> the module split (above) is its prerequisite.
+
+### Goal
+
+Enable Quarry to run as a Temporal activity, with workflow-level retries,
+lineage tracking, and durable execution guarantees.
+
+### Prerequisites
+
+- [ ] Module split complete (`quarry-core/` extracted)
+
+### Deliverables
+
+- Activity wrapper calling `runtime.NewRunOrchestrator(config).Execute(ctx)`
+- Heartbeat goroutine for liveness reporting
+- Outcome mapping: `OutcomeStatus` → Temporal error semantics
+- Reference workflow with lineage-aware retry logic
+- Worker binary for `quarry-temporal/`
 
 ---
 
