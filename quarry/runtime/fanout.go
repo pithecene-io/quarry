@@ -55,6 +55,12 @@ type WorkItem struct {
 	DedupKey string
 	// RunID is the assigned run_id for the child run.
 	RunID string
+	// Source is an optional partition override for the child run's source.
+	// Empty string means inherit from parent.
+	Source string
+	// Category is an optional partition override for the child run's category.
+	// Empty string means inherit from parent.
+	Category string
 }
 
 // ChildRunFactory creates and executes a child run, returning the result.
@@ -140,12 +146,17 @@ func (s *Operator) NewObserver(depth int) EnqueueObserver {
 		s.runsStarted.Add(1)
 		s.mu.Unlock()
 
+		source, _ := envelope.Payload["source"].(string)
+		category, _ := envelope.Payload["category"].(string)
+
 		item := WorkItem{
 			Target:   target,
 			Params:   params,
 			Depth:    childDepth,
 			DedupKey: dedupKey,
 			RunID:    uuid.New().String(),
+			Source:   source,
+			Category: category,
 		}
 
 		// Non-blocking send; queue is sized to MaxRuns.

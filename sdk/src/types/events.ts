@@ -96,6 +96,10 @@ export interface EnqueuePayload {
   target: string
   /** Parameters for the work */
   params: Record<string, unknown>
+  /** Optional source partition override for the child run */
+  source?: string
+  /** Optional category partition override for the child run */
+  category?: string
 }
 
 /**
