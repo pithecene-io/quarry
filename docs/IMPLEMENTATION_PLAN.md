@@ -20,7 +20,7 @@ Scripts and executors remain **policy-agnostic**.
 - v0.5.0 adds webhook and Redis pub/sub event-bus adapters for downstream notifications.
 - v0.4.1 added `--config` for YAML project-level defaults and config package hardening.
 - v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
-- Next priority: v0.6.0 crawl mode (`quarry crawl`) — see roadmap below.
+- Next priority: v0.6.0 derived work execution (fan-out flags on `quarry run`) — see roadmap below.
 
 ---
 
@@ -405,8 +405,6 @@ Standalone CLI usage remains a first-class paradigm. The outbox pattern
 is relevant for users running Quarry directly (cron, CI, shell scripts)
 without an external orchestrator.
 
-See `docs/guides/temporal.md` for the full Temporal integration design.
-
 #### Open questions
 - Retry ownership: CLI command, background process, or next-run piggyback?
 - TTL for stale outbox entries (when to give up permanently).
@@ -418,101 +416,215 @@ production usage.
 
 ---
 
-## v0.6.0 Roadmap — Crawl Mode
+## v0.6.0 Roadmap — Derived Work Execution
 
 ### Goal
 
-Enable Quarry to follow its own `enqueue` signals, turning a single CLI
-invocation into a bounded crawl that discovers and processes work without
-external orchestration.
+Enable `quarry run` to execute derived work discovered via `emit.enqueue()`,
+turning a single CLI invocation into bounded fan-out — without introducing
+new commands, modes, or abstractions.
+
+### Design Principle
+
+There is no "crawl mode." Fan-out is an **emergent runtime behavior** that
+occurs when the user provides explicit fan-out flags. No new top-level
+verbs, no umbrella "scope" or "budget" concepts. Only independent, literal
+flags that state facts about execution bounds.
+
+This preserves `CONTRACT_CLI.md`'s invariant: `quarry run` is the only
+execution entrypoint.
 
 ### Motivation
 
-Crawling is the most common Quarry workload shape that the current CLI
-cannot serve natively. A listing page emits `enqueue` events for detail
-pages, but the runtime drops them — forcing users to build external
-orchestrators that read items from storage, loop, and spawn `quarry run`
-per target. Crawl mode closes this loop inside the runtime.
+Discovery-driven extraction is the most common Quarry workload shape that
+the current runtime cannot serve natively. A listing script emits `enqueue`
+events for detail pages, but the runtime records them without acting — forcing
+users to build external orchestrators that read enqueue records from storage,
+loop, and spawn `quarry run` per target.
 
-This fills the gap between `quarry run` (single target, zero infrastructure)
-and external orchestrators like Temporal (complex DAGs, heavy infrastructure):
+Fan-out flags close this loop inside the runtime:
 
 ```
-Complexity of work graph
+quarry run --source list.ts --job '{"url":"..."}' --depth 2 --max-runs 500 --parallel 8
+```
+
+This fills the gap between single-target `quarry run` (zero infrastructure)
+and external orchestrators (complex DAGs, heavy infrastructure):
+
+```
+Complexity of work
 ──────────────────────────────────────────────────────
-Simple               Discovered              Complex DAG
-(one target)         (fan-out)               (multi-step, conditional)
+Single target        Discovered fan-out      Complex DAG
 
-quarry run           quarry crawl            External orchestrator
+quarry run           quarry run              External orchestrator
+(no fan-out flags)   (with fan-out flags)    (Temporal, Airflow, etc.)
 ```
 
-### Semantics
+### Default Behavior (no fan-out flags)
 
-- `quarry crawl` is a new CLI command (does not change `quarry run`)
-- `enqueue` events remain advisory in `quarry run` — crawl mode is opt-in
-- Each `enqueue` event spawns a child run:
-  - `target` → `--source` (script to execute)
-  - `params` → `--job` (job payload)
-- `parent_run_id` links child runs to their parent
-- All runs in a crawl share the same Lode dataset
-- The crawl exits when the run tree is exhausted or limits are reached
+```bash
+quarry run --source list.ts --job '{"url":"..."}' ...
+```
 
-### Bounds and Controls
+- Exactly one run executes.
+- `emit.enqueue()` events are persisted as normal events.
+- Enqueue events **never cause execution** of child runs.
+- Process exits deterministically.
 
-- `--max-depth N` — maximum generations from the root run
-- `--concurrency N` — maximum in-flight child runs
-- `--max-runs N` — hard cap on total runs in the crawl
-- Deduplication by `(target, params)` hash — same work is not re-queued
+This is unchanged from current behavior. The `enqueue` event type remains
+advisory per `CONTRACT_EMIT.md`.
 
-### Outcome Semantics
+### Fan-Out Behavior (any fan-out flag present)
 
-A crawl's exit reflects aggregate outcome:
-- Exit 0 if all runs completed successfully
-- Non-zero if any run failed (with summary of failures)
-- Partial success is the expected case for large crawls
-- `quarry inspect` extended to show crawl tree with per-run outcomes
+```bash
+quarry run --source list.ts --job '{"url":"..."}' --depth 3 --max-runs 50000 --parallel 12
+```
+
+When any fan-out flag is provided:
+
+- `emit.enqueue({ target, params })` events are **scheduled and executed**
+  as child runs in addition to being persisted.
+- Fan-out continues until the work queue is exhausted or bounds are reached.
+- The process remains one-shot: it starts, exhausts, exits.
+
+### Fan-Out Flags
+
+| Flag | Meaning | Required for fan-out |
+|------|---------|---------------------|
+| `--depth N` | Maximum derivation depth from root run | Yes (at least one fan-out flag) |
+| `--max-runs N` | Hard cap on total runs executed | No (unbounded if omitted) |
+| `--parallel N` | Maximum concurrent child runs | No (default: 1) |
+
+Flags are **bounds**, not requirements. A run with `--depth 3` that emits
+zero enqueue events completes successfully with zero fan-out.
+
+`--parallel` without any other fan-out flag is a no-op (single run has
+nothing to parallelize).
+
+### Depth Semantics
+
+Depth is **derivation depth**, not same-script recursion depth:
+
+- Root run starts at depth 0
+- Each `enqueue` spawns a child at `depth + 1`
+- `--depth N` means: do not execute runs where `depth > N`
+
+This supports heterogeneous script chains naturally:
+
+```
+list.ts (depth 0) → detail.ts (depth 1) → asset.ts (depth 2)
+```
+
+### Script Chaining
+
+Chaining is explicit in the `enqueue` payload. The `target` field identifies
+the script to execute; `params` carries the job data:
+
+```ts
+// list.ts discovers detail pages
+for (const url of discoveredUrls) {
+  emit.enqueue({ target: "detail.ts", params: { url } })
+}
+```
+
+The runtime resolves `target` and constructs a child run with
+`--source <target>` and `--job <params>`.
+
+### Deduplication
+
+When fan-out is enabled, dedup is mandatory:
+
+- Key: `(target, canonical_json(params))`
+- Canonical JSON: sorted-key serialization (deterministic key ordering)
+- Same `(target, params)` pair encountered again → silently skipped
+- Dedup is per-invocation (no cross-invocation persistence)
+
+### Scheduling Independence
+
+The scheduler intercepts `enqueue` events **before** the ingestion
+pipeline. The control path (what to execute next) is independent of
+the data path (event persistence). If ingestion policy drops an enqueue
+event from storage, the scheduler must still have received it.
+
+This ensures fan-out behavior cannot be accidentally altered by policy
+configuration.
+
+### Exit Semantics
+
+- Exit 0 if the root run succeeded and the process completed normally
+- Non-zero only for infrastructure failures (executor crash, runtime error)
+- Individual child run failures are recorded in metrics and a summary event
+- Callers who need per-child outcome granularity use `quarry inspect`
+- Summary record emitted: runs attempted, runs deduplicated, failures
+
+### Bound Exhaustion
+
+When `--max-runs` is reached mid-execution:
+
+- Runs already in-flight complete normally
+- Pending enqueue events are **not executed** but remain persisted
+- The summary records how many enqueue events were not executed due to
+  the cap
 
 ### Contract Impact
 
-- No changes to CONTRACT_EMIT.md — `enqueue` stays advisory
-- CONTRACT_RUN.md — additive: `parent_run_id` threading for crawl lineage
-- CONTRACT_CLI.md — additive: `quarry crawl` command and flags
+- CONTRACT_EMIT.md — additive: specify that when fan-out flags are
+  present, the runtime **may treat enqueue as actionable** (schedule
+  derived work). Default behavior (advisory) is unchanged.
+- CONTRACT_RUN.md — additive: `parent_run_id` and `depth` threading
+  for fan-out lineage.
+- CONTRACT_CLI.md — additive: fan-out flags on `quarry run`. No new
+  commands.
 
 ### Deliverables
 
-- `quarry crawl` CLI command with depth/concurrency/max-runs flags
-- Crawl scheduler in runtime: enqueue consumer, dedup, child run spawning
-- Lineage tracking via `parent_run_id` across the run tree
-- Crawl summary output (tree view, per-run outcomes, aggregate stats)
-- CLI `inspect` support for crawl trees
+- Fan-out flags on `quarry run`: `--depth`, `--max-runs`, `--parallel`
+- In-process scheduler: bounded work queue, dedup store, concurrency executor
+- Lineage fields: `parent_run_id`, `depth` on child run envelopes
+- Summary output: runs attempted, deduplicated, failed, not-executed
+- `quarry inspect` support for fan-out lineage trees
+- Contract and guide updates
 
 ### Mini-milestones
 
-- [ ] Contract updates (CONTRACT_RUN.md lineage, CONTRACT_CLI.md command)
-- [ ] Crawl scheduler: enqueue event consumer with dedup and depth tracking
+- [ ] Contract updates (CONTRACT_EMIT.md enqueue semantics, CONTRACT_RUN.md
+      lineage fields, CONTRACT_CLI.md fan-out flags)
+- [ ] In-process scheduler: enqueue event interception, dedup, depth tracking
 - [ ] Child run spawning with concurrency limiter
-- [ ] `parent_run_id` threading through run metadata
-- [ ] `quarry crawl` CLI wiring (command, flags, config)
-- [ ] Crawl summary output and exit code semantics
-- [ ] `quarry inspect` crawl tree view
-- [ ] Tests: depth bounds, concurrency limits, dedup, partial failure
+- [ ] `parent_run_id` and `depth` threading through run metadata
+- [ ] Fan-out flag wiring in `quarry/cli/cmd/run.go`
+- [ ] Summary output and exit code semantics
+- [ ] `quarry inspect` fan-out lineage view
+- [ ] Tests: depth bounds, max-runs cap, concurrency, dedup, scheduling
+      independence from ingestion policy
 
-### Scope boundary
+### Scope Boundary
 
-Crawl mode handles bounded, discovered work graphs. It does **not** handle:
-- Priority queuing (depth-first vs breadth-first is implementation-chosen)
-- Cross-crawl dedup (don't re-scrape URLs seen in previous crawls)
-- Per-URL rate limiting beyond proxy rotation
-- Resume of interrupted crawls
+Fan-out handles bounded, discovered work. It does **not** handle:
+- Scheduling priority (depth-first vs breadth-first is implementation-chosen)
+- Cross-invocation dedup (don't re-scrape URLs seen in previous runs)
+- Per-target rate limiting beyond proxy rotation
+- Resume of interrupted fan-out
 - Conditional branching (if X then enqueue Y)
 
-These belong in external orchestrators. If crawl mode starts accumulating
+These belong in external orchestrators. If fan-out starts accumulating
 these features, it has exceeded its scope.
 
-### Design exploration
+### Open Questions
 
-See `docs/ingress-models.md` for the full analysis of ingress models
-and how crawl mode (Model B) relates to other options.
+- **`target` resolution**: Should `target` be a file path (relative to
+  CWD, relative to root script, or absolute) or a logical name resolved
+  from `--config` YAML? Must be frozen before implementation.
+- **`--parallel` default**: 1 (sequential) is safest but may surprise
+  users who expect fan-out to be concurrent by default.
+- **Proxy pool sharing**: When N child runs execute concurrently against
+  the same proxy pool, recency tracking (v0.7.0) must be pool-aware
+  across concurrent runs. The fan-out design must not preclude this.
+
+### Design Context
+
+See `docs/ingress-models.md` for the broader analysis of ingress models
+and use case taxonomy that motivated this approach.
 
 ---
 
@@ -619,8 +731,9 @@ TUI, or unrelated dependencies.
 > that already operate Temporal infrastructure and need complex DAG
 > orchestration, conditional branching, or human-in-the-loop workflows.
 > However, most Quarry users do not run Temporal, and the most common
-> gap — crawling with discovered work — is better served by `quarry crawl`
-> (v0.6.0) with zero infrastructure requirements.
+> gap — discovery-driven fan-out — is better served by derived work
+> execution via fan-out flags on `quarry run` (v0.6.0) with zero
+> infrastructure requirements.
 >
 > Temporal remains a valid future integration. When demand justifies it,
 > the module split (above) is its prerequisite.
