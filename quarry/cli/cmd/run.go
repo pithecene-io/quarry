@@ -317,6 +317,144 @@ func validateFanOutConfig(choice fanOutChoice) error {
 	return nil
 }
 
+// childFactory holds the shared configuration needed to construct and execute
+// child runs during fan-out. Each invocation of Run builds an independent
+// policy, sink, and metrics collector for the child.
+type childFactory struct {
+	policyChoice   policyChoice
+	executorPath   string
+	storage        storageChoice
+	storageDataset string
+	source         string
+	category       string
+	proxy          *types.ProxyEndpoint
+}
+
+// Run constructs and executes a single child run for the fan-out operator.
+func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer runtime.EnqueueObserver) (*runtime.RunResult, error) {
+	childMeta := &types.RunMeta{
+		RunID:   item.RunID,
+		Attempt: 1,
+	}
+
+	childCollector := metrics.NewCollector(
+		cf.policyChoice.name,
+		filepath.Base(cf.executorPath),
+		cf.storage.backend,
+		item.RunID,
+		"",
+	)
+
+	childPol, childLodeClient, childFileWriter, err := buildPolicy(
+		cf.policyChoice, cf.storage, cf.storageDataset,
+		cf.source, cf.category, item.RunID,
+		time.Now(), childCollector,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child policy: %w", err)
+	}
+	defer func() { _ = childPol.Close() }()
+
+	config := &runtime.RunConfig{
+		ExecutorPath:    cf.executorPath,
+		ScriptPath:      item.Target,
+		Job:             item.Params,
+		RunMeta:         childMeta,
+		Policy:          childPol,
+		Proxy:           cf.proxy,
+		FileWriter:      childFileWriter,
+		EnqueueObserver: observer,
+		Source:          cf.source,
+		Category:        cf.category,
+		Collector:       childCollector,
+	}
+
+	orchestrator, err := runtime.NewRunOrchestrator(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child orchestrator: %w", err)
+	}
+
+	result, err := orchestrator.Execute(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("child execution failed: %w", err)
+	}
+
+	// Persist child metrics (best effort)
+	if childLodeClient != nil {
+		metricsCtx, metricsCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if writeErr := childLodeClient.WriteMetrics(metricsCtx, childCollector.Snapshot(), time.Now()); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist child metrics for %s: %v\n", item.RunID, writeErr)
+		}
+		metricsCancel()
+	}
+
+	return result, nil
+}
+
+// runFinalizer handles post-execution concerns: metrics persistence,
+// adapter notification, and result printing. Built once per run invocation
+// and shared across fan-out and single-run paths.
+type runFinalizer struct {
+	lodeClient     lode.Client
+	collector      *metrics.Collector
+	adapter        *adapterChoice
+	storage        storageChoice
+	storageDataset string
+	source         string
+	category       string
+	policyChoice   policyChoice
+	startTime      time.Time
+	quiet          bool
+}
+
+// Finalize persists metrics, notifies the adapter, and prints results.
+// duration is computed from startTime internally.
+func (f *runFinalizer) Finalize(result *runtime.RunResult) {
+	duration := time.Since(f.startTime)
+	f.persistMetrics(duration)
+	f.notifyAdapter(result, duration)
+	f.printResults(result, duration)
+}
+
+func (f *runFinalizer) persistMetrics(duration time.Duration) {
+	if f.lodeClient == nil {
+		return
+	}
+	completedAt := f.startTime.Add(duration)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := f.lodeClient.WriteMetrics(ctx, f.collector.Snapshot(), completedAt); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", err)
+	}
+}
+
+func (f *runFinalizer) notifyAdapter(result *runtime.RunResult, duration time.Duration) {
+	if f.adapter == nil {
+		return
+	}
+	adpt, err := buildAdapter(*f.adapter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
+		return
+	}
+	defer func() { _ = adpt.Close() }()
+
+	event := buildRunCompletedEvent(result, f.storage, f.storageDataset, f.source, f.category, lode.DeriveDay(f.startTime), duration)
+	ctx, cancel := context.WithTimeout(context.Background(), f.adapter.timeout)
+	defer cancel()
+	if err := adpt.Publish(ctx, event); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
+	}
+}
+
+func (f *runFinalizer) printResults(result *runtime.RunResult, duration time.Duration) {
+	if f.quiet {
+		return
+	}
+	printRunResult(result, f.policyChoice, duration)
+	printMetrics(f.collector.Snapshot())
+}
+
 func runAction(c *cli.Context) error {
 	// Load config file if --config is provided
 	var cfg *quarryconfig.Config
@@ -488,13 +626,22 @@ func runAction(c *cli.Context) error {
 		cancel()
 	}()
 
-	// Branch: fan-out or single run
-	if fanOut.depth > 0 {
-		return runWithFanOut(ctx, c, fanOut, choice, executorPath, job, runMeta, pol, resolvedProxy, source, category, collector, lodeClient, fileWriter, storageConfig, storageDataset, adptConfig, startTime)
+	// Build finalizer (shared post-run concerns for both execution paths)
+	finalizer := &runFinalizer{
+		lodeClient:     lodeClient,
+		collector:      collector,
+		adapter:        adptConfig,
+		storage:        storageConfig,
+		storageDataset: storageDataset,
+		source:         source,
+		category:       category,
+		policyChoice:   choice,
+		startTime:      startTime,
+		quiet:          c.Bool("quiet"),
 	}
 
-	// Create run config
-	config := &runtime.RunConfig{
+	// Build root run config
+	rootConfig := &runtime.RunConfig{
 		ExecutorPath: executorPath,
 		ScriptPath:   c.String("script"),
 		Job:          job,
@@ -507,8 +654,22 @@ func runAction(c *cli.Context) error {
 		Collector:    collector,
 	}
 
+	// Branch: fan-out or single run
+	if fanOut.depth > 0 {
+		factory := &childFactory{
+			policyChoice:   choice,
+			executorPath:   executorPath,
+			storage:        storageConfig,
+			storageDataset: storageDataset,
+			source:         source,
+			category:       category,
+			proxy:          resolvedProxy,
+		}
+		return runWithFanOut(ctx, fanOut, rootConfig, factory, finalizer)
+	}
+
 	// Create orchestrator
-	orchestrator, err := runtime.NewRunOrchestrator(config)
+	orchestrator, err := runtime.NewRunOrchestrator(rootConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create orchestrator: %w", err)
 	}
@@ -518,42 +679,8 @@ func runAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("execution failed: %w", err)
 	}
-	duration := time.Since(startTime)
 
-	// Persist metrics to Lode (best effort per CONTRACT_METRICS.md)
-	// Use actual run completion time, not current wall clock
-	completedAt := startTime.Add(duration)
-	if lodeClient != nil {
-		metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if writeErr := lodeClient.WriteMetrics(metricsCtx, collector.Snapshot(), completedAt); writeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", writeErr)
-		}
-		metricsCancel()
-	}
-
-	// Notify adapter (if configured) per CONTRACT_INTEGRATION.md.
-	// Config was validated pre-execution; publish failure does NOT fail the run.
-	if adptConfig != nil {
-		adpt, err := buildAdapter(*adptConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
-		} else {
-			event := buildRunCompletedEvent(result, storageConfig, storageDataset, source, category, lode.DeriveDay(startTime), duration)
-			notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
-			if err := adpt.Publish(notifyCtx, event); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
-			}
-			notifyCancel()
-			_ = adpt.Close()
-		}
-	}
-
-	// Print result
-	if !c.Bool("quiet") {
-		printRunResult(result, choice, duration)
-		printMetrics(collector.Snapshot())
-	}
-
+	finalizer.Finalize(result)
 	return cli.Exit("", outcomeToExitCode(result.Outcome.Status))
 }
 
@@ -562,117 +689,20 @@ func runAction(c *cli.Context) error {
 // runs the root orchestrator and operator concurrently.
 func runWithFanOut(
 	ctx context.Context,
-	c *cli.Context,
 	fanOut fanOutChoice,
-	choice policyChoice,
-	executorPath string,
-	job map[string]any,
-	runMeta *types.RunMeta,
-	pol policy.Policy,
-	resolvedProxy *types.ProxyEndpoint,
-	source, category string,
-	collector *metrics.Collector,
-	lodeClient lode.Client,
-	rootFileWriter lode.FileWriter,
-	storageConfig storageChoice,
-	storageDataset string,
-	adptConfig *adapterChoice,
-	startTime time.Time,
+	rootConfig *runtime.RunConfig,
+	factory *childFactory,
+	finalizer *runFinalizer,
 ) error {
-	scriptPath := c.String("script")
-
-	// Build the child run factory closure.
-	// Each child run gets its own policy, sink, and metrics collector.
-	childRunFactory := func(ctx context.Context, item runtime.WorkItem, observer runtime.EnqueueObserver) (*runtime.RunResult, error) {
-		// Create child run metadata (new run_id, attempt 1)
-		childMeta := &types.RunMeta{
-			RunID:   item.RunID,
-			Attempt: 1,
-		}
-
-		// Resolve the child's script path (target is relative to CWD, same as --script)
-		childScript := item.Target
-
-		// Build child policy with its own storage sink
-		childCollector := metrics.NewCollector(
-			choice.name,
-			filepath.Base(executorPath),
-			storageConfig.backend,
-			item.RunID,
-			"",
-		)
-
-		childPol, childLodeClient, childFileWriter, err := buildPolicy(
-			choice, storageConfig, storageDataset,
-			source, category, item.RunID,
-			time.Now(), childCollector,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create child policy: %w", err)
-		}
-		defer func() { _ = childPol.Close() }()
-
-		config := &runtime.RunConfig{
-			ExecutorPath:    executorPath,
-			ScriptPath:      childScript,
-			Job:             item.Params,
-			RunMeta:         childMeta,
-			Policy:          childPol,
-			Proxy:           resolvedProxy,
-			FileWriter:      childFileWriter,
-			EnqueueObserver: observer,
-			Source:          source,
-			Category:        category,
-			Collector:       childCollector,
-		}
-
-		orchestrator, err := runtime.NewRunOrchestrator(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create child orchestrator: %w", err)
-		}
-
-		result, err := orchestrator.Execute(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("child execution failed: %w", err)
-		}
-
-		// Persist child metrics (best effort)
-		if childLodeClient != nil {
-			childCompletedAt := time.Now()
-			metricsCtx, metricsCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-			if writeErr := childLodeClient.WriteMetrics(metricsCtx, childCollector.Snapshot(), childCompletedAt); writeErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to persist child metrics for %s: %v\n", item.RunID, writeErr)
-			}
-			metricsCancel()
-		}
-
-		return result, nil
-	}
-
 	// Create operator
 	operator := runtime.NewOperator(runtime.FanOutConfig{
 		MaxDepth: fanOut.depth,
 		MaxRuns:  fanOut.maxRuns,
 		Parallel: fanOut.parallel,
-	}, childRunFactory)
+	}, factory.Run)
 
-	// Wire root run's observer
-	rootObserver := operator.NewObserver(0)
-
-	// Build root run config with observer
-	rootConfig := &runtime.RunConfig{
-		ExecutorPath:    executorPath,
-		ScriptPath:      scriptPath,
-		Job:             job,
-		RunMeta:         runMeta,
-		Policy:          pol,
-		Proxy:           resolvedProxy,
-		FileWriter:      rootFileWriter,
-		EnqueueObserver: rootObserver,
-		Source:          source,
-		Category:        category,
-		Collector:       collector,
-	}
+	// Wire root run's enqueue observer into the operator
+	rootConfig.EnqueueObserver = operator.NewObserver(0)
 
 	rootOrchestrator, err := runtime.NewRunOrchestrator(rootConfig)
 	if err != nil {
@@ -694,44 +724,14 @@ func runWithFanOut(
 	// Operator blocks until root is done + queue drained + workers idle.
 	operator.Run(ctx, rootDone)
 
-	// Handle root run result
 	if rootErr != nil {
 		return fmt.Errorf("execution failed: %w", rootErr)
 	}
-	duration := time.Since(startTime)
 
-	// Persist root metrics to Lode (best effort per CONTRACT_METRICS.md)
-	completedAt := startTime.Add(duration)
-	if lodeClient != nil {
-		metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if writeErr := lodeClient.WriteMetrics(metricsCtx, collector.Snapshot(), completedAt); writeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", writeErr)
-		}
-		metricsCancel()
-	}
+	finalizer.Finalize(rootResult)
 
-	// Notify adapter for root run (if configured)
-	if adptConfig != nil {
-		adpt, err := buildAdapter(*adptConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
-		} else {
-			event := buildRunCompletedEvent(rootResult, storageConfig, storageDataset, source, category, lode.DeriveDay(startTime), duration)
-			notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
-			if err := adpt.Publish(notifyCtx, event); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
-			}
-			notifyCancel()
-			_ = adpt.Close()
-		}
-	}
-
-	// Print root result
-	if !c.Bool("quiet") {
-		printRunResult(rootResult, choice, duration)
-		printMetrics(collector.Snapshot())
-
-		// Print fan-out summary
+	// Print fan-out summary
+	if !finalizer.quiet {
 		fanOutResult := operator.Results()
 		runtime.PrintFanOutSummary(fanOutResult)
 	}
