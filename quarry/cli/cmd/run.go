@@ -210,6 +210,21 @@ ADVANCED:
 				Name:  "storage-s3-path-style",
 				Usage: "Force path-style addressing for S3 (required by R2, MinIO)",
 			},
+			// Fan-out flags
+			&cli.IntFlag{
+				Name:  "depth",
+				Usage: "Maximum fan-out recursion depth (0 = disabled)",
+				Value: 0,
+			},
+			&cli.IntFlag{
+				Name:  "max-runs",
+				Usage: "Maximum total child runs (required when --depth > 0)",
+			},
+			&cli.IntFlag{
+				Name:  "parallel",
+				Usage: "Maximum concurrent child runs",
+				Value: 1,
+			},
 			// Adapter flags (event-bus notification)
 			&cli.StringFlag{
 				Name:  "adapter",
@@ -277,6 +292,29 @@ type adapterChoice struct {
 	headers     map[string]string
 	timeout     time.Duration
 	retries     int
+}
+
+// fanOutChoice holds parsed fan-out configuration.
+type fanOutChoice struct {
+	depth    int
+	maxRuns  int
+	parallel int
+}
+
+func validateFanOutConfig(choice fanOutChoice) error {
+	if choice.depth < 0 {
+		return fmt.Errorf("--depth must be >= 0, got %d", choice.depth)
+	}
+	if choice.depth > 0 && choice.maxRuns == 0 {
+		return fmt.Errorf("--max-runs is required when --depth > 0 (safety rail to prevent unbounded fan-out)")
+	}
+	if choice.maxRuns < 0 {
+		return fmt.Errorf("--max-runs must be >= 0, got %d", choice.maxRuns)
+	}
+	if choice.parallel < 1 {
+		return fmt.Errorf("--parallel must be >= 1, got %d", choice.parallel)
+	}
+	return nil
 }
 
 func runAction(c *cli.Context) error {
@@ -366,6 +404,19 @@ func runAction(c *cli.Context) error {
 		adptConfig = &ac
 	}
 
+	// Parse and validate fan-out config
+	fanOut := fanOutChoice{
+		depth:    c.Int("depth"),
+		maxRuns:  c.Int("max-runs"),
+		parallel: c.Int("parallel"),
+	}
+	if err := validateFanOutConfig(fanOut); err != nil {
+		return cli.Exit(fmt.Sprintf("invalid fan-out config: %v", err), exitConfigError)
+	}
+	if fanOut.depth == 0 && c.IsSet("parallel") && fanOut.parallel > 1 {
+		fmt.Fprintf(os.Stderr, "Warning: --parallel > 1 has no effect without --depth > 0\n")
+	}
+
 	// Resolve executor path (needed for metrics dimension before policy build)
 	executorPath, err := resolveExecutor(executor)
 	if err != nil {
@@ -426,6 +477,22 @@ func runAction(c *cli.Context) error {
 		resolvedProxy = endpoint
 	}
 
+	// Set up context with signal handling
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
+	// Branch: fan-out or single run
+	if fanOut.depth > 0 {
+		return runWithFanOut(ctx, c, fanOut, choice, executorPath, job, runMeta, pol, resolvedProxy, source, category, collector, lodeClient, storageConfig, storageDataset, adptConfig, startTime)
+	}
+
 	// Create run config
 	config := &runtime.RunConfig{
 		ExecutorPath: executorPath,
@@ -444,17 +511,6 @@ func runAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create orchestrator: %w", err)
 	}
-
-	// Set up context with signal handling
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
 
 	// Execute run (startTime was set earlier for Lode day derivation)
 	result, err := orchestrator.Execute(ctx)
@@ -498,6 +554,189 @@ func runAction(c *cli.Context) error {
 	}
 
 	return cli.Exit("", outcomeToExitCode(result.Outcome.Status))
+}
+
+// runWithFanOut executes the root run with fan-out scheduling enabled.
+// It creates an Operator, wires the root run's EnqueueObserver, and
+// runs the root orchestrator and operator concurrently.
+func runWithFanOut(
+	ctx context.Context,
+	c *cli.Context,
+	fanOut fanOutChoice,
+	choice policyChoice,
+	executorPath string,
+	job map[string]any,
+	runMeta *types.RunMeta,
+	pol policy.Policy,
+	resolvedProxy *types.ProxyEndpoint,
+	source, category string,
+	collector *metrics.Collector,
+	lodeClient lode.Client,
+	storageConfig storageChoice,
+	storageDataset string,
+	adptConfig *adapterChoice,
+	startTime time.Time,
+) error {
+	scriptPath := c.String("script")
+
+	// Build the child run factory closure.
+	// Each child run gets its own policy, sink, and metrics collector.
+	childRunFactory := func(ctx context.Context, item runtime.WorkItem, observer runtime.EnqueueObserver) (*runtime.RunResult, error) {
+		// Create child run metadata (new run_id, attempt 1)
+		childMeta := &types.RunMeta{
+			RunID:   item.RunID,
+			Attempt: 1,
+		}
+
+		// Resolve the child's script path (target is relative to CWD, same as --script)
+		childScript := item.Target
+
+		// Build child policy with its own storage sink
+		childCollector := metrics.NewCollector(
+			choice.name,
+			filepath.Base(executorPath),
+			storageConfig.backend,
+			item.RunID,
+			"",
+		)
+
+		childPol, childLodeClient, err := buildPolicy(
+			choice, storageConfig, storageDataset,
+			source, category, item.RunID,
+			time.Now(), childCollector,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create child policy: %w", err)
+		}
+		defer func() { _ = childPol.Close() }()
+
+		// FileWriter is intentionally nil for child runs. lode.Client does not
+		// satisfy lode.FileWriter; plumbing the concrete *LodeClient through
+		// requires a broader refactor deferred to a follow-up.
+		config := &runtime.RunConfig{
+			ExecutorPath:    executorPath,
+			ScriptPath:      childScript,
+			Job:             item.Params,
+			RunMeta:         childMeta,
+			Policy:          childPol,
+			Proxy:           resolvedProxy,
+			EnqueueObserver: observer,
+			Source:          source,
+			Category:        category,
+			Collector:       childCollector,
+		}
+
+		orchestrator, err := runtime.NewRunOrchestrator(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create child orchestrator: %w", err)
+		}
+
+		result, err := orchestrator.Execute(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("child execution failed: %w", err)
+		}
+
+		// Persist child metrics (best effort)
+		if childLodeClient != nil {
+			childCompletedAt := time.Now()
+			metricsCtx, metricsCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			if writeErr := childLodeClient.WriteMetrics(metricsCtx, childCollector.Snapshot(), childCompletedAt); writeErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to persist child metrics for %s: %v\n", item.RunID, writeErr)
+			}
+			metricsCancel()
+		}
+
+		return result, nil
+	}
+
+	// Create operator
+	operator := runtime.NewOperator(runtime.FanOutConfig{
+		MaxDepth: fanOut.depth,
+		MaxRuns:  fanOut.maxRuns,
+		Parallel: fanOut.parallel,
+	}, childRunFactory)
+
+	// Wire root run's observer
+	rootObserver := operator.NewObserver(0)
+
+	// Build root run config with observer
+	rootConfig := &runtime.RunConfig{
+		ExecutorPath:    executorPath,
+		ScriptPath:      scriptPath,
+		Job:             job,
+		RunMeta:         runMeta,
+		Policy:          pol,
+		Proxy:           resolvedProxy,
+		EnqueueObserver: rootObserver,
+		Source:          source,
+		Category:        category,
+		Collector:       collector,
+	}
+
+	rootOrchestrator, err := runtime.NewRunOrchestrator(rootConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create orchestrator: %w", err)
+	}
+
+	// Run root orchestrator and operator concurrently.
+	// rootDone signals to the operator that the root run has finished
+	// and no more enqueue events will arrive from it.
+	rootDone := make(chan struct{})
+	var rootResult *runtime.RunResult
+	var rootErr error
+
+	go func() {
+		rootResult, rootErr = rootOrchestrator.Execute(ctx)
+		close(rootDone)
+	}()
+
+	// Operator blocks until root is done + queue drained + workers idle.
+	operator.Run(ctx, rootDone)
+
+	// Handle root run result
+	if rootErr != nil {
+		return fmt.Errorf("execution failed: %w", rootErr)
+	}
+	duration := time.Since(startTime)
+
+	// Persist root metrics to Lode (best effort per CONTRACT_METRICS.md)
+	completedAt := startTime.Add(duration)
+	if lodeClient != nil {
+		metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if writeErr := lodeClient.WriteMetrics(metricsCtx, collector.Snapshot(), completedAt); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", writeErr)
+		}
+		metricsCancel()
+	}
+
+	// Notify adapter for root run (if configured)
+	if adptConfig != nil {
+		adpt, err := buildAdapter(*adptConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
+		} else {
+			event := buildRunCompletedEvent(rootResult, storageConfig, storageDataset, source, category, lode.DeriveDay(startTime), duration)
+			notifyCtx, notifyCancel := context.WithTimeout(context.Background(), adptConfig.timeout)
+			if err := adpt.Publish(notifyCtx, event); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
+			}
+			notifyCancel()
+			_ = adpt.Close()
+		}
+	}
+
+	// Print root result
+	if !c.Bool("quiet") {
+		printRunResult(rootResult, choice, duration)
+		printMetrics(collector.Snapshot())
+
+		// Print fan-out summary
+		fanOutResult := operator.Results()
+		runtime.PrintFanOutSummary(fanOutResult)
+	}
+
+	// Exit code is determined by root run outcome only
+	return cli.Exit("", outcomeToExitCode(rootResult.Outcome.Status))
 }
 
 // resolveString returns the CLI flag value if explicitly set, else the config

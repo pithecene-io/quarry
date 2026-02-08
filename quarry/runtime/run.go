@@ -45,6 +45,9 @@ type RunConfig struct {
 	// FileWriter handles sidecar file writes via Lode Store.
 	// If nil, file_write frames are logged and ignored.
 	FileWriter lode.FileWriter
+	// EnqueueObserver is an optional callback for fan-out scheduling.
+	// When set, called synchronously on each enqueue event before policy dispatch.
+	EnqueueObserver EnqueueObserver
 	// Source is the partition key for origin system/provider.
 	Source string
 	// Category is the partition key for logical data type (default: "default").
@@ -170,6 +173,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		r.logger,
 		r.config.RunMeta,
 		r.config.Collector,
+		r.config.EnqueueObserver,
 	)
 
 	// Run ingestion in goroutine
