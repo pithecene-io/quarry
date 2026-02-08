@@ -46,6 +46,11 @@ _No known issues in v0.4.1._
 | Go | 1.25.6 | Exact version |
 | Node.js | 23+ | Native TS support |
 | Node.js | 22.6+ | Requires `--experimental-strip-types` |
+
+### Required Tooling
+
+| Tool | Version | Notes |
+|------|---------|-------|
 | pnpm | 10.28.2 | Exact version |
 
 ---
