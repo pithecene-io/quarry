@@ -152,6 +152,25 @@ See CONTRACT_INTEGRATION.md for semantics.
 Adapter invocation is best-effort. Failures are logged to stderr.
 The run exit code is determined by execution outcome, never by adapter status.
 
+### Fan-Out Flags (v0.6.0+)
+
+`quarry run` supports optional derived work execution via enqueue events.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--depth` | int | `0` | Max fan-out recursion depth (0 = disabled) |
+| `--max-runs` | int | | Total child run cap (required when `--depth > 0`) |
+| `--parallel` | int | `1` | Max concurrent child runs |
+
+Semantics:
+- `--depth 0` (default): enqueue events are advisory only; no child runs.
+- `--depth > 0`: enqueue events trigger child runs up to the specified depth.
+- `--max-runs` is mandatory when `--depth > 0` (safety rail).
+- `--parallel > 1` without `--depth > 0` emits a stderr warning (no-op).
+- Deduplication: identical `(target, params)` pairs are executed once.
+- Exit code is determined by root run outcome only.
+- Child run results appear in the fan-out summary printed to stdout.
+
 ### Config File (v0.4.x+)
 
 `quarry run` supports an optional `--config <path>` flag that loads a YAML

@@ -49,6 +49,18 @@ When applicable, the following fields must be set:
   - Incremented by 1 for each retry run.
   - A run with `attempt: 1` and no `parent_run_id` is an initial run.
 
+### Child Runs (v0.6.0+)
+
+When fan-out is active (`--depth > 0`), the runtime may create child runs
+in response to `enqueue` events. Child runs have:
+
+- A unique `run_id` (distinct from the parent).
+- `attempt: 1` (child runs are first attempts of derived work).
+- Depth tracked internally by the fan-out operator (not in the envelope).
+
+Child runs are **not** retries. They represent derived work from a different
+script, not a re-execution of the same job.
+
 ---
 
 ## Idempotency Expectations

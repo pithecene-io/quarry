@@ -1,19 +1,19 @@
-# Support Posture — Quarry v0.5.0
+# Support Posture — Quarry v0.6.0
 
-This document defines support expectations for Quarry v0.5.0.
+This document defines support expectations for Quarry v0.6.0.
 
 ---
 
 ## Maturity Level
 
-**v0.5.0 is an early release.** APIs and behaviors may change in subsequent
+**v0.6.0 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
 
 ---
 
 ## Known Issues
 
-_No known issues in v0.5.0._
+_No known issues in v0.6.0._
 
 ---
 
@@ -30,6 +30,7 @@ _No known issues in v0.5.0._
 | Filesystem storage backend | Supported |
 | S3 storage backend | Experimental |
 | SDK emit API | Supported |
+| Fan-out (`--depth`) | Supported |
 
 ### Supported Platforms
 
@@ -128,12 +129,12 @@ Quarry uses lockstep versioning:
 Check versions:
 ```bash
 quarry version
-# 0.4.1 (commit: ...)
+# 0.6.0 (commit: ...)
 ```
 
 ---
 
 ## No Warranty
 
-Quarry v0.5.0 is provided "as is" without warranty of any kind.
+Quarry v0.6.0 is provided "as is" without warranty of any kind.
 See LICENSE for details.

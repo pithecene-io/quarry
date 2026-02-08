@@ -51,6 +51,19 @@ intent but carry no delivery or execution guarantee.
 
 Scripts should not depend on advisory events being acted upon.
 
+### Fan-Out Activation (v0.6.0+)
+
+When `quarry run` is invoked with `--depth <n>` (where n > 0), the runtime
+**acts on** enqueue events by executing them as child runs:
+
+- `target` names the script to execute (resolved relative to CWD).
+- `params` becomes the child run's job payload.
+- Identical `(target, params)` pairs are deduplicated.
+- Child runs can themselves emit enqueue events (up to the depth limit).
+
+Without `--depth`, enqueue remains purely advisory. The emit contract is
+unchanged; the runtime's interpretation depends on CLI flags.
+
 ---
 
 ## Convenience Log Methods

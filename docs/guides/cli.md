@@ -131,6 +131,11 @@ Adapter flags (event-bus notification):
 - `--adapter-timeout <duration>` (per-request timeout, default: `10s`)
 - `--adapter-retries <n>` (retry attempts with exponential backoff, default: `3`)
 
+Fan-out flags (derived work execution):
+- `--depth <n>` (maximum recursion depth; 0 = disabled, default: `0`)
+- `--max-runs <n>` (total child run cap; required when `--depth > 0`)
+- `--parallel <n>` (concurrent child runs, default: `1`)
+
 Advanced flags:
 - `--executor <path>` (auto-resolved by default; override for troubleshooting)
 
@@ -180,6 +185,21 @@ quarry run \
   --storage-endpoint https://ACCOUNT_ID.r2.cloudflarestorage.com \
   --storage-s3-path-style \
   --job '{"url":"https://example.com"}'
+```
+
+Fan-out example (derived work execution):
+
+```
+quarry run \
+  --script ./listing.ts \
+  --run-id root-001 \
+  --source demo \
+  --storage-backend fs \
+  --storage-path ./quarry-data \
+  --job '{"start_url":"https://example.com/listings"}' \
+  --depth 1 \
+  --max-runs 50 \
+  --parallel 4
 ```
 
 #### Job Payload Contract
