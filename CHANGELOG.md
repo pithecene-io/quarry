@@ -13,6 +13,14 @@ _No unreleased changes._
 
 ---
 
+## [0.5.1] - 2026-02-08
+
+### Fixed
+
+- **Release**: Published npm packages on GitHub Packages now include `dist/` directory — previous releases (v0.4.1, v0.5.0) shipped empty tarballs with no type declarations or runtime code (#110, #111)
+
+---
+
 ## [0.5.0] - 2026-02-07
 
 ### Added
@@ -271,6 +279,7 @@ _No unreleased changes._
 
 ---
 
+[0.5.1]: https://github.com/justapithecus/quarry/releases/tag/v0.5.1
 [0.5.0]: https://github.com/justapithecus/quarry/releases/tag/v0.5.0
 [0.4.1]: https://github.com/justapithecus/quarry/releases/tag/v0.4.1
 [0.4.0]: https://github.com/justapithecus/quarry/releases/tag/v0.4.0
