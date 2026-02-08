@@ -368,7 +368,6 @@ to poll Lode or wire external plumbing.
 - [x] CONTRACT_INTEGRATION.md and CONTRACT_CLI.md updated
 
 ### Future adapters (separate PRs)
-- Temporal
 - NATS
 - SNS
 
@@ -392,7 +391,7 @@ Outbox records would live at:
 datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
 ```
 
-#### Relationship to Temporal adapter
+#### Relationship to Temporal orchestration
 
 The outbox pattern applies only to standalone/CLI usage where no external
 orchestrator provides delivery guarantees. When Quarry runs as a Temporal
@@ -407,6 +406,8 @@ Temporal eliminates the need for the outbox in orchestrated deployments,
 but standalone CLI usage remains a first-class paradigm. The outbox
 pattern is still relevant for users running Quarry directly (cron, CI,
 shell scripts) without an external orchestrator.
+
+See `docs/guides/temporal.md` for the full Temporal integration design.
 
 #### Open questions
 - Retry ownership: CLI command, background process, or next-run piggyback?
@@ -467,13 +468,108 @@ Phase 2 is deferred until Phase 1 is validated in production.
 
 ---
 
-## Post-v0.5.0 — Additional Event Bus Adapters (Staggered)
+## Module Split — Multi-Module Restructure
+
+### Goal
+
+Split the `quarry/` Go module into independent modules so that
+`quarry-temporal/` (and future integrations) can depend on core runtime
+types without pulling in CLI, TUI, or unrelated dependencies.
+
+### Agreed Layout
+
+| Module | Go Module Path | Contains |
+|--------|---------------|----------|
+| `quarry-core/` | `github.com/justapithecus/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
+| `quarry-cli/` | `github.com/justapithecus/quarry-cli` | CLI commands, TUI, config, reader |
+| `quarry-temporal/` | `github.com/justapithecus/quarry-temporal` | activity, workflow, worker binary |
+| `quarry-sdk/` | (npm: `@aspect/quarry-sdk`) | TypeScript SDK (rename from `sdk/`) |
+| `quarry-executor/` | (npm: `@aspect/quarry-executor`) | Node executor (rename from `executor-node/`) |
+
+### Dependency Graph
+
+```
+quarry-cli/      -> quarry-core/
+quarry-temporal/  -> quarry-core/, go.temporal.io/sdk
+quarry-core/      (no quarry-* dependencies)
+```
+
+### Prerequisites
+
+- [x] Decouple lode from cli/reader dependency (PR #113)
+- [ ] Zero cli/tui imports from core packages
+
+### Sequencing
+
+1. Extract `quarry-core/` — move types, runtime, policy, lode, adapter,
+   proxy, metrics, log into standalone module.
+2. Extract `quarry-cli/` — CLI, TUI, config, reader depend on
+   `quarry-core/`.
+3. Create `quarry-temporal/` — new module depending on `quarry-core/`
+   and `go.temporal.io/sdk`.
+4. Rename `sdk/` → `quarry-sdk/`, `executor-node/` → `quarry-executor/`
+   — update package names and CI references.
+5. Update CI — build matrix, release workflows, go.work for local dev.
+
+### Mini-milestones
+
+- [ ] Audit: identify all cross-package imports that block extraction
+- [ ] Extract `quarry-core/` module with passing tests
+- [ ] Extract `quarry-cli/` module with passing tests
+- [ ] Create `quarry-temporal/` module (empty scaffold)
+- [ ] Rename SDK and executor packages
+- [ ] CI builds all modules independently
+
+---
+
+## Temporal Orchestration Integration
+
+### Goal
+
+Enable Quarry to run as a Temporal activity, with workflow-level retries,
+lineage tracking, and durable execution guarantees.
+
+### Prerequisites
+
+- [ ] Module split complete (`quarry-core/` extracted)
+- [ ] `quarry-temporal/` module created
+
+### Deliverables
+
+- Activity wrapper: thin in-process wrapper calling
+  `runtime.NewRunOrchestrator(config).Execute(ctx)`
+- Heartbeat goroutine: concurrent liveness reporting (30s interval)
+- Outcome mapping: `OutcomeStatus` → Temporal error semantics per
+  `CONTRACT_INTEGRATION.md`
+- Reference workflow: `QuarryExtractionWorkflow` with lineage-aware
+  retry logic (new `run_id` per attempt, `parent_run_id` threading)
+- Worker binary: standalone Temporal worker for `quarry-temporal/`
+- Batch patterns: parallel activities for small batches, child workflows
+  for large batches (>500 runs)
+
+### Mini-milestones
+
+- [ ] Activity wrapper with outcome mapping
+- [ ] Heartbeat goroutine with cancellation propagation
+- [ ] Reference workflow with lineage-aware retries
+- [ ] Worker binary and registration
+- [ ] Batch workflow patterns (parallel + child workflow)
+- [ ] Integration tests with Temporal test framework
+
+See `docs/guides/temporal.md` for detailed design and pseudocode.
+
+---
+
+## Post-v0.5.0 — Additional Notification Adapters (Staggered)
 
 Order of support:
 - ~~Redis Pub/Sub~~ (shipped in v0.5.0)
-- Temporal.io
 - NATS
 - SNS/SQS
+
+> Temporal is an orchestration integration, not a notification adapter.
+> See [Temporal Orchestration Integration](#temporal-orchestration-integration)
+> and `docs/guides/temporal.md`.
 
 Principles:
 - Integrations must not change contracts.

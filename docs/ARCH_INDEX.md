@@ -37,6 +37,7 @@ User-facing guides (informational).
 - `guides/configuration.md` — consolidated configuration reference (flags, env vars, config files)
 - `guides/proxy.md` — user-facing proxy guide
 - `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
+- `guides/temporal.md` — Temporal orchestration integration guide
 
 ### docs/contracts/
 
