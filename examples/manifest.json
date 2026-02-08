@@ -61,6 +61,23 @@
         "terminal": "run_error",
         "exit_code": 1
       }
+    },
+    {
+      "name": "fan-out-chain",
+      "script": "fan-out-chain/listing.ts",
+      "description": "Fan-out derived work execution (listing → detail)",
+      "fan_out": {
+        "depth": 1,
+        "max_runs": 10,
+        "parallel": 3
+      },
+      "expected": {
+        "events": {
+          "enqueue": 3,
+          "item": 3
+        },
+        "terminal": "run_complete"
+      }
     }
   ]
 }
