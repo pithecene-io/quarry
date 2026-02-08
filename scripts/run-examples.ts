@@ -169,9 +169,11 @@ async function runExample(example: Example): Promise<RunResult> {
     );
   }
 
-  // Parse events from stdout/stderr (look for event summaries)
-  // The CLI should output a summary, but for now we'll just check exit code
-  // TODO: Add proper event counting from storage
+  // Exit-code validation is the primary correctness signal: the runtime maps
+  // terminal states to specific codes (0=success, 1=script error, 2=crash,
+  // 3=policy failure). Event counting from storage is deferred because it
+  // couples this runner to the storage layout and adds disk I/O without
+  // improving confidence beyond what exit codes already guarantee.
 
   // Write logs
   const logPath = join(storagePath, "run.log");

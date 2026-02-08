@@ -38,6 +38,59 @@ sequence numbers and does not reorder types.
 
 ---
 
+## Advisory Events
+
+The `enqueue` and `rotateProxy` emit methods are **advisory**. They express
+intent but carry no delivery or execution guarantee.
+
+- `emit.enqueue({ target, params })` — suggests additional work to the
+  runtime. The runtime may ignore it, deduplicate it, or defer it.
+- `emit.rotateProxy({ reason? })` — hints that the current proxy should be
+  rotated. The runtime applies rotation only if a proxy pool is configured
+  and the strategy supports mid-run changes.
+
+Scripts should not depend on advisory events being acted upon.
+
+---
+
+## Convenience Log Methods
+
+`emit.debug()`, `emit.info()`, `emit.warn()`, and `emit.error()` are
+shortcuts for `emit.log()` with a preset level:
+
+```typescript
+await emit.info('page loaded', { url })
+// equivalent to:
+await emit.log({ level: 'info', message: 'page loaded', fields: { url } })
+```
+
+All four methods accept `(message: string, fields?: Record<string, unknown>)`.
+
+---
+
+## Sidecar File Uploads
+
+For files that don't fit the `emit.artifact()` chunked-streaming model,
+scripts can write directly to storage via `ctx.storage.put()`:
+
+```typescript
+await ctx.storage.put({
+  filename: 'report.json',
+  content_type: 'application/json',
+  data: Buffer.from(JSON.stringify(report))
+})
+```
+
+Constraints:
+- Maximum file size: **8 MiB**
+- Filename must be flat (no path separators, no `..`)
+- Files land under the run's Hive-partitioned `files/` prefix
+
+Use `emit.artifact()` for larger payloads or when chunk-level progress
+tracking is needed.
+
+---
+
 ## Versioning Notes
 
 The emit envelope includes a contract version string. Contract changes are

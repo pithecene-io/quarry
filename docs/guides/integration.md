@@ -118,7 +118,7 @@ run exits with its normal outcome code.
 
 ```json
 {
-  "contract_version": "0.4.0",
+  "contract_version": "0.5.0",
   "event_type": "run_completed",
   "run_id": "run-001",
   "source": "my-source",

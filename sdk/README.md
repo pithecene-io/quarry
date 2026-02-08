@@ -91,6 +91,17 @@ All methods are async and may block on backpressure.
 | `runError({ error_type, message, stack? })` | Signal fatal error |
 | `runComplete({ summary? })` | Signal completion |
 
+### StorageAPI
+
+Sidecar file upload interface available via `ctx.storage`.
+
+| Method | Description |
+|--------|-------------|
+| `put({ filename, content_type, data })` | Write a file to Hive-partitioned storage (max **8 MiB**, flat filename only) |
+
+Files land under the run's `files/` prefix. Use `emit.artifact()` for larger
+payloads or when chunk-level progress tracking is needed.
+
 ### Lifecycle Hooks
 
 Export these from your script module for lifecycle control:

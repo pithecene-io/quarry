@@ -1,5 +1,7 @@
 # Quarry
 
+[![CI](https://github.com/justapithecus/quarry/actions/workflows/ci.yml/badge.svg)](https://github.com/justapithecus/quarry/actions/workflows/ci.yml)
+
 **A CLI-first web extraction runtime for browser-driven crawling and durable ingestion**
 
 Quarry is a web extraction runtime for imperative, browser-backed scraping workflows. It is designed for adversarial sites, bespoke extraction logic, and long-lived ETL pipelines where correctness, observability, and durability matter more than convenience abstractions.
@@ -28,29 +30,15 @@ See [PUBLIC_API.md](PUBLIC_API.md) for full setup and usage guide.
 
 ## What Quarry Is
 
-Quarry is:
-
 - A **runtime**, not a framework
 - **CLI-first**, not embedded
 - Designed for **imperative Puppeteer scripts**
 - Explicit about **ordering, backpressure, and failure**
 - Agnostic to storage, retries, scheduling, and downstream processing
+- **Not** a crawling DSL or workflow orchestrator
+- **Not** a SaaS scraper or low-code pipeline
 
-Quarry’s responsibility ends at **observing and emitting what happened**.
-
----
-
-## What Quarry Is Not
-
-Quarry is **not**:
-
-- A crawling DSL
-- A workflow orchestrator
-- A distributed task scheduler
-- A SaaS scraper or low-code pipeline
-- A storage engine
-
-Those concerns are intentionally left to other layers.
+Quarry's responsibility ends at **observing and emitting what happened**.
 
 ---
 
@@ -76,11 +64,9 @@ Persistence decides what survives.
 
 ---
 
-## Using Quarry in a Larger Pipeline
+## Pipeline Composition
 
-Quarry is designed to be composed **around**, not extended **from**.
-
-A typical pipeline might look like:
+Quarry is designed to be composed **around**, not extended **from**:
 
 ```bash
 # Extract
@@ -108,7 +94,7 @@ Quarry owns **only** the extraction step.
 
 ---
 
-## Quarry Scripts
+## Quick Example
 
 Quarry scripts are **freestanding programs**, not libraries.
 
@@ -147,72 +133,30 @@ Scripts are imperative, explicit, and boring by design.
 
 ---
 
-## Emission Model
+## Key Concepts
 
-Scripts do not return values.
-
-All output flows through `emit.*`:
-
-- `emit.item(...)` — structured records
-- `emit.artifact(...)` — binary artifacts (screenshots, files)
-- `emit.checkpoint(...)` — progress markers
-- `emit.log(...)` — structured logs
-- `emit.runError(...)` — terminal failure
-- `emit.runComplete(...)` — successful completion
-
-Emission is:
-- **ordered**
-- **append-only**
-- **backpressure-aware**
-- **observable**
-
----
-
-## Backpressure and Policies
-
-Quarry does not hide backpressure.
-
-If downstream ingestion is slow, `emit.*` **blocks**.
-
-Ingestion behavior is controlled via **policies**:
-
-- **Strict** — synchronous writes, no loss
-- **Buffered** — bounded buffering, explicit drops allowed
-
-Scripts are policy-agnostic.
-
----
-
-## Durability and Lode
-
-Quarry does not persist data itself.
-
-It is commonly paired with **Lode**, which provides:
-- append-only object storage
-- partitioned datasets
-- recovery and replay
-- lineage visibility
-
-Quarry guarantees consistent emission semantics so that Lode can remain simple.
-
----
-
-## Design Principles
-
-- **Contracts before code**
-- **No silent loss**
-- **No hidden retries**
-- **No framework magic**
-- **Explicit failure boundaries**
-
-If a behavior matters, it is documented and observable.
+- **Emit API** — all script output flows through `emit.*` → [docs/guides/emit.md](docs/guides/emit.md)
+- **Policies** — strict or buffered ingestion control → [docs/guides/policy.md](docs/guides/policy.md)
+- **Storage** — FS and S3 backends via Lode → [docs/guides/lode.md](docs/guides/lode.md)
+- **Proxies** — pool-based rotation with multiple strategies → [docs/guides/proxy.md](docs/guides/proxy.md)
+- **Streaming** — chunked artifacts with backpressure → [docs/guides/streaming.md](docs/guides/streaming.md)
+- **Configuration** — YAML project defaults via `--config` → [docs/guides/cli.md](docs/guides/cli.md)
+- **Integration** — webhook adapter for downstream triggers → [docs/guides/integration.md](docs/guides/integration.md)
+- **Run Lifecycle** — terminal states and exit codes → [docs/guides/run.md](docs/guides/run.md)
 
 ---
 
 ## Documentation
 
-User-facing guides live in [docs/guides/](docs/guides/) for a deeper dive into concepts,
-configuration, and usage.
+| Resource | Path |
+|----------|------|
+| Guides | [docs/guides/](docs/guides/) |
+| Contracts | [docs/contracts/](docs/contracts/) |
+| Public API | [PUBLIC_API.md](PUBLIC_API.md) |
+| SDK | [sdk/README.md](sdk/README.md) |
+| Examples | [examples/](examples/) |
+| Support | [SUPPORT.md](SUPPORT.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
 
 ---
 
@@ -220,9 +164,9 @@ configuration, and usage.
 
 Quarry is under active development.
 
-- Contracts are frozen
-- SDK surface is stabilizing
-- Executor and runtime are evolving
+- Contracts frozen, SDK stable
+- FS storage supported, S3 experimental
+- Platforms: linux/darwin, x64/arm64
 
 Breaking changes are gated by contract versioning.
 
