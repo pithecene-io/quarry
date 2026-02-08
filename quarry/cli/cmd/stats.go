@@ -177,7 +177,7 @@ func statsMetricsAction(c *cli.Context) error {
 			return fmt.Errorf("failed to read metrics from Lode: %w", err)
 		}
 
-		parsed, err := lode.ParseMetricsRecord(record)
+		parsed, err := reader.ParseMetricsRecord(record)
 		if err != nil {
 			return fmt.Errorf("failed to parse metrics record: %w", err)
 		}

@@ -2,7 +2,6 @@ package lode
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +9,20 @@ import (
 
 	"github.com/justapithecus/quarry/metrics"
 )
+
+// toInt64 converts a value to int64 for test assertions on raw map fields.
+func toInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	default:
+		return 0
+	}
+}
 
 // sharedFactory returns a StoreFactory that always returns the given store.
 // This allows write and read datasets to share the same in-memory state.
@@ -67,53 +80,45 @@ func TestQueryLatestMetrics_WriteAndRead(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	// Verify round-trip fidelity
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	// Verify round-trip fidelity on raw map fields
+	if v := toInt64(record["runs_started_total"]); v != 1 {
+		t.Errorf("runs_started_total = %d, want 1", v)
 	}
-
-	if parsed.RunsStarted != 1 {
-		t.Errorf("RunsStarted = %d, want 1", parsed.RunsStarted)
+	if v := toInt64(record["runs_completed_total"]); v != 1 {
+		t.Errorf("runs_completed_total = %d, want 1", v)
 	}
-	if parsed.RunsCompleted != 1 {
-		t.Errorf("RunsCompleted = %d, want 1", parsed.RunsCompleted)
+	if v := toInt64(record["events_received_total"]); v != 42 {
+		t.Errorf("events_received_total = %d, want 42", v)
 	}
-	if parsed.EventsReceived != 42 {
-		t.Errorf("EventsReceived = %d, want 42", parsed.EventsReceived)
+	if v := toInt64(record["events_persisted_total"]); v != 40 {
+		t.Errorf("events_persisted_total = %d, want 40", v)
 	}
-	if parsed.EventsPersisted != 40 {
-		t.Errorf("EventsPersisted = %d, want 40", parsed.EventsPersisted)
+	if v := toInt64(record["events_dropped_total"]); v != 2 {
+		t.Errorf("events_dropped_total = %d, want 2", v)
 	}
-	if parsed.EventsDropped != 2 {
-		t.Errorf("EventsDropped = %d, want 2", parsed.EventsDropped)
+	if v := toInt64(record["executor_launch_success_total"]); v != 1 {
+		t.Errorf("executor_launch_success_total = %d, want 1", v)
 	}
-	if parsed.ExecutorLaunchSuccess != 1 {
-		t.Errorf("ExecutorLaunchSuccess = %d, want 1", parsed.ExecutorLaunchSuccess)
+	if v := toInt64(record["lode_write_success_total"]); v != 10 {
+		t.Errorf("lode_write_success_total = %d, want 10", v)
 	}
-	if parsed.LodeWriteSuccess != 10 {
-		t.Errorf("LodeWriteSuccess = %d, want 10", parsed.LodeWriteSuccess)
+	if v := toString(record["policy"]); v != "strict" {
+		t.Errorf("policy = %q, want %q", v, "strict")
 	}
-	if parsed.Policy != "strict" {
-		t.Errorf("Policy = %q, want %q", parsed.Policy, "strict")
+	if v := toString(record["executor"]); v != "executor.js" {
+		t.Errorf("executor = %q, want %q", v, "executor.js")
 	}
-	if parsed.Executor != "executor.js" {
-		t.Errorf("Executor = %q, want %q", parsed.Executor, "executor.js")
+	if v := toString(record["storage_backend"]); v != "fs" {
+		t.Errorf("storage_backend = %q, want %q", v, "fs")
 	}
-	if parsed.StorageBackend != "fs" {
-		t.Errorf("StorageBackend = %q, want %q", parsed.StorageBackend, "fs")
+	if v := toString(record["run_id"]); v != "run-001" {
+		t.Errorf("run_id = %q, want %q", v, "run-001")
 	}
-	if parsed.RunID != "run-001" {
-		t.Errorf("RunID = %q, want %q", parsed.RunID, "run-001")
+	if v := toString(record["job_id"]); v != "job-xyz" {
+		t.Errorf("job_id = %q, want %q", v, "job-xyz")
 	}
-	if parsed.JobID != "job-xyz" {
-		t.Errorf("JobID = %q, want %q", parsed.JobID, "job-xyz")
-	}
-	if parsed.DroppedByType == nil {
-		t.Fatal("DroppedByType should not be nil")
-	}
-	if parsed.DroppedByType["debug"] != 2 {
-		t.Errorf("DroppedByType[debug] = %d, want 2", parsed.DroppedByType["debug"])
+	if record["dropped_by_type"] == nil {
+		t.Fatal("dropped_by_type should not be nil")
 	}
 }
 
@@ -162,16 +167,11 @@ func TestQueryLatestMetrics_MultipleRuns(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	if v := toString(record["run_id"]); v != "run-003" {
+		t.Errorf("run_id = %q, want %q (latest)", v, "run-003")
 	}
-
-	if parsed.RunID != "run-003" {
-		t.Errorf("RunID = %q, want %q (latest)", parsed.RunID, "run-003")
-	}
-	if parsed.RunsStarted != 3 {
-		t.Errorf("RunsStarted = %d, want 3", parsed.RunsStarted)
+	if v := toInt64(record["runs_started_total"]); v != 3 {
+		t.Errorf("runs_started_total = %d, want 3", v)
 	}
 }
 
@@ -220,16 +220,11 @@ func TestQueryLatestMetrics_FilterByRunID(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	if v := toString(record["run_id"]); v != "run-002" {
+		t.Errorf("run_id = %q, want %q", v, "run-002")
 	}
-
-	if parsed.RunID != "run-002" {
-		t.Errorf("RunID = %q, want %q", parsed.RunID, "run-002")
-	}
-	if parsed.RunsStarted != 2 {
-		t.Errorf("RunsStarted = %d, want 2", parsed.RunsStarted)
+	if v := toInt64(record["runs_started_total"]); v != 2 {
+		t.Errorf("runs_started_total = %d, want 2", v)
 	}
 }
 
@@ -278,13 +273,8 @@ func TestQueryLatestMetrics_FilterBySource(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-
-	if parsed.RunsStarted != 1 {
-		t.Errorf("RunsStarted = %d, want 1 (alpha source)", parsed.RunsStarted)
+	if v := toInt64(record["runs_started_total"]); v != 1 {
+		t.Errorf("runs_started_total = %d, want 1 (alpha source)", v)
 	}
 }
 
@@ -303,168 +293,6 @@ func TestQueryLatestMetrics_NoMetrics(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNoMetricsFound) {
 		t.Errorf("expected ErrNoMetricsFound, got: %v", err)
-	}
-}
-
-func TestParseMetricsRecord(t *testing.T) {
-	// Simulate a JSON-round-tripped record (float64 values)
-	record := map[string]any{
-		"record_kind":                    "metrics",
-		"ts":                             "2026-02-03T15:00:00Z",
-		"runs_started_total":             float64(5),
-		"runs_completed_total":           float64(4),
-		"runs_failed_total":              float64(1),
-		"runs_crashed_total":             float64(0),
-		"events_received_total":          float64(100),
-		"events_persisted_total":         float64(98),
-		"events_dropped_total":           float64(2),
-		"executor_launch_success_total":  float64(5),
-		"executor_launch_failure_total":  float64(0),
-		"executor_crash_total":           float64(0),
-		"ipc_decode_errors_total":        float64(1),
-		"lode_write_success_total":       float64(50),
-		"lode_write_failure_total":       float64(0),
-		"lode_write_retry_total":         float64(3),
-		"policy":                         "buffered",
-		"executor":                       "my-executor.js",
-		"storage_backend":                "s3",
-		"run_id":                         "run-abc",
-		"job_id":                         "job-def",
-		"dropped_by_type":                map[string]any{"log": float64(2)},
-	}
-
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-
-	if parsed.Ts != "2026-02-03T15:00:00Z" {
-		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:00:00Z")
-	}
-	if parsed.RunsStarted != 5 {
-		t.Errorf("RunsStarted = %d, want 5", parsed.RunsStarted)
-	}
-	if parsed.RunsCompleted != 4 {
-		t.Errorf("RunsCompleted = %d, want 4", parsed.RunsCompleted)
-	}
-	if parsed.RunsFailed != 1 {
-		t.Errorf("RunsFailed = %d, want 1", parsed.RunsFailed)
-	}
-	if parsed.EventsReceived != 100 {
-		t.Errorf("EventsReceived = %d, want 100", parsed.EventsReceived)
-	}
-	if parsed.EventsPersisted != 98 {
-		t.Errorf("EventsPersisted = %d, want 98", parsed.EventsPersisted)
-	}
-	if parsed.EventsDropped != 2 {
-		t.Errorf("EventsDropped = %d, want 2", parsed.EventsDropped)
-	}
-	if parsed.IPCDecodeErrors != 1 {
-		t.Errorf("IPCDecodeErrors = %d, want 1", parsed.IPCDecodeErrors)
-	}
-	if parsed.LodeWriteSuccess != 50 {
-		t.Errorf("LodeWriteSuccess = %d, want 50", parsed.LodeWriteSuccess)
-	}
-	if parsed.LodeWriteRetry != 3 {
-		t.Errorf("LodeWriteRetry = %d, want 3", parsed.LodeWriteRetry)
-	}
-	if parsed.Policy != "buffered" {
-		t.Errorf("Policy = %q, want %q", parsed.Policy, "buffered")
-	}
-	if parsed.Executor != "my-executor.js" {
-		t.Errorf("Executor = %q, want %q", parsed.Executor, "my-executor.js")
-	}
-	if parsed.StorageBackend != "s3" {
-		t.Errorf("StorageBackend = %q, want %q", parsed.StorageBackend, "s3")
-	}
-	if parsed.RunID != "run-abc" {
-		t.Errorf("RunID = %q, want %q", parsed.RunID, "run-abc")
-	}
-	if parsed.JobID != "job-def" {
-		t.Errorf("JobID = %q, want %q", parsed.JobID, "job-def")
-	}
-	if parsed.DroppedByType == nil {
-		t.Fatal("DroppedByType should not be nil")
-	}
-	if parsed.DroppedByType["log"] != 2 {
-		t.Errorf("DroppedByType[log] = %d, want 2", parsed.DroppedByType["log"])
-	}
-}
-
-func TestParseMetricsRecord_NilRecord(t *testing.T) {
-	_, err := ParseMetricsRecord(nil)
-	if err == nil {
-		t.Error("expected error for nil record")
-	}
-}
-
-func TestParseMetricsRecord_MissingRequiredFields(t *testing.T) {
-	tests := []struct {
-		name   string
-		record map[string]any
-		errMsg string
-	}{
-		{
-			name:   "missing ts",
-			record: map[string]any{"record_kind": "metrics", "run_id": "run-1", "policy": "strict", "executor": "e.js", "storage_backend": "fs"},
-			errMsg: "ts",
-		},
-		{
-			name:   "missing run_id",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "policy": "strict", "executor": "e.js", "storage_backend": "fs"},
-			errMsg: "run_id",
-		},
-		{
-			name:   "missing policy",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "executor": "e.js", "storage_backend": "fs"},
-			errMsg: "policy",
-		},
-		{
-			name:   "missing executor",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "policy": "strict", "storage_backend": "fs"},
-			errMsg: "executor",
-		},
-		{
-			name:   "missing storage_backend",
-			record: map[string]any{"record_kind": "metrics", "ts": "2026-02-03T15:00:00Z", "run_id": "run-1", "policy": "strict", "executor": "e.js"},
-			errMsg: "storage_backend",
-		},
-		{
-			name:   "all required missing",
-			record: map[string]any{"record_kind": "metrics"},
-			errMsg: "ts",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := ParseMetricsRecord(tt.record)
-			if err == nil {
-				t.Fatal("expected error for missing required field, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errMsg) {
-				t.Errorf("error = %q, want it to mention %q", err.Error(), tt.errMsg)
-			}
-		})
-	}
-}
-
-func TestParseMetricsRecord_Ts(t *testing.T) {
-	record := map[string]any{
-		"record_kind":    "metrics",
-		"ts":             "2026-02-03T15:30:00Z",
-		"run_id":         "run-1",
-		"policy":         "strict",
-		"executor":       "executor.js",
-		"storage_backend": "fs",
-	}
-
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-	if parsed.Ts != "2026-02-03T15:30:00Z" {
-		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:30:00Z")
 	}
 }
 
@@ -515,16 +343,11 @@ func TestQueryLatestMetrics_RunIDSubstringNoCollision(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
+	if v := toString(record["run_id"]); v != "run-1" {
+		t.Errorf("run_id = %q, want %q (must not match run-10)", v, "run-1")
 	}
-
-	if parsed.RunID != "run-1" {
-		t.Errorf("RunID = %q, want %q (must not match run-10)", parsed.RunID, "run-1")
-	}
-	if parsed.RunsStarted != 1 {
-		t.Errorf("RunsStarted = %d, want 1", parsed.RunsStarted)
+	if v := toInt64(record["runs_started_total"]); v != 1 {
+		t.Errorf("runs_started_total = %d, want 1", v)
 	}
 }
 
@@ -575,13 +398,8 @@ func TestQueryLatestMetrics_SourceSubstringNoCollision(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-
-	if parsed.RunsStarted != 1 {
-		t.Errorf("RunsStarted = %d, want 1 (alpha source, not alphabet)", parsed.RunsStarted)
+	if v := toInt64(record["runs_started_total"]); v != 1 {
+		t.Errorf("runs_started_total = %d, want 1 (alpha source, not alphabet)", v)
 	}
 }
 
@@ -675,12 +493,7 @@ func TestQueryLatestMetrics_TsRoundTrip(t *testing.T) {
 		t.Fatalf("QueryLatestMetrics failed: %v", err)
 	}
 
-	parsed, err := ParseMetricsRecord(record)
-	if err != nil {
-		t.Fatalf("ParseMetricsRecord failed: %v", err)
-	}
-
-	if parsed.Ts != "2026-02-03T15:30:00Z" {
-		t.Errorf("Ts = %q, want %q", parsed.Ts, "2026-02-03T15:30:00Z")
+	if v := toString(record["ts"]); v != "2026-02-03T15:30:00Z" {
+		t.Errorf("ts = %q, want %q", v, "2026-02-03T15:30:00Z")
 	}
 }
