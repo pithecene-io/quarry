@@ -28,6 +28,11 @@ Renders a local fixture and emits a screenshot artifact:
 Tests the error path by throwing after one item:
 - `examples/intentional-failure/`
 
+## fan-out-chain
+
+Demonstrates fan-out derived work execution (list → detail):
+- `examples/fan-out-chain/`
+
 ## integration-patterns
 
 Conceptual examples for downstream event-bus and polling integration:
