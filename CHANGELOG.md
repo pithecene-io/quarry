@@ -13,6 +13,27 @@ _No unreleased changes._
 
 ---
 
+## [0.5.0] - 2026-02-07
+
+### Added
+
+- **Adapter**: Redis pub/sub adapter — publishes `RunCompletedEvent` as JSON to a configurable Redis channel after run completion (#107)
+- **Adapter**: `--adapter-channel` CLI flag for Redis pub/sub channel name (default: `quarry:run_completed`) (#107)
+- **Adapter**: Redis adapter config in YAML: `adapter.channel` field (#107)
+- **Adapter**: Webhook adapter — HTTP POST with retries, custom headers, timeout (#103)
+- **Adapter**: `Adapter` interface and `RunCompletedEvent` type in `quarry/adapter/` (#103)
+- **Adapter**: CLI flags: `--adapter`, `--adapter-url`, `--adapter-header`, `--adapter-timeout`, `--adapter-retries` (#103)
+- **Contracts**: CONTRACT_INTEGRATION.md updated with runtime adapter reference, Redis and webhook (#103, #107)
+- **Contracts**: CONTRACT_CLI.md updated with adapter flags including `--adapter-channel` (#103, #107)
+- **Docs**: Integration guide updated with webhook and Redis adapter examples (#103, #107)
+- **Docs**: Configuration guide updated with adapter section (#107)
+
+### Changed
+
+- **Docs**: CLI_PARITY.json updated with adapter flags and validation (#103, #107)
+
+---
+
 ## [0.4.1] - 2026-02-07
 
 ### Added
@@ -250,6 +271,7 @@ _No unreleased changes._
 
 ---
 
+[0.5.0]: https://github.com/justapithecus/quarry/releases/tag/v0.5.0
 [0.4.1]: https://github.com/justapithecus/quarry/releases/tag/v0.4.1
 [0.4.0]: https://github.com/justapithecus/quarry/releases/tag/v0.4.0
 [0.3.5]: https://github.com/justapithecus/quarry/releases/tag/v0.3.5

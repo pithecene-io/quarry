@@ -98,6 +98,19 @@ Buffered policy requires at least one of `--buffer-events` or `--buffer-bytes` t
 
 See `docs/guides/proxy.md` for pool configuration format and selection behavior.
 
+### Adapter (Event-Bus Notification)
+
+| Flag | Type | Default | Purpose |
+|------|------|---------|---------|
+| `--adapter` | `webhook`, `redis` | | Adapter type |
+| `--adapter-url` | string | | Endpoint URL (required when `--adapter` set) |
+| `--adapter-header` | string (repeatable) | | Custom header as `key=value` (webhook only) |
+| `--adapter-channel` | string | `quarry:run_completed` | Pub/sub channel name (redis only) |
+| `--adapter-timeout` | duration | `10s` (webhook) / `5s` (redis) | Per-request/publish timeout |
+| `--adapter-retries` | int | `3` | Retry attempts |
+
+See `docs/guides/integration.md` for adapter usage patterns.
+
 ### Output
 
 | Flag | Type | Default | Purpose |
@@ -220,6 +233,14 @@ proxies:
 proxy:
   pool: iproyal_nyc
   strategy: round_robin
+
+adapter:
+  type: webhook
+  url: https://hooks.example.com/quarry
+  headers:
+    Authorization: Bearer ${WEBHOOK_TOKEN}
+  timeout: 10s
+  retries: 3
 ```
 
 ### Environment Variable Expansion

@@ -13,10 +13,11 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.4.1)
-- Latest release: v0.4.1 (see CHANGELOG.md).
+## Current Status (as of v0.5.0)
+- Latest release: v0.5.0 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.4.1 adds `--config` for YAML project-level defaults and config package hardening.
+- v0.5.0 adds webhook and Redis pub/sub event-bus adapters for downstream notifications.
+- v0.4.1 added `--config` for YAML project-level defaults and config package hardening.
 - v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
 
 ---
@@ -342,7 +343,8 @@ to poll Lode or wire external plumbing.
 ### Deliverables
 - `Adapter` interface and `RunCompletedEvent` type (`quarry/adapter/`)
 - Webhook adapter: HTTP POST with retries, custom headers, timeout (`quarry/adapter/webhook/`)
-- CLI flags: `--adapter`, `--adapter-url`, `--adapter-header`, `--adapter-timeout`, `--adapter-retries`
+- Redis pub/sub adapter: PUBLISH with retries, configurable channel (`quarry/adapter/redis/`)
+- CLI flags: `--adapter`, `--adapter-url`, `--adapter-header`, `--adapter-channel`, `--adapter-timeout`, `--adapter-retries`
 - Hook in `runAction()` after metrics persist (best-effort, does not fail run)
 - Contract and guide updates
 
@@ -355,6 +357,15 @@ to poll Lode or wire external plumbing.
 - [x] CONTRACT_CLI.md updated with adapter flags
 - [x] Integration guide updated with webhook example
 - [x] CLI_PARITY.json updated
+
+### Redis Pub/Sub Adapter (v0.5.0)
+- [x] Redis adapter implementation (`quarry/adapter/redis/redis.go`)
+- [x] Redis adapter tests with miniredis (`quarry/adapter/redis/redis_test.go`)
+- [x] `--adapter-channel` CLI flag
+- [x] Config YAML `channel` field in adapter stanza
+- [x] CLI wiring in `run.go` (import, flag, parse, build)
+- [x] CLI_PARITY.json updated
+- [x] CONTRACT_INTEGRATION.md and CONTRACT_CLI.md updated
 
 ### Future adapters (separate PRs)
 - Temporal
@@ -459,6 +470,7 @@ Phase 2 is deferred until Phase 1 is validated in production.
 ## Post-v0.5.0 — Additional Event Bus Adapters (Staggered)
 
 Order of support:
+- ~~Redis Pub/Sub~~ (shipped in v0.5.0)
 - Temporal.io
 - NATS
 - SNS/SQS
