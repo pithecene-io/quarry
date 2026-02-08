@@ -170,8 +170,16 @@ Semantics:
 - Deduplication: identical `(target, params)` pairs are executed once.
 - Exit code is determined by root run outcome only.
 - Child run results appear in the fan-out summary printed to stdout.
-- Child runs inherit the root run's `--category` (no per-child override).
+- Child runs inherit the root run's `--source` and `--category` by default.
+  Per-child overrides are supported via `emit.enqueue({ source, category })`.
 - `target` is resolved as a file path relative to CWD (same as `--script`).
+  Target resolution semantics may change; do not depend on path resolution details.
+
+**Caveats:**
+- `storage.put()` in child scripts requires that storage is properly configured
+  on the root run. A missing FileWriter will fail the child run immediately.
+- Per-enqueue `source`/`category` overrides apply to the immediate child only;
+  grandchildren inherit from their parent unless they also specify overrides.
 
 ### Config File (v0.4.x+)
 

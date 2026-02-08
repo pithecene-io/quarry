@@ -43,8 +43,10 @@ sequence numbers and does not reorder types.
 The `enqueue` and `rotateProxy` emit methods are **advisory**. They express
 intent but carry no delivery or execution guarantee.
 
-- `emit.enqueue({ target, params })` — suggests additional work to the
-  runtime. The runtime may ignore it, deduplicate it, or defer it.
+- `emit.enqueue({ target, params, source?, category? })` — suggests additional
+  work to the runtime. The runtime may ignore it, deduplicate it, or defer it.
+  Optional `source` and `category` override the child run's partition keys
+  (default: inherit from root).
 - `emit.rotateProxy({ reason? })` — hints that the current proxy should be
   rotated. The runtime applies rotation only if a proxy pool is configured
   and the strategy supports mid-run changes.
