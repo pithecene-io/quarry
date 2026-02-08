@@ -111,6 +111,18 @@ See `docs/guides/proxy.md` for pool configuration format and selection behavior.
 
 See `docs/guides/integration.md` for adapter usage patterns.
 
+### Fan-Out (Derived Work Execution)
+
+| Flag | Type | Default | Purpose |
+|------|------|---------|---------|
+| `--depth` | int | `0` | Max recursion depth (0 = disabled) |
+| `--max-runs` | int | | Total child run cap (required when `--depth > 0`) |
+| `--parallel` | int | `1` | Max concurrent child runs |
+
+When `--depth > 0`, enqueue events emitted by scripts trigger child runs
+at runtime. `--max-runs` is mandatory as a safety rail.
+`--parallel > 1` without `--depth > 0` emits a warning (no-op).
+
 ### Output
 
 | Flag | Type | Default | Purpose |

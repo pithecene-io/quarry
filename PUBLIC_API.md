@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.5.0.
+User-facing guide for Quarry v0.6.0.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -26,14 +26,14 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:justapithecus/quarry@0.5.0
+mise install github:justapithecus/quarry@0.6.0
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:justapithecus/quarry" = "0.5.0"
+"github:justapithecus/quarry" = "0.6.0"
 ```
 
 ### SDK
@@ -266,6 +266,14 @@ CLI flags always override config file values.
 | `--adapter-timeout <duration>` | `10s` | Notification timeout |
 | `--adapter-retries <n>` | `3` | Retry attempts |
 
+**Fan-out flags (derived work execution):**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--depth <n>` | `0` | Maximum recursion depth (0 = disabled) |
+| `--max-runs <n>` | | Total child run cap (required when `--depth > 0`) |
+| `--parallel <n>` | `1` | Maximum concurrent child runs |
+
 **Advanced flags (development only):**
 
 | Flag | Description |
@@ -395,13 +403,13 @@ task build
 
 ---
 
-## Known Limitations (v0.5.0)
+## Known Limitations (v0.6.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
 3. **No streaming reads**: Artifacts must fit in memory
 4. **S3 is experimental**: S3 and S3-compatible providers (R2, MinIO) are supported but experimental; no transactional guarantees across writes
-5. **No job scheduling**: Quarry is an execution runtime, not a scheduler
+5. **No job scheduling**: Quarry supports in-process derived work via `--depth` but is not a scheduler; external orchestration is the caller's responsibility
 6. **Puppeteer required**: All scripts run in a browser context
 7. **Event bus adapters**: Webhook and Redis pub/sub adapters are available. Temporal, NATS, and SNS adapters are planned. See `docs/guides/integration.md`.
 
@@ -466,7 +474,7 @@ export AWS_SECRET_ACCESS_KEY=<secret-key>
 Quarry is an extraction runtime, not a full pipeline. For triggering downstream
 processing after runs complete, see [docs/guides/integration.md](docs/guides/integration.md).
 
-**Built-in adapters** (v0.5.0+): `--adapter webhook` sends an HTTP POST, and
+**Built-in adapters** (v0.6.0+): `--adapter webhook` sends an HTTP POST, and
 `--adapter redis` publishes to a Redis pub/sub channel after each run completes.
 See adapter flags above.
 
@@ -478,7 +486,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.5.0 (commit: ...)
+# 0.6.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -487,6 +495,6 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.5.0` |
+| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.6.0` |
 | SDK | JSR | `npx jsr add @justapithecus/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @justapithecus/quarry-sdk` |

@@ -15,7 +15,7 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:justapithecus/quarry@0.5.0
+mise install github:justapithecus/quarry@0.6.0
 ```
 
 ### SDK
@@ -142,6 +142,7 @@ Scripts are imperative, explicit, and boring by design.
 - **Streaming** — chunked artifacts with backpressure → [docs/guides/streaming.md](docs/guides/streaming.md)
 - **Configuration** — YAML project defaults via `--config` → [docs/guides/cli.md](docs/guides/cli.md)
 - **Integration** — webhook adapter for downstream triggers → [docs/guides/integration.md](docs/guides/integration.md)
+- **Fan-Out** — derived work execution via `emit.enqueue()` → [docs/guides/emit.md](docs/guides/emit.md)
 - **Run Lifecycle** — terminal states and exit codes → [docs/guides/run.md](docs/guides/run.md)
 
 ---

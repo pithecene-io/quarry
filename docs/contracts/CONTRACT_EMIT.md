@@ -98,6 +98,12 @@ Semantics:
 - Advisory only; not guaranteed or required.
 - No feedback channel is implied.
 
+Runtime interpretation (v0.6.0+):
+- Default (`--depth 0`): advisory only, as above.
+- With `--depth > 0`: runtime schedules and executes as child runs.
+  Deduplication and depth limits are applied by the fan-out operator.
+  The contract itself is unchanged; runtime behavior depends on CLI flags.
+
 ### 5) `rotate_proxy` (optional advisory)
 Suggests the runtime consider rotating proxy/session identity.
 

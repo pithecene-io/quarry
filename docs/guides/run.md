@@ -29,3 +29,21 @@ Runs end in one of a few outcomes:
 - policy failure
 
 Each outcome is observable in runtime metadata.
+
+---
+
+## Child Runs (Fan-Out)
+
+When `--depth > 0` is set, scripts can trigger **child runs** via
+`emit.enqueue()`. Child runs differ from retry runs:
+
+| | Retry Run | Child Run |
+|-|-----------|-----------|
+| Trigger | Failure of previous run | `emit.enqueue()` from parent |
+| Script | Same as parent | Specified by `target` field |
+| `attempt` | Incremented | Always 1 |
+| `job_id` | Same as parent | New (derived from parent) |
+
+Child runs are tracked internally by the fan-out operator. The root run's
+exit code determines the overall outcome; child run results appear in the
+fan-out summary.
