@@ -205,6 +205,26 @@
           "required": false,
           "description": "Pub/sub channel name for Redis adapter (default: quarry:run_completed)",
           "dependsOn": ["adapter=redis"]
+        },
+        "depth": {
+          "type": "int",
+          "required": false,
+          "description": "Maximum fan-out recursion depth (0 = disabled)",
+          "notes": "When > 0, --max-runs is required as a safety rail"
+        },
+        "max-runs": {
+          "type": "int",
+          "required": false,
+          "description": "Maximum total child runs (required when --depth > 0)",
+          "dependsOn": ["depth>0"],
+          "notes": "Safety rail to prevent unbounded fan-out"
+        },
+        "parallel": {
+          "type": "int",
+          "required": false,
+          "default": 1,
+          "description": "Maximum concurrent child runs",
+          "dependsOn": ["depth>0"]
         }
       }
     },

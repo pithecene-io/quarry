@@ -70,6 +70,12 @@ func IsStreamError(err error) bool {
 	return false
 }
 
+// EnqueueObserver is a callback invoked when an enqueue event is received.
+// Called synchronously between artifact handling and policy dispatch.
+// Implementations must not perform blocking I/O; brief mutex acquisition
+// for dedup bookkeeping is acceptable.
+type EnqueueObserver func(*types.EventEnvelope)
+
 // IngestionEngine handles IPC frame ingestion.
 // Per CONTRACT_IPC.md and CONTRACT_EMIT.md:
 //   - Frames are read in order
@@ -79,21 +85,23 @@ func IsStreamError(err error) bool {
 //   - Policy failure on non-droppable events terminates run
 //   - run_result control frames do not affect seq ordering
 type IngestionEngine struct {
-	decoder       *ipc.FrameDecoder
-	policy        policy.Policy
-	artifacts     *ArtifactManager
-	fileWriter    lode.FileWriter // sidecar file writes, may be nil
-	logger        *log.Logger
-	runMeta       *types.RunMeta // for envelope validation
-	collector     *metrics.Collector
-	currentSeq    int64
-	terminalSeen  bool
-	terminalEvent *types.EventEnvelope
-	runResult     *types.RunResultFrame // control frame, not counted in seq
+	decoder          *ipc.FrameDecoder
+	policy           policy.Policy
+	artifacts        *ArtifactManager
+	fileWriter       lode.FileWriter // sidecar file writes, may be nil
+	logger           *log.Logger
+	runMeta          *types.RunMeta // for envelope validation
+	collector        *metrics.Collector
+	enqueueObserver  EnqueueObserver // optional fan-out observer, may be nil
+	currentSeq       int64
+	terminalSeen     bool
+	terminalEvent    *types.EventEnvelope
+	runResult        *types.RunResultFrame // control frame, not counted in seq
 }
 
 // NewIngestionEngine creates a new ingestion engine.
 // The fileWriter parameter may be nil if sidecar file writes are not supported.
+// The observer parameter may be nil if fan-out is not enabled.
 func NewIngestionEngine(
 	reader io.Reader,
 	pol policy.Policy,
@@ -102,16 +110,18 @@ func NewIngestionEngine(
 	logger *log.Logger,
 	runMeta *types.RunMeta,
 	collector *metrics.Collector,
+	observer EnqueueObserver,
 ) *IngestionEngine {
 	return &IngestionEngine{
-		decoder:    ipc.NewFrameDecoder(reader),
-		policy:     pol,
-		artifacts:  artifacts,
-		fileWriter: fileWriter,
-		logger:     logger,
-		runMeta:    runMeta,
-		collector:  collector,
-		currentSeq: 0,
+		decoder:         ipc.NewFrameDecoder(reader),
+		policy:          pol,
+		artifacts:       artifacts,
+		fileWriter:      fileWriter,
+		logger:          logger,
+		runMeta:         runMeta,
+		collector:       collector,
+		enqueueObserver: observer,
+		currentSeq:      0,
 	}
 }
 
@@ -273,6 +283,12 @@ func (e *IngestionEngine) processEvent(ctx context.Context, envelope *types.Even
 				Err:  err,
 			}
 		}
+	}
+
+	// Notify fan-out observer before policy dispatch.
+	// Scheduling is independent of whether the policy drops the enqueue event.
+	if envelope.Type == types.EventTypeEnqueue && e.enqueueObserver != nil {
+		e.enqueueObserver(envelope)
 	}
 
 	// Delegate to policy
