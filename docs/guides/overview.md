@@ -34,6 +34,8 @@ At a high level:
 - Configuration reference: `docs/guides/configuration.md`
 - Proxies: `docs/guides/proxy.md`
 - Run lifecycle: `docs/guides/run.md`
+- Storage: `docs/guides/lode.md`
+- Integration: `docs/guides/integration.md`
 
 ---
 

@@ -16,7 +16,7 @@ quarry run \
   --source demo \
   --storage-backend fs \
   --storage-path ./quarry-data \
-  --job '{"source":"demo"}'
+  --job '{"url":"https://example.com"}'
 ```
 
 Inspect a run:
@@ -97,6 +97,9 @@ Required flags:
 - `--storage-backend <fs|s3>`
 - `--storage-path <path>`
 
+Config file flag:
+- `--config <path>` (YAML project-level defaults for `quarry run`)
+
 Optional flags:
 - `--attempt <n>` (default: 1)
 - `--job-id <id>`
@@ -120,6 +123,13 @@ Storage flags:
 - `--storage-region <region>` (AWS region, uses default chain if omitted)
 - `--storage-endpoint <url>` (custom S3 endpoint for R2, MinIO, etc.)
 - `--storage-s3-path-style` (force path-style addressing, required by R2/MinIO)
+
+Adapter flags (event-bus notification):
+- `--adapter <type>` (event-bus adapter, e.g. `webhook`)
+- `--adapter-url <url>` (adapter endpoint URL, required when `--adapter` is set)
+- `--adapter-header <key=value>` (custom HTTP header, repeatable)
+- `--adapter-timeout <duration>` (per-request timeout, default: `10s`)
+- `--adapter-retries <n>` (retry attempts with exponential backoff, default: `3`)
 
 Advanced flags:
 - `--executor <path>` (auto-resolved by default; override for troubleshooting)

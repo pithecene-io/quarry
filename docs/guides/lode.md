@@ -134,9 +134,9 @@ Validation is a downstream consumer responsibility.
 
 ---
 
-## Non-Goals (v0.1.0)
+## Design Non-Goals
 
-The following behaviors are explicitly **out of scope** for v0.1.0:
+The following behaviors are explicitly **out of scope**:
 
 **No Automatic Retries:**
 - Quarry does not retry failed storage writes.
