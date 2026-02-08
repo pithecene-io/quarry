@@ -9,6 +9,8 @@ import (
 	"time"
 
 	quarryconfig "github.com/justapithecus/quarry/cli/config"
+	"github.com/justapithecus/quarry/runtime"
+	"github.com/justapithecus/quarry/types"
 	"github.com/urfave/cli/v2"
 )
 
@@ -928,5 +930,538 @@ proxy:
 	}
 	if !strings.Contains(err.Error(), "cannot use --proxy-config and config file proxies") {
 		t.Errorf("error should mention conflict, got: %v", err)
+	}
+}
+
+// --- outcomeToExitCode ---
+
+func TestOutcomeToExitCode(t *testing.T) {
+	tests := []struct {
+		status types.OutcomeStatus
+		want   int
+	}{
+		{types.OutcomeSuccess, exitSuccess},
+		{types.OutcomeScriptError, exitScriptError},
+		{types.OutcomeExecutorCrash, exitExecutorCrash},
+		{types.OutcomePolicyFailure, exitPolicyFailure},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			if got := outcomeToExitCode(tt.status); got != tt.want {
+				t.Errorf("outcomeToExitCode(%q) = %d, want %d", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOutcomeToExitCode_UnknownDefaultsToScriptError(t *testing.T) {
+	got := outcomeToExitCode(types.OutcomeStatus("unknown_status"))
+	if got != exitScriptError {
+		t.Errorf("unknown status should map to exitScriptError (%d), got %d", exitScriptError, got)
+	}
+}
+
+func TestOutcomeToExitCode_ContractValues(t *testing.T) {
+	// Verify the actual numeric values per CONTRACT_RUN.md
+	if exitSuccess != 0 {
+		t.Errorf("exitSuccess should be 0, got %d", exitSuccess)
+	}
+	if exitScriptError != 1 {
+		t.Errorf("exitScriptError should be 1, got %d", exitScriptError)
+	}
+	if exitExecutorCrash != 2 {
+		t.Errorf("exitExecutorCrash should be 2, got %d", exitExecutorCrash)
+	}
+	if exitPolicyFailure != 3 {
+		t.Errorf("exitPolicyFailure should be 3, got %d", exitPolicyFailure)
+	}
+}
+
+// --- buildStoragePath ---
+
+func TestBuildStoragePath_FS(t *testing.T) {
+	sc := storageChoice{backend: "fs", path: "/var/quarry/data"}
+	got := buildStoragePath(sc, "quarry", "my-source", "default", "2026-02-08", "run-001")
+
+	// Must be file:// scheme with absolute path
+	if !strings.HasPrefix(got, "file:///") {
+		t.Errorf("fs path should start with file:///, got %q", got)
+	}
+	// Must contain Hive-partitioned segments
+	for _, segment := range []string{
+		"datasets/quarry/partitions",
+		"source=my-source",
+		"category=default",
+		"day=2026-02-08",
+		"run_id=run-001",
+	} {
+		if !strings.Contains(got, segment) {
+			t.Errorf("fs path should contain %q, got %q", segment, got)
+		}
+	}
+}
+
+func TestBuildStoragePath_S3WithPrefix(t *testing.T) {
+	sc := storageChoice{backend: "s3", path: "my-bucket/quarry-data"}
+	got := buildStoragePath(sc, "quarry", "src", "cat", "2026-01-01", "run-x")
+
+	want := "s3://my-bucket/quarry-data/datasets/quarry/partitions/source=src/category=cat/day=2026-01-01/run_id=run-x"
+	if got != want {
+		t.Errorf("s3 with prefix:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestBuildStoragePath_S3BucketOnly(t *testing.T) {
+	sc := storageChoice{backend: "s3", path: "my-bucket"}
+	got := buildStoragePath(sc, "quarry", "src", "cat", "2026-01-01", "run-x")
+
+	want := "s3://my-bucket/datasets/quarry/partitions/source=src/category=cat/day=2026-01-01/run_id=run-x"
+	if got != want {
+		t.Errorf("s3 bucket only:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestBuildStoragePath_UnknownBackend(t *testing.T) {
+	sc := storageChoice{backend: "gcs", path: "/tmp"}
+	got := buildStoragePath(sc, "quarry", "src", "cat", "2026-01-01", "run-x")
+
+	// Unknown backend returns bare partition path (no scheme prefix)
+	if strings.Contains(got, "://") {
+		t.Errorf("unknown backend should not include scheme, got %q", got)
+	}
+	if !strings.HasPrefix(got, "datasets/") {
+		t.Errorf("unknown backend should return bare partition path, got %q", got)
+	}
+}
+
+// --- buildRunCompletedEvent ---
+
+func TestBuildRunCompletedEvent_BasicFields(t *testing.T) {
+	result := &runtime.RunResult{
+		RunMeta: &types.RunMeta{
+			RunID:   "run-001",
+			Attempt: 1,
+		},
+		Outcome: &types.RunOutcome{
+			Status: types.OutcomeSuccess,
+		},
+		EventCount: 42,
+	}
+	sc := storageChoice{backend: "fs", path: "/tmp/data"}
+	event := buildRunCompletedEvent(result, sc, "quarry", "src", "cat", "2026-02-08", 5*time.Second)
+
+	if event.ContractVersion != types.ContractVersion {
+		t.Errorf("ContractVersion = %q, want %q", event.ContractVersion, types.ContractVersion)
+	}
+	if event.EventType != "run_completed" {
+		t.Errorf("EventType = %q, want %q", event.EventType, "run_completed")
+	}
+	if event.RunID != "run-001" {
+		t.Errorf("RunID = %q, want %q", event.RunID, "run-001")
+	}
+	if event.Source != "src" {
+		t.Errorf("Source = %q, want %q", event.Source, "src")
+	}
+	if event.Category != "cat" {
+		t.Errorf("Category = %q, want %q", event.Category, "cat")
+	}
+	if event.Day != "2026-02-08" {
+		t.Errorf("Day = %q, want %q", event.Day, "2026-02-08")
+	}
+	if event.Outcome != "success" {
+		t.Errorf("Outcome = %q, want %q", event.Outcome, "success")
+	}
+	if event.Attempt != 1 {
+		t.Errorf("Attempt = %d, want %d", event.Attempt, 1)
+	}
+	if event.EventCount != 42 {
+		t.Errorf("EventCount = %d, want %d", event.EventCount, 42)
+	}
+	if event.DurationMs != 5000 {
+		t.Errorf("DurationMs = %d, want %d", event.DurationMs, 5000)
+	}
+	if event.StoragePath == "" {
+		t.Error("StoragePath should not be empty")
+	}
+	if event.Timestamp == "" {
+		t.Error("Timestamp should not be empty")
+	}
+}
+
+func TestBuildRunCompletedEvent_WithJobID(t *testing.T) {
+	jobID := "job-abc"
+	result := &runtime.RunResult{
+		RunMeta: &types.RunMeta{
+			RunID:   "run-001",
+			JobID:   &jobID,
+			Attempt: 1,
+		},
+		Outcome: &types.RunOutcome{Status: types.OutcomeSuccess},
+	}
+	sc := storageChoice{backend: "fs", path: "/tmp"}
+	event := buildRunCompletedEvent(result, sc, "quarry", "src", "cat", "2026-02-08", time.Second)
+
+	if event.JobID != "job-abc" {
+		t.Errorf("JobID = %q, want %q", event.JobID, "job-abc")
+	}
+}
+
+func TestBuildRunCompletedEvent_WithoutJobID(t *testing.T) {
+	result := &runtime.RunResult{
+		RunMeta: &types.RunMeta{
+			RunID:   "run-001",
+			Attempt: 1,
+		},
+		Outcome: &types.RunOutcome{Status: types.OutcomeScriptError},
+	}
+	sc := storageChoice{backend: "fs", path: "/tmp"}
+	event := buildRunCompletedEvent(result, sc, "quarry", "src", "cat", "2026-02-08", time.Second)
+
+	if event.JobID != "" {
+		t.Errorf("JobID should be empty when RunMeta.JobID is nil, got %q", event.JobID)
+	}
+}
+
+func TestBuildRunCompletedEvent_OutcomeMapsCorrectly(t *testing.T) {
+	for _, status := range []types.OutcomeStatus{
+		types.OutcomeSuccess,
+		types.OutcomeScriptError,
+		types.OutcomeExecutorCrash,
+		types.OutcomePolicyFailure,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			result := &runtime.RunResult{
+				RunMeta: &types.RunMeta{RunID: "r", Attempt: 1},
+				Outcome: &types.RunOutcome{Status: status},
+			}
+			sc := storageChoice{backend: "fs", path: "/tmp"}
+			event := buildRunCompletedEvent(result, sc, "q", "s", "c", "d", 0)
+
+			if event.Outcome != string(status) {
+				t.Errorf("Outcome = %q, want %q", event.Outcome, string(status))
+			}
+		})
+	}
+}
+
+// --- validateFanOutConfig ---
+
+func TestValidateFanOutConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		choice      fanOutChoice
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "disabled (depth=0) is valid",
+			choice:  fanOutChoice{depth: 0, maxRuns: 0, parallel: 1},
+			wantErr: false,
+		},
+		{
+			name:    "depth=1 with max-runs is valid",
+			choice:  fanOutChoice{depth: 1, maxRuns: 10, parallel: 1},
+			wantErr: false,
+		},
+		{
+			name:    "depth=1 with parallel>1 is valid",
+			choice:  fanOutChoice{depth: 1, maxRuns: 10, parallel: 4},
+			wantErr: false,
+		},
+		{
+			name:        "negative depth rejected",
+			choice:      fanOutChoice{depth: -1, maxRuns: 0, parallel: 1},
+			wantErr:     true,
+			errContains: "--depth must be >= 0",
+		},
+		{
+			name:        "depth>0 without max-runs rejected (safety rail)",
+			choice:      fanOutChoice{depth: 1, maxRuns: 0, parallel: 1},
+			wantErr:     true,
+			errContains: "--max-runs is required when --depth > 0",
+		},
+		{
+			name:        "negative max-runs rejected",
+			choice:      fanOutChoice{depth: 0, maxRuns: -1, parallel: 1},
+			wantErr:     true,
+			errContains: "--max-runs must be >= 0",
+		},
+		{
+			name:        "parallel=0 rejected",
+			choice:      fanOutChoice{depth: 1, maxRuns: 10, parallel: 0},
+			wantErr:     true,
+			errContains: "--parallel must be >= 1",
+		},
+		{
+			name:    "depth=0 max-runs=0 parallel=1 is default valid state",
+			choice:  fanOutChoice{depth: 0, maxRuns: 0, parallel: 1},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateFanOutConfig(tt.choice)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errContains)
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// --- parseAdapterConfigWithPrecedence ---
+
+// newAdapterTestContext builds a CLI context with adapter-related flags.
+func newAdapterTestContext(t *testing.T, flags map[string]string, sliceFlags map[string][]string) *cli.Context {
+	t.Helper()
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{Name: "adapter-url"},
+		&cli.StringFlag{Name: "adapter-channel"},
+		&cli.DurationFlag{Name: "adapter-timeout", Value: 10 * time.Second},
+		&cli.IntFlag{Name: "adapter-retries", Value: 3},
+		&cli.StringSliceFlag{Name: "adapter-header"},
+	}
+
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.String("adapter-url", "", "")
+	fs.String("adapter-channel", "", "")
+	fs.Duration("adapter-timeout", 10*time.Second, "")
+	fs.Int("adapter-retries", 3, "")
+
+	// Register the string slice in the flagset via a multi-value approach.
+	// urfave/cli uses its own internal plumbing for slices, so we handle
+	// headers through the config path or by setting the flag manually.
+	for name, val := range flags {
+		if err := fs.Set(name, val); err != nil {
+			t.Fatalf("failed to set flag %s: %v", name, err)
+		}
+	}
+
+	c := cli.NewContext(app, fs, nil)
+
+	// For string slice flags, we need to work within urfave's model.
+	// The test cases that exercise headers use config-based headers instead
+	// since urfave slices require the full app.Run() path.
+	_ = sliceFlags
+	return c
+}
+
+func TestParseAdapterConfig_WebhookValid(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "https://hooks.example.com/quarry",
+	}, nil)
+
+	ac, err := parseAdapterConfigWithPrecedence(c, nil, "webhook")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.adapterType != "webhook" {
+		t.Errorf("adapterType = %q, want %q", ac.adapterType, "webhook")
+	}
+	if ac.url != "https://hooks.example.com/quarry" {
+		t.Errorf("url = %q, want %q", ac.url, "https://hooks.example.com/quarry")
+	}
+}
+
+func TestParseAdapterConfig_WebhookMissingURL(t *testing.T) {
+	c := newAdapterTestContext(t, nil, nil)
+
+	_, err := parseAdapterConfigWithPrecedence(c, nil, "webhook")
+	if err == nil {
+		t.Fatal("expected error for missing URL")
+	}
+	if !strings.Contains(err.Error(), "--adapter-url is required") {
+		t.Errorf("error should mention --adapter-url, got: %v", err)
+	}
+}
+
+func TestParseAdapterConfig_RedisValid(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url":     "redis://localhost:6379",
+		"adapter-channel": "my-channel",
+	}, nil)
+
+	ac, err := parseAdapterConfigWithPrecedence(c, nil, "redis")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.adapterType != "redis" {
+		t.Errorf("adapterType = %q, want %q", ac.adapterType, "redis")
+	}
+	if ac.channel != "my-channel" {
+		t.Errorf("channel = %q, want %q", ac.channel, "my-channel")
+	}
+}
+
+func TestParseAdapterConfig_RedisMissingURL(t *testing.T) {
+	c := newAdapterTestContext(t, nil, nil)
+
+	_, err := parseAdapterConfigWithPrecedence(c, nil, "redis")
+	if err == nil {
+		t.Fatal("expected error for missing URL")
+	}
+	if !strings.Contains(err.Error(), "--adapter-url is required when --adapter=redis") {
+		t.Errorf("error should mention redis URL requirement, got: %v", err)
+	}
+}
+
+func TestParseAdapterConfig_UnknownType(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "https://example.com",
+	}, nil)
+
+	_, err := parseAdapterConfigWithPrecedence(c, nil, "kafka")
+	if err == nil {
+		t.Fatal("expected error for unknown adapter type")
+	}
+	if !strings.Contains(err.Error(), "unknown adapter type") {
+		t.Errorf("error should mention unknown type, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "kafka") {
+		t.Errorf("error should include the bad type name, got: %v", err)
+	}
+}
+
+func TestParseAdapterConfig_ConfigProvidesURL(t *testing.T) {
+	// CLI has no --adapter-url set; config provides it
+	c := newAdapterTestContext(t, nil, nil)
+	cfg := &quarryconfig.Config{
+		Adapter: quarryconfig.AdapterConfig{
+			URL: "https://from-config.example.com",
+		},
+	}
+
+	ac, err := parseAdapterConfigWithPrecedence(c, cfg, "webhook")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.url != "https://from-config.example.com" {
+		t.Errorf("url should come from config, got %q", ac.url)
+	}
+}
+
+func TestParseAdapterConfig_CLIOverridesConfigURL(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "https://cli-url.example.com",
+	}, nil)
+	cfg := &quarryconfig.Config{
+		Adapter: quarryconfig.AdapterConfig{
+			URL: "https://config-url.example.com",
+		},
+	}
+
+	ac, err := parseAdapterConfigWithPrecedence(c, cfg, "webhook")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.url != "https://cli-url.example.com" {
+		t.Errorf("CLI should override config URL, got %q", ac.url)
+	}
+}
+
+func TestParseAdapterConfig_ConfigProvidesRetries(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "https://example.com",
+	}, nil)
+	retries := 5
+	cfg := &quarryconfig.Config{
+		Adapter: quarryconfig.AdapterConfig{
+			URL:     "https://example.com",
+			Retries: &retries,
+		},
+	}
+
+	ac, err := parseAdapterConfigWithPrecedence(c, cfg, "webhook")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.retries != 5 {
+		t.Errorf("retries should come from config (5), got %d", ac.retries)
+	}
+}
+
+func TestParseAdapterConfig_ConfigHeadersMerged(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "https://example.com",
+	}, nil)
+	cfg := &quarryconfig.Config{
+		Adapter: quarryconfig.AdapterConfig{
+			URL: "https://example.com",
+			Headers: map[string]string{
+				"X-Api-Key": "secret-123",
+				"X-Source":  "quarry",
+			},
+		},
+	}
+
+	ac, err := parseAdapterConfigWithPrecedence(c, cfg, "webhook")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.headers["X-Api-Key"] != "secret-123" {
+		t.Errorf("config header X-Api-Key not merged, got %v", ac.headers)
+	}
+	if ac.headers["X-Source"] != "quarry" {
+		t.Errorf("config header X-Source not merged, got %v", ac.headers)
+	}
+}
+
+func TestParseAdapterConfig_MalformedHeader(t *testing.T) {
+	// Build an app context with a malformed --adapter-header via app.Run
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{Name: "adapter-url"},
+		&cli.StringSliceFlag{Name: "adapter-header"},
+		&cli.DurationFlag{Name: "adapter-timeout", Value: 10 * time.Second},
+		&cli.IntFlag{Name: "adapter-retries", Value: 3},
+		&cli.StringFlag{Name: "adapter-channel"},
+	}
+
+	var parseErr error
+	app.Action = func(c *cli.Context) error {
+		_, parseErr = parseAdapterConfigWithPrecedence(c, nil, "webhook")
+		return nil
+	}
+
+	_ = app.Run([]string{"test",
+		"--adapter-url", "https://example.com",
+		"--adapter-header", "no-equals-sign",
+	})
+
+	if parseErr == nil {
+		t.Fatal("expected error for malformed header")
+	}
+	if !strings.Contains(parseErr.Error(), "invalid --adapter-header") {
+		t.Errorf("error should mention invalid header, got: %v", parseErr)
+	}
+	if !strings.Contains(parseErr.Error(), "key=value") {
+		t.Errorf("error should suggest key=value format, got: %v", parseErr)
+	}
+}
+
+func TestParseAdapterConfig_RedisChannelFromConfig(t *testing.T) {
+	c := newAdapterTestContext(t, map[string]string{
+		"adapter-url": "redis://localhost:6379",
+	}, nil)
+	cfg := &quarryconfig.Config{
+		Adapter: quarryconfig.AdapterConfig{
+			URL:     "redis://localhost:6379",
+			Channel: "custom-channel",
+		},
+	}
+
+	ac, err := parseAdapterConfigWithPrecedence(c, cfg, "redis")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ac.channel != "custom-channel" {
+		t.Errorf("channel should come from config, got %q", ac.channel)
 	}
 }
