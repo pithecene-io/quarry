@@ -13,6 +13,24 @@ _No unreleased changes._
 
 ---
 
+## [0.6.0] - 2026-02-08
+
+### Added
+
+- **Runtime**: Fan-out operator for derived work execution — `emit.enqueue()` events now trigger child runs at runtime, enabling discovery-driven extraction chains (list → detail → asset) without external orchestrators (#117)
+- **CLI**: `--depth` flag to set maximum fan-out recursion depth (root = depth 0); required for fan-out activation (#117)
+- **CLI**: `--max-runs` flag to cap total child runs (required when `--depth > 0` as a safety rail against unbounded fan-out) (#117)
+- **CLI**: `--parallel` flag to control concurrent child run execution (default: 1, sequential) (#117)
+- **Docs**: Derived work execution design replacing crawl mode concept (#116)
+- **Docs**: Ingress models exploration document (#115)
+- **Docs**: Temporal orchestration integration and module split documentation (#114)
+
+### Changed
+
+- **Lode**: Decoupled Lode from `cli/reader` dependency — cleaner module boundaries (#113)
+
+---
+
 ## [0.5.1] - 2026-02-08
 
 ### Fixed
@@ -279,6 +297,7 @@ _No unreleased changes._
 
 ---
 
+[0.6.0]: https://github.com/justapithecus/quarry/releases/tag/v0.6.0
 [0.5.1]: https://github.com/justapithecus/quarry/releases/tag/v0.5.1
 [0.5.0]: https://github.com/justapithecus/quarry/releases/tag/v0.5.0
 [0.4.1]: https://github.com/justapithecus/quarry/releases/tag/v0.4.1
