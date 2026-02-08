@@ -13,6 +13,27 @@ _No unreleased changes._
 
 ---
 
+## [0.6.2] - 2026-02-08
+
+### Added
+
+- **CLI**: `--browser-ws-endpoint` flag — connect to an externally managed browser instead of launching Chromium per run, eliminating ~180x cold-start overhead for multi-run workloads (#127)
+- **Emit**: Per-enqueue `source` and `category` partition overrides — child runs can target different Lode partitions via `emit.enqueue({ source, category })` (#129)
+- **Docs**: Browser reuse documented in CLI guide, configuration reference, and PUBLIC_API.md (#130)
+- **Docs**: Enqueue partition overrides documented in CONTRACT_EMIT.md and emit guide (#130)
+
+### Changed
+
+- **Runtime**: `storage.put()` now **fails fast** when FileWriter is not configured — previously logged a warning and silently discarded data (#128)
+- **Runtime**: Metrics persistence timeout increased from 10s to 30s to match policy flush timeout (#128)
+- **Docs**: Fan-out support level downgraded from `Supported` to `Experimental` in SUPPORT.md (#130)
+
+### Upgrade Notes
+
+- **Breaking**: `storage.put()` now returns an error instead of silently discarding data when storage is not configured. Scripts using `storage.put()` must ensure `--storage-backend` and `--storage-path` are set. Previously, misconfigured runs would silently lose sidecar files.
+
+---
+
 ## [0.6.0] - 2026-02-08
 
 ### Added
@@ -297,6 +318,7 @@ _No unreleased changes._
 
 ---
 
+[0.6.2]: https://github.com/justapithecus/quarry/releases/tag/v0.6.2
 [0.6.0]: https://github.com/justapithecus/quarry/releases/tag/v0.6.0
 [0.5.1]: https://github.com/justapithecus/quarry/releases/tag/v0.5.1
 [0.5.0]: https://github.com/justapithecus/quarry/releases/tag/v0.5.0

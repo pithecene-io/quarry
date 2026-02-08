@@ -132,6 +132,18 @@ at runtime. `--max-runs` is mandatory as a safety rail.
 | `--tui` | bool | `false` | Interactive TUI (inspect/stats only) |
 | `--quiet` | bool | `false` | Suppress run result output |
 
+### Browser Reuse
+
+| Flag | Type | Purpose |
+|------|------|---------|
+| `--browser-ws-endpoint` | string | Connect to an externally managed browser via WebSocket URL instead of launching Chromium per run |
+
+When set, the executor uses `puppeteer.connect()` (vanilla, no plugins) and
+creates an isolated `BrowserContext` per run. On cleanup, the context is closed
+but the browser stays alive. Fan-out child runs inherit the endpoint automatically.
+
+See `docs/guides/cli.md` for usage examples.
+
 ### Advanced (development only)
 
 | Flag | Type | Purpose |
@@ -203,6 +215,9 @@ quarry run --config quarry.yaml --script ./script.ts --run-id run-001
 
 source: my-source
 category: default
+
+# Connect to an externally managed browser instead of launching one per run.
+# browser_ws_endpoint: ws://localhost:9222/devtools/browser/...
 
 # Executor path override (development only).
 # The bundled binary auto-resolves the executor; only needed for local dev builds.
@@ -342,7 +357,7 @@ quarry run (Go runtime)
   ├── YAML config file (--config, project defaults)
   ├── Flag defaults (lowest precedence)
   └── Spawns executor subprocess
-        ├── stdin JSON → run_id, attempt, job, proxy endpoint
+        ├── stdin JSON → run_id, attempt, job, proxy endpoint, browser_ws_endpoint
         └── env vars → QUARRY_STEALTH, QUARRY_ADBLOCKER, QUARRY_NO_SANDBOX
               └── Controls Puppeteer browser behavior
 ```

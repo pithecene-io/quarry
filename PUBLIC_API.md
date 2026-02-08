@@ -178,7 +178,10 @@ await ctx.emit.error("Error message");
 // Suggest enqueueing additional work
 await ctx.emit.enqueue({
   target: "detail-page",
-  params: { url: "https://example.com/item/123" }
+  params: { url: "https://example.com/item/123" },
+  // Optional partition overrides (default: inherit from root run)
+  // source: "other-source",
+  // category: "other-category",
 });
 
 // Suggest proxy rotation
@@ -273,6 +276,12 @@ CLI flags always override config file values.
 | `--depth <n>` | `0` | Maximum recursion depth (0 = disabled) |
 | `--max-runs <n>` | | Total child run cap (required when `--depth > 0`) |
 | `--parallel <n>` | `1` | Maximum concurrent child runs |
+
+**Browser reuse:**
+
+| Flag | Description |
+|------|-------------|
+| `--browser-ws-endpoint <url>` | Connect to an externally managed browser via WebSocket URL (skips per-run Chromium launch; see `docs/guides/cli.md`) |
 
 **Advanced flags (development only):**
 

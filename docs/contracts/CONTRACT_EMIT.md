@@ -94,9 +94,15 @@ Required payload fields:
 - `target` (string)
 - `params` (object)
 
+Optional payload fields (v0.6.2+):
+- `source` (string) — override the child run's source partition key (default: inherit from root)
+- `category` (string) — override the child run's category partition key (default: inherit from root)
+
 Semantics:
 - Advisory only; not guaranteed or required.
 - No feedback channel is implied.
+- `source` and `category` are partition hints only. They do not affect dedup
+  (dedup is by `(target, params)` only).
 
 Runtime interpretation (v0.6.0+):
 - Default (`--depth 0`): advisory only, as above.

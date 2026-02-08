@@ -137,7 +137,34 @@ Fan-out flags (derived work execution):
 - `--parallel <n>` (concurrent child runs, default: `1`)
 
 Advanced flags:
+- `--browser-ws-endpoint <url>` (connect to an externally managed browser instead of launching one; see below)
 - `--executor <path>` (auto-resolved by default; override for troubleshooting)
+
+#### Browser Reuse (`--browser-ws-endpoint`)
+
+By default, each `quarry run` launches a fresh Chromium instance. For workloads
+with many runs (especially fan-out), this overhead is significant.
+
+`--browser-ws-endpoint <ws://...>` connects to an externally managed browser
+instead of launching one. Each run gets an isolated `BrowserContext` within the
+shared browser. On cleanup, the page and context are closed but the browser
+stays alive.
+
+```bash
+# Start a long-lived browser
+chrome --headless --remote-debugging-port=9222 &
+WS=$(curl -s http://localhost:9222/json/version | jq -r .webSocketDebuggerUrl)
+
+# Connect Quarry to it
+quarry run --browser-ws-endpoint "$WS" --script ./detail.ts ...
+```
+
+When fan-out is enabled (`--depth > 0`), all child runs automatically share the
+root run's browser connection.
+
+> **Note:** When using `--browser-ws-endpoint`, stealth and adblocker plugins
+> are skipped (vanilla Puppeteer `connect()` is used). Proxy credentials
+> configured via `--proxy-*` flags still apply via `page.authenticate()`.
 
 Exit codes (per CONTRACT_RUN.md):
 - `0`: success (run_complete)
