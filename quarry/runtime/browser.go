@@ -49,7 +49,7 @@ func LaunchManagedBrowser(ctx context.Context, executorPath, scriptPath string) 
 	go func() {
 		if scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
-			if strings.HasPrefix(line, "ws://") {
+			if strings.HasPrefix(line, "ws://") || strings.HasPrefix(line, "wss://") {
 				wsURLCh <- line
 				return
 			}
