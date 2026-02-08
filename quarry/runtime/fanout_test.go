@@ -311,7 +311,7 @@ func TestOperator_RecursiveFanOut(t *testing.T) {
 
 	var totalCalls atomic.Int64
 
-	var factory ChildRunFactory
+	var factory ChildRunFactory //nolint:staticcheck // split decl+assign needed for recursive self-reference
 	factory = func(ctx context.Context, item WorkItem, observer EnqueueObserver) (*RunResult, error) {
 		totalCalls.Add(1)
 
