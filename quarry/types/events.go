@@ -96,6 +96,10 @@ type EnqueuePayload struct {
 	Target string `msgpack:"target"`
 	// Params is the parameters for the work.
 	Params map[string]any `msgpack:"params"`
+	// Source is an optional partition override for the child run's source.
+	Source string `msgpack:"source,omitempty"`
+	// Category is an optional partition override for the child run's category.
+	Category string `msgpack:"category,omitempty"`
 }
 
 // RotateProxyPayload represents a rotate_proxy event payload per CONTRACT_EMIT.md.

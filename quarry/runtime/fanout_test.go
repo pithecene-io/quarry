@@ -403,6 +403,70 @@ func TestOperator_NoEnqueueEvents(t *testing.T) {
 	}
 }
 
+func TestOperator_EnqueueSourceCategoryOverride(t *testing.T) {
+	var capturedItems []WorkItem
+
+	factory := func(ctx context.Context, item WorkItem, observer EnqueueObserver) (*RunResult, error) {
+		capturedItems = append(capturedItems, item)
+		return &RunResult{
+			RunMeta: &types.RunMeta{RunID: item.RunID, Attempt: 1},
+			Outcome: &types.RunOutcome{Status: types.OutcomeSuccess, Message: "ok"},
+		}, nil
+	}
+
+	operator := NewOperator(FanOutConfig{
+		MaxDepth: 3,
+		MaxRuns:  10,
+		Parallel: 1,
+	}, factory)
+
+	observer := operator.NewObserver(0)
+
+	// Enqueue with source/category overrides
+	observer(&types.EventEnvelope{
+		Type: types.EventTypeEnqueue,
+		Payload: map[string]any{
+			"target":   "detail.ts",
+			"params":   map[string]any{"url": "https://example.com"},
+			"source":   "other-source",
+			"category": "premium",
+		},
+	})
+
+	// Enqueue without overrides (should have empty strings)
+	observer(&types.EventEnvelope{
+		Type: types.EventTypeEnqueue,
+		Payload: map[string]any{
+			"target": "basic.ts",
+			"params": map[string]any{"url": "https://basic.com"},
+		},
+	})
+
+	rootDone := make(chan struct{})
+	close(rootDone)
+	operator.Run(t.Context(), rootDone)
+
+	if len(capturedItems) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(capturedItems))
+	}
+
+	// First item should have overrides
+	if capturedItems[0].Source != "other-source" {
+		t.Errorf("expected source=other-source, got %q", capturedItems[0].Source)
+	}
+	if capturedItems[0].Category != "premium" {
+		t.Errorf("expected category=premium, got %q", capturedItems[0].Category)
+	}
+
+	// Second item should have empty (inherit from parent)
+	if capturedItems[1].Source != "" {
+		t.Errorf("expected empty source for no-override item, got %q", capturedItems[1].Source)
+	}
+	if capturedItems[1].Category != "" {
+		t.Errorf("expected empty category for no-override item, got %q", capturedItems[1].Category)
+	}
+}
+
 func TestOperator_FailedChildRun(t *testing.T) {
 	factory := func(ctx context.Context, item WorkItem, observer EnqueueObserver) (*RunResult, error) {
 		return &RunResult{

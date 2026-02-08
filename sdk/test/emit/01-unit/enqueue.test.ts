@@ -86,4 +86,54 @@ describe('emit.enqueue() envelope correctness', () => {
     const errors = validateEnvelope(sink.envelopes[0])
     expect(errors).toEqual([])
   })
+
+  it('includes source when provided', async () => {
+    const emit = createEmitAPI(run, sink)
+
+    await emit.enqueue({ target: 'detail', params: {}, source: 'other-source' })
+
+    expect(sink.envelopes[0].payload).toMatchObject({
+      target: 'detail',
+      source: 'other-source'
+    })
+  })
+
+  it('includes category when provided', async () => {
+    const emit = createEmitAPI(run, sink)
+
+    await emit.enqueue({ target: 'detail', params: {}, category: 'premium' })
+
+    expect(sink.envelopes[0].payload).toMatchObject({
+      target: 'detail',
+      category: 'premium'
+    })
+  })
+
+  it('includes both source and category when provided', async () => {
+    const emit = createEmitAPI(run, sink)
+
+    await emit.enqueue({
+      target: 'detail',
+      params: { id: 1 },
+      source: 'alt-source',
+      category: 'special'
+    })
+
+    expect(sink.envelopes[0].payload).toMatchObject({
+      target: 'detail',
+      params: { id: 1 },
+      source: 'alt-source',
+      category: 'special'
+    })
+  })
+
+  it('omits source and category when not provided', async () => {
+    const emit = createEmitAPI(run, sink)
+
+    await emit.enqueue({ target: 'basic', params: {} })
+
+    const payload = sink.envelopes[0].payload as Record<string, unknown>
+    expect(payload).not.toHaveProperty('source')
+    expect(payload).not.toHaveProperty('category')
+  })
 })

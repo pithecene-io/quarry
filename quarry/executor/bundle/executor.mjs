@@ -119,7 +119,9 @@ function createAPIs(run, sink) {
     enqueue(options) {
       return emitEvent("enqueue", {
         target: options.target,
-        params: options.params
+        params: options.params,
+        ...options.source !== void 0 && { source: options.source },
+        ...options.category !== void 0 && { category: options.category }
       });
     },
     rotateProxy(options) {

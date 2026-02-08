@@ -342,6 +342,15 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		Attempt: 1,
 	}
 
+	childSource := cf.source
+	if item.Source != "" {
+		childSource = item.Source
+	}
+	childCategory := cf.category
+	if item.Category != "" {
+		childCategory = item.Category
+	}
+
 	childCollector := metrics.NewCollector(
 		cf.policyChoice.name,
 		filepath.Base(cf.executorPath),
@@ -352,7 +361,7 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 
 	childPol, childLodeClient, childFileWriter, err := buildPolicy(
 		cf.policyChoice, cf.storage, cf.storageDataset,
-		cf.source, cf.category, item.RunID,
+		childSource, childCategory, item.RunID,
 		time.Now(), childCollector,
 	)
 	if err != nil {
@@ -370,8 +379,8 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		FileWriter:        childFileWriter,
 		EnqueueObserver:   observer,
 		BrowserWSEndpoint: cf.browserWSEndpoint,
-		Source:            cf.source,
-		Category:          cf.category,
+		Source:            childSource,
+		Category:          childCategory,
 		Collector:         childCollector,
 	}
 

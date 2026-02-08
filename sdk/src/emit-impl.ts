@@ -181,7 +181,9 @@ export function createAPIs(run: RunMeta, sink: EmitSink): { emit: EmitAPI; stora
     enqueue(options: EmitEnqueueOptions): Promise<void> {
       return emitEvent('enqueue', {
         target: options.target,
-        params: options.params
+        params: options.params,
+        ...(options.source !== undefined && { source: options.source }),
+        ...(options.category !== undefined && { category: options.category })
       })
     },
 
