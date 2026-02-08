@@ -255,6 +255,11 @@ jobs:
             exit 1
           fi
           echo "✅ pnpm version matches pin"
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "🏗️ Build SDK"
+        working-directory: sdk
+        run: pnpm run build
       - name: "🔍 Publish Diagnostics"
         working-directory: sdk
         run: |
