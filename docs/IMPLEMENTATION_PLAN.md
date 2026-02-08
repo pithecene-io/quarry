@@ -13,12 +13,14 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.5.0)
-- Latest release: v0.5.0 (see CHANGELOG.md).
+## Current Status (as of v0.5.1)
+- Latest release: v0.5.1 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
+- v0.5.1 fixed published npm packages missing `dist/` directory (#110).
 - v0.5.0 adds webhook and Redis pub/sub event-bus adapters for downstream notifications.
 - v0.4.1 added `--config` for YAML project-level defaults and config package hardening.
 - v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
+- Next priority: v0.6.0 crawl mode (`quarry crawl`) — see roadmap below.
 
 ---
 
@@ -391,21 +393,17 @@ Outbox records would live at:
 datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/event_type=adapter_outbox/
 ```
 
-#### Relationship to Temporal orchestration
+#### Relationship to external orchestrators
 
 The outbox pattern applies only to standalone/CLI usage where no external
-orchestrator provides delivery guarantees. When Quarry runs as a Temporal
-activity, the outbox is redundant — Temporal owns durable execution and
-the downstream notification becomes a separate activity with Temporal's
-built-in retry semantics. In that paradigm, Quarry embeds naturally:
-the workflow orchestrates extraction (Quarry activity) and notification
-(webhook/SNS activity) as independent steps, each with Temporal's
-at-least-once guarantees.
+orchestrator provides delivery guarantees. When Quarry runs inside an
+orchestrator (Temporal, Airflow, etc.), the outbox is redundant — the
+orchestrator owns durable execution and downstream notification becomes
+a separate step with the orchestrator's built-in retry semantics.
 
-Temporal eliminates the need for the outbox in orchestrated deployments,
-but standalone CLI usage remains a first-class paradigm. The outbox
-pattern is still relevant for users running Quarry directly (cron, CI,
-shell scripts) without an external orchestrator.
+Standalone CLI usage remains a first-class paradigm. The outbox pattern
+is relevant for users running Quarry directly (cron, CI, shell scripts)
+without an external orchestrator.
 
 See `docs/guides/temporal.md` for the full Temporal integration design.
 
@@ -420,7 +418,105 @@ production usage.
 
 ---
 
-## v0.6.0 Roadmap — Advanced Proxy Rotation
+## v0.6.0 Roadmap — Crawl Mode
+
+### Goal
+
+Enable Quarry to follow its own `enqueue` signals, turning a single CLI
+invocation into a bounded crawl that discovers and processes work without
+external orchestration.
+
+### Motivation
+
+Crawling is the most common Quarry workload shape that the current CLI
+cannot serve natively. A listing page emits `enqueue` events for detail
+pages, but the runtime drops them — forcing users to build external
+orchestrators that read items from storage, loop, and spawn `quarry run`
+per target. Crawl mode closes this loop inside the runtime.
+
+This fills the gap between `quarry run` (single target, zero infrastructure)
+and external orchestrators like Temporal (complex DAGs, heavy infrastructure):
+
+```
+Complexity of work graph
+──────────────────────────────────────────────────────
+Simple               Discovered              Complex DAG
+(one target)         (fan-out)               (multi-step, conditional)
+
+quarry run           quarry crawl            External orchestrator
+```
+
+### Semantics
+
+- `quarry crawl` is a new CLI command (does not change `quarry run`)
+- `enqueue` events remain advisory in `quarry run` — crawl mode is opt-in
+- Each `enqueue` event spawns a child run:
+  - `target` → `--source` (script to execute)
+  - `params` → `--job` (job payload)
+- `parent_run_id` links child runs to their parent
+- All runs in a crawl share the same Lode dataset
+- The crawl exits when the run tree is exhausted or limits are reached
+
+### Bounds and Controls
+
+- `--max-depth N` — maximum generations from the root run
+- `--concurrency N` — maximum in-flight child runs
+- `--max-runs N` — hard cap on total runs in the crawl
+- Deduplication by `(target, params)` hash — same work is not re-queued
+
+### Outcome Semantics
+
+A crawl's exit reflects aggregate outcome:
+- Exit 0 if all runs completed successfully
+- Non-zero if any run failed (with summary of failures)
+- Partial success is the expected case for large crawls
+- `quarry inspect` extended to show crawl tree with per-run outcomes
+
+### Contract Impact
+
+- No changes to CONTRACT_EMIT.md — `enqueue` stays advisory
+- CONTRACT_RUN.md — additive: `parent_run_id` threading for crawl lineage
+- CONTRACT_CLI.md — additive: `quarry crawl` command and flags
+
+### Deliverables
+
+- `quarry crawl` CLI command with depth/concurrency/max-runs flags
+- Crawl scheduler in runtime: enqueue consumer, dedup, child run spawning
+- Lineage tracking via `parent_run_id` across the run tree
+- Crawl summary output (tree view, per-run outcomes, aggregate stats)
+- CLI `inspect` support for crawl trees
+
+### Mini-milestones
+
+- [ ] Contract updates (CONTRACT_RUN.md lineage, CONTRACT_CLI.md command)
+- [ ] Crawl scheduler: enqueue event consumer with dedup and depth tracking
+- [ ] Child run spawning with concurrency limiter
+- [ ] `parent_run_id` threading through run metadata
+- [ ] `quarry crawl` CLI wiring (command, flags, config)
+- [ ] Crawl summary output and exit code semantics
+- [ ] `quarry inspect` crawl tree view
+- [ ] Tests: depth bounds, concurrency limits, dedup, partial failure
+
+### Scope boundary
+
+Crawl mode handles bounded, discovered work graphs. It does **not** handle:
+- Priority queuing (depth-first vs breadth-first is implementation-chosen)
+- Cross-crawl dedup (don't re-scrape URLs seen in previous crawls)
+- Per-URL rate limiting beyond proxy rotation
+- Resume of interrupted crawls
+- Conditional branching (if X then enqueue Y)
+
+These belong in external orchestrators. If crawl mode starts accumulating
+these features, it has exceeded its scope.
+
+### Design exploration
+
+See `docs/ingress-models.md` for the full analysis of ingress models
+and how crawl mode (Model B) relates to other options.
+
+---
+
+## v0.7.0 Roadmap — Advanced Proxy Rotation
 
 ### Goal
 Harden proxy selection for production workloads that require recency-aware
@@ -468,13 +564,32 @@ Phase 2 is deferred until Phase 1 is validated in production.
 
 ---
 
-## Module Split — Multi-Module Restructure
+## Additional Event Bus Adapters (Staggered)
+
+Order of support:
+- ~~Redis Pub/Sub~~ (shipped in v0.5.0)
+- NATS
+- SNS/SQS
+
+Principles:
+- Integrations must not change contracts.
+- Event envelope remains stable across adapters.
+- CLI/Stats/Metrics hardening is a prerequisite for each new adapter.
+
+---
+
+## Module Split — Multi-Module Restructure (Deferred)
+
+> **Status: Deferred.** The module split was originally motivated by the
+> Temporal integration (see below). With Temporal deprioritized, the split
+> is not urgent. It remains a clean-up goal for dependency hygiene but is
+> no longer on the critical path.
 
 ### Goal
 
-Split the `quarry/` Go module into independent modules so that
-`quarry-temporal/` (and future integrations) can depend on core runtime
-types without pulling in CLI, TUI, or unrelated dependencies.
+Split the `quarry/` Go module into independent modules so that future
+integrations can depend on core runtime types without pulling in CLI,
+TUI, or unrelated dependencies.
 
 ### Agreed Layout
 
@@ -482,17 +597,6 @@ types without pulling in CLI, TUI, or unrelated dependencies.
 |--------|---------------|----------|
 | `quarry-core/` | `github.com/justapithecus/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
 | `quarry-cli/` | `github.com/justapithecus/quarry-cli` | CLI commands, TUI, config, reader |
-| `quarry-temporal/` | `github.com/justapithecus/quarry-temporal` | activity, workflow, worker binary |
-| `quarry-sdk/` | (npm: `@aspect/quarry-sdk`) | TypeScript SDK (rename from `sdk/`) |
-| `quarry-executor/` | (npm: `@aspect/quarry-executor`) | Node executor (rename from `executor-node/`) |
-
-### Dependency Graph
-
-```
-quarry-cli/      -> quarry-core/
-quarry-temporal/  -> quarry-core/, go.temporal.io/sdk
-quarry-core/      (no quarry-* dependencies)
-```
 
 ### Prerequisites
 
@@ -505,24 +609,21 @@ quarry-core/      (no quarry-* dependencies)
    proxy, metrics, log into standalone module.
 2. Extract `quarry-cli/` — CLI, TUI, config, reader depend on
    `quarry-core/`.
-3. Create `quarry-temporal/` — new module depending on `quarry-core/`
-   and `go.temporal.io/sdk`.
-4. Rename `sdk/` → `quarry-sdk/`, `executor-node/` → `quarry-executor/`
-   — update package names and CI references.
-5. Update CI — build matrix, release workflows, go.work for local dev.
-
-### Mini-milestones
-
-- [ ] Audit: identify all cross-package imports that block extraction
-- [ ] Extract `quarry-core/` module with passing tests
-- [ ] Extract `quarry-cli/` module with passing tests
-- [ ] Create `quarry-temporal/` module (empty scaffold)
-- [ ] Rename SDK and executor packages
-- [ ] CI builds all modules independently
+3. Update CI — build matrix, release workflows, go.work for local dev.
 
 ---
 
-## Temporal Orchestration Integration
+## Temporal Orchestration Integration (Deferred)
+
+> **Status: Deferred.** Temporal integration is the right answer for teams
+> that already operate Temporal infrastructure and need complex DAG
+> orchestration, conditional branching, or human-in-the-loop workflows.
+> However, most Quarry users do not run Temporal, and the most common
+> gap — crawling with discovered work — is better served by `quarry crawl`
+> (v0.6.0) with zero infrastructure requirements.
+>
+> Temporal remains a valid future integration. When demand justifies it,
+> the module split (above) is its prerequisite.
 
 ### Goal
 
@@ -532,49 +633,14 @@ lineage tracking, and durable execution guarantees.
 ### Prerequisites
 
 - [ ] Module split complete (`quarry-core/` extracted)
-- [ ] `quarry-temporal/` module created
 
 ### Deliverables
 
-- Activity wrapper: thin in-process wrapper calling
-  `runtime.NewRunOrchestrator(config).Execute(ctx)`
-- Heartbeat goroutine: concurrent liveness reporting (30s interval)
-- Outcome mapping: `OutcomeStatus` → Temporal error semantics per
-  `CONTRACT_INTEGRATION.md`
-- Reference workflow: `QuarryExtractionWorkflow` with lineage-aware
-  retry logic (new `run_id` per attempt, `parent_run_id` threading)
-- Worker binary: standalone Temporal worker for `quarry-temporal/`
-- Batch patterns: parallel activities for small batches, child workflows
-  for large batches (>500 runs)
-
-### Mini-milestones
-
-- [ ] Activity wrapper with outcome mapping
-- [ ] Heartbeat goroutine with cancellation propagation
-- [ ] Reference workflow with lineage-aware retries
-- [ ] Worker binary and registration
-- [ ] Batch workflow patterns (parallel + child workflow)
-- [ ] Integration tests with Temporal test framework
-
-See `docs/guides/temporal.md` for detailed design and pseudocode.
-
----
-
-## Post-v0.5.0 — Additional Notification Adapters (Staggered)
-
-Order of support:
-- ~~Redis Pub/Sub~~ (shipped in v0.5.0)
-- NATS
-- SNS/SQS
-
-> Temporal is an orchestration integration, not a notification adapter.
-> See [Temporal Orchestration Integration](#temporal-orchestration-integration)
-> and `docs/guides/temporal.md`.
-
-Principles:
-- Integrations must not change contracts.
-- Event envelope remains stable across adapters.
-- CLI/Stats/Metrics hardening is a prerequisite for each new adapter.
+- Activity wrapper calling `runtime.NewRunOrchestrator(config).Execute(ctx)`
+- Heartbeat goroutine for liveness reporting
+- Outcome mapping: `OutcomeStatus` → Temporal error semantics
+- Reference workflow with lineage-aware retry logic
+- Worker binary for `quarry-temporal/`
 
 ---
 
