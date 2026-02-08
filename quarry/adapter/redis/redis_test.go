@@ -13,7 +13,7 @@ import (
 
 func testEvent() *adapter.RunCompletedEvent {
 	return &adapter.RunCompletedEvent{
-		ContractVersion: "0.4.1",
+		ContractVersion: "0.5.0",
 		EventType:       "run_completed",
 		RunID:           "run-001",
 		Source:          "test-source",

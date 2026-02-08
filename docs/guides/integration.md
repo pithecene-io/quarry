@@ -141,6 +141,48 @@ run exits with its normal outcome code.
 | `--adapter-retries` | `3` | Retry attempts with exponential backoff |
 | `--adapter-header` | | Custom header (repeatable, `key=value` format) |
 
+### Redis Pub/Sub Adapter (v0.5.0+)
+
+Quarry ships a built-in Redis pub/sub adapter that publishes a JSON event
+to a configurable Redis channel after each run completes.
+
+```bash
+quarry run \
+  --script ./script.ts \
+  --run-id run-001 \
+  --source my-source \
+  --storage-backend fs \
+  --storage-path ./data \
+  --adapter redis \
+  --adapter-url redis://localhost:6379/0 \
+  --adapter-channel quarry:run_completed
+```
+
+The adapter publishes after storage commit and metrics persist. If the
+publish fails (after retries), the warning is logged to stderr but the
+run exits with its normal outcome code.
+
+#### Redis Adapter Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--adapter-channel` | `quarry:run_completed` | Pub/sub channel name |
+| `--adapter-timeout` | `5s` | Per-publish timeout |
+| `--adapter-retries` | `3` | Retry attempts with exponential backoff |
+
+The `--adapter-header` flag is ignored for the Redis adapter (with a warning).
+
+#### YAML Config Example
+
+```yaml
+adapter:
+  type: redis
+  url: redis://localhost:6379/0
+  channel: quarry:run_completed
+  timeout: 5s
+  retries: 3
+```
+
 ### Interim Pattern (v0.4.x)
 
 Before v0.5.0, use a shell wrapper to trigger downstream notifications:
