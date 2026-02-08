@@ -91,7 +91,7 @@ Validation is a downstream consumer responsibility.
 - The ingestion policy determines whether partial data is preserved on failure.
 - Error messages include actionable context (what operation failed, where).
 
-### S3 Backend (Experimental)
+### S3 Backend
 
 **Authentication:**
 - S3 uses the AWS SDK default credential chain:
