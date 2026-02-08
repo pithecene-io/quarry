@@ -408,10 +408,12 @@ task build
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
 3. **No streaming reads**: Artifacts must fit in memory
-4. **S3 is experimental**: S3 and S3-compatible providers (R2, MinIO) are supported but experimental; no transactional guarantees across writes
+4. **No transactional storage writes**: S3 and S3-compatible providers (R2, MinIO) do not provide transactional guarantees across writes
 5. **No job scheduling**: Quarry supports in-process derived work via `--depth` but is not a scheduler; external orchestration is the caller's responsibility
 6. **Puppeteer required**: All scripts run in a browser context
 7. **Event bus adapters**: Webhook and Redis pub/sub adapters are available. Temporal, NATS, and SNS adapters are planned. See `docs/guides/integration.md`.
+8. **Fan-out category inheritance**: Child runs inherit the root run's `--category`. Fan-out is designed for homogeneous derived work within the same logical partition; heterogeneous pipelines requiring different categories should use external orchestration.
+9. **Fan-out target resolution**: `target` in `emit.enqueue()` is resolved as a file path relative to CWD (same as `--script`). Config-based logical names may be supported in a future release.
 
 ---
 
@@ -437,7 +439,7 @@ Data is stored in Hive-partitioned layout:
             data.jsonl
 ```
 
-### S3 Backend (Experimental)
+### S3 Backend
 
 ```bash
 --storage-backend s3 \

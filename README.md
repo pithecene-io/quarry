@@ -166,7 +166,7 @@ Scripts are imperative, explicit, and boring by design.
 Quarry is under active development.
 
 - Contracts frozen, SDK stable
-- FS storage supported, S3 experimental
+- FS and S3 storage supported
 - Platforms: linux/darwin, x64/arm64
 
 Breaking changes are gated by contract versioning.

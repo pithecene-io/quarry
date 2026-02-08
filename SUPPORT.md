@@ -28,9 +28,9 @@ _No known issues in v0.6.0._
 | `quarry stats` command | Supported |
 | Node.js executor | Supported |
 | Filesystem storage backend | Supported |
-| S3 storage backend | Experimental |
+| S3 storage backend | Supported |
 | SDK emit API | Supported |
-| Fan-out (`--depth`) | Supported |
+| Fan-out (`--depth`) | Experimental |
 
 ### Supported Platforms
 
@@ -70,7 +70,6 @@ _No known issues in v0.6.0._
 
 The following are available but not production-hardened:
 
-- **S3 storage backend**: Requires explicit opt-in via `--storage-backend s3`
 - **Proxy rotation**: Advisory only; actual rotation depends on infrastructure
 
 ---

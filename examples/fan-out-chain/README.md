@@ -4,6 +4,9 @@ Demonstrates fan-out derived work execution. The root script parses a
 product listing and enqueues a detail script per product. Each detail
 script extracts product data and emits an item.
 
+**Note:** Child runs inherit the root run's `--category`. All child run
+data lands under the same Lode partition as the root.
+
 Run:
 
 ```

@@ -434,7 +434,7 @@ func runAction(c *cli.Context) error {
 	// Build policy with storage sink
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, lodeClient, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector)
+	pol, lodeClient, fileWriter, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -490,7 +490,7 @@ func runAction(c *cli.Context) error {
 
 	// Branch: fan-out or single run
 	if fanOut.depth > 0 {
-		return runWithFanOut(ctx, c, fanOut, choice, executorPath, job, runMeta, pol, resolvedProxy, source, category, collector, lodeClient, storageConfig, storageDataset, adptConfig, startTime)
+		return runWithFanOut(ctx, c, fanOut, choice, executorPath, job, runMeta, pol, resolvedProxy, source, category, collector, lodeClient, fileWriter, storageConfig, storageDataset, adptConfig, startTime)
 	}
 
 	// Create run config
@@ -501,6 +501,7 @@ func runAction(c *cli.Context) error {
 		RunMeta:      runMeta,
 		Policy:       pol,
 		Proxy:        resolvedProxy,
+		FileWriter:   fileWriter,
 		Source:       source,
 		Category:     category,
 		Collector:    collector,
@@ -572,6 +573,7 @@ func runWithFanOut(
 	source, category string,
 	collector *metrics.Collector,
 	lodeClient lode.Client,
+	rootFileWriter lode.FileWriter,
 	storageConfig storageChoice,
 	storageDataset string,
 	adptConfig *adapterChoice,
@@ -600,7 +602,7 @@ func runWithFanOut(
 			"",
 		)
 
-		childPol, childLodeClient, err := buildPolicy(
+		childPol, childLodeClient, childFileWriter, err := buildPolicy(
 			choice, storageConfig, storageDataset,
 			source, category, item.RunID,
 			time.Now(), childCollector,
@@ -610,9 +612,6 @@ func runWithFanOut(
 		}
 		defer func() { _ = childPol.Close() }()
 
-		// FileWriter is intentionally nil for child runs. lode.Client does not
-		// satisfy lode.FileWriter; plumbing the concrete *LodeClient through
-		// requires a broader refactor deferred to a follow-up.
 		config := &runtime.RunConfig{
 			ExecutorPath:    executorPath,
 			ScriptPath:      childScript,
@@ -620,6 +619,7 @@ func runWithFanOut(
 			RunMeta:         childMeta,
 			Policy:          childPol,
 			Proxy:           resolvedProxy,
+			FileWriter:      childFileWriter,
 			EnqueueObserver: observer,
 			Source:          source,
 			Category:        category,
@@ -667,6 +667,7 @@ func runWithFanOut(
 		RunMeta:         runMeta,
 		Policy:          pol,
 		Proxy:           resolvedProxy,
+		FileWriter:      rootFileWriter,
 		EnqueueObserver: rootObserver,
 		Source:          source,
 		Category:        category,
@@ -1159,16 +1160,16 @@ Quarry could not locate the executor. To fix:
   3. Or add quarry-executor to your PATH`)
 }
 
-func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, error) {
+func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, lode.FileWriter, error) {
 	// Build storage sink
-	sink, client, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
+	sink, client, fw, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
 
 	switch choice.name {
 	case "strict":
-		return policy.NewStrictPolicy(sink), client, nil
+		return policy.NewStrictPolicy(sink), client, fw, nil
 
 	case "buffered":
 		config := policy.BufferedConfig{
@@ -1177,18 +1178,19 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushMode:       policy.FlushMode(choice.flushMode),
 		}
 		p, err := policy.NewBufferedPolicy(sink, config)
-		return p, client, err
+		return p, client, fw, err
 
 	default:
-		return nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
+		return nil, nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
 	}
 }
 
 // buildStorageSink creates a Lode storage sink based on CLI configuration.
 // Storage backend and path are required - no silent fallback to stub.
 // If collector is non-nil, wraps the sink with metrics instrumentation.
-// Returns the sink, the underlying client (for metrics persistence), and any error.
-func buildStorageSink(storageConfig storageChoice, dataset, source, category, runID, policy string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, error) {
+// Returns the sink, the underlying client (for metrics persistence),
+// a FileWriter for sidecar file uploads, and any error.
+func buildStorageSink(storageConfig storageChoice, dataset, source, category, runID, policy string, startTime time.Time, collector *metrics.Collector) (policy.Sink, lode.Client, lode.FileWriter, error) {
 	// Build Lode config with partition keys
 	cfg := lode.Config{
 		Dataset:  dataset,
@@ -1199,14 +1201,16 @@ func buildStorageSink(storageConfig storageChoice, dataset, source, category, ru
 		Policy:   policy,
 	}
 
-	var client lode.Client
+	// LodeClient implements both lode.Client and lode.FileWriter.
+	// Capture as concrete type so we can return both interfaces.
+	var lc *lode.LodeClient
 	var err error
 
 	switch storageConfig.backend {
 	case "fs":
-		client, err = lode.NewLodeClient(cfg, storageConfig.path)
+		lc, err = lode.NewLodeClient(cfg, storageConfig.path)
 		if err != nil {
-			return nil, nil, fmt.Errorf("filesystem storage initialization failed: %w (ensure directory %s exists and is writable)", err, storageConfig.path)
+			return nil, nil, nil, fmt.Errorf("filesystem storage initialization failed: %w (ensure directory %s exists and is writable)", err, storageConfig.path)
 		}
 	case "s3":
 		bucket, prefix := lode.ParseS3Path(storageConfig.path)
@@ -1217,20 +1221,20 @@ func buildStorageSink(storageConfig storageChoice, dataset, source, category, ru
 			Endpoint:     storageConfig.endpoint,
 			UsePathStyle: storageConfig.usePathStyle,
 		}
-		client, err = lode.NewLodeS3Client(cfg, s3cfg)
+		lc, err = lode.NewLodeS3Client(cfg, s3cfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("S3 storage initialization failed: %w (check AWS credentials and bucket permissions)", err)
+			return nil, nil, nil, fmt.Errorf("S3 storage initialization failed: %w (check AWS credentials and bucket permissions)", err)
 		}
 	default:
 		// Should not reach here due to validateStorageConfig
-		return nil, nil, fmt.Errorf("unknown storage-backend: %s", storageConfig.backend)
+		return nil, nil, nil, fmt.Errorf("unknown storage-backend: %s", storageConfig.backend)
 	}
 
-	sink := lode.NewSink(cfg, client)
+	sink := lode.NewSink(cfg, lc)
 	if collector != nil {
-		return lode.NewInstrumentedSink(sink, collector), client, nil
+		return lode.NewInstrumentedSink(sink, collector), lc, lc, nil
 	}
-	return sink, client, nil
+	return sink, lc, lc, nil
 }
 
 // buildAdapter creates an adapter from parsed config.
