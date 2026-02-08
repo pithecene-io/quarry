@@ -30,7 +30,7 @@ _No known issues in v0.6.0._
 | Filesystem storage backend | Supported |
 | S3 storage backend | Experimental |
 | SDK emit API | Supported |
-| Fan-out (`--depth`) | Supported |
+| Fan-out (`--depth`) | Experimental |
 
 ### Supported Platforms
 

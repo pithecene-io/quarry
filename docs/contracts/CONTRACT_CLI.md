@@ -170,6 +170,8 @@ Semantics:
 - Deduplication: identical `(target, params)` pairs are executed once.
 - Exit code is determined by root run outcome only.
 - Child run results appear in the fan-out summary printed to stdout.
+- Child runs inherit the root run's `--category` (no per-child override).
+- `target` is resolved as a file path relative to CWD (same as `--script`).
 
 ### Config File (v0.4.x+)
 

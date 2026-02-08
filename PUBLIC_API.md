@@ -412,6 +412,8 @@ task build
 5. **No job scheduling**: Quarry supports in-process derived work via `--depth` but is not a scheduler; external orchestration is the caller's responsibility
 6. **Puppeteer required**: All scripts run in a browser context
 7. **Event bus adapters**: Webhook and Redis pub/sub adapters are available. Temporal, NATS, and SNS adapters are planned. See `docs/guides/integration.md`.
+8. **Fan-out category inheritance**: Child runs inherit the root run's `--category`. Fan-out is designed for homogeneous derived work within the same logical partition; heterogeneous pipelines requiring different categories should use external orchestration.
+9. **Fan-out target resolution**: `target` in `emit.enqueue()` is resolved as a file path relative to CWD (same as `--script`). Config-based logical names may be supported in a future release.
 
 ---
 
