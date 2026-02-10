@@ -113,6 +113,10 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 		StartedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := writeDiscovery(discoveryPath, disc); err != nil {
+		// Kill the just-launched process to avoid an unmanaged orphan
+		if proc, findErr := os.FindProcess(pid); findErr == nil {
+			_ = proc.Kill()
+		}
 		return "", fmt.Errorf("browser reuse: write discovery: %w", err)
 	}
 
