@@ -3,6 +3,7 @@ package policy
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -100,10 +101,14 @@ func BenchmarkStrictPolicy_IngestArtifactChunk(b *testing.B) {
 	}
 }
 
-// BenchmarkStrictPolicy_ConcurrentIngest measures contention under concurrent writers.
+// BenchmarkStrictPolicy_ConcurrentIngest measures contention under concurrent writers
+// with varying parallelism levels.
 func BenchmarkStrictPolicy_ConcurrentIngest(b *testing.B) {
 	for _, goroutines := range []int{1, 4, 8} {
 		b.Run(fmt.Sprintf("goroutines=%d", goroutines), func(b *testing.B) {
+			prev := runtime.GOMAXPROCS(goroutines)
+			b.Cleanup(func() { runtime.GOMAXPROCS(prev) })
+
 			pol := NewStrictPolicy(noopSink{})
 			ctx := context.Background()
 			env := benchEnvelope(1)
