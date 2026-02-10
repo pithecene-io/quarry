@@ -48,6 +48,20 @@ Non-goals:
 - `runs_failed_total` (counter)
 - `runs_crashed_total` (counter)
 
+Outcome-to-metric mapping:
+
+| OutcomeStatus | Counter Incremented |
+|---------------|---------------------|
+| `success` | `runs_completed_total` |
+| `script_error` | `runs_failed_total` |
+| `policy_failure` | `runs_failed_total` |
+| `version_mismatch` | `runs_failed_total` |
+| `executor_crash` | `runs_crashed_total` |
+
+`version_mismatch` increments `runs_failed_total` (not `runs_crashed_total`)
+because it is a configuration error, not an executor fault. It also does NOT
+increment `executor_crash_total`.
+
 ### Ingestion Policy
 - `events_received_total` (counter)
 - `events_persisted_total` (counter)
