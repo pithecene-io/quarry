@@ -1,6 +1,6 @@
 import { PassThrough, Writable } from 'node:stream'
-import type { ArtifactId, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
 import { decode as msgpackDecode } from '@msgpack/msgpack'
+import type { ArtifactId, EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type ArtifactChunkFrame, LENGTH_PREFIX_SIZE } from '../../src/ipc/frame.js'
 import { StdioSink, StreamClosedError } from '../../src/ipc/sink.js'

@@ -1,4 +1,4 @@
-# @justapithecus/quarry-sdk
+# @pithecene-io/quarry-sdk
 
 TypeScript SDK for writing Quarry extraction scripts.
 
@@ -6,16 +6,16 @@ TypeScript SDK for writing Quarry extraction scripts.
 
 ```bash
 # via JSR (recommended)
-npx jsr add @justapithecus/quarry-sdk
+npx jsr add @pithecene-io/quarry-sdk
 
 # via GitHub Packages
-pnpm add @justapithecus/quarry-sdk
+pnpm add @pithecene-io/quarry-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import type { QuarryScript } from '@justapithecus/quarry-sdk'
+import type { QuarryScript } from '@pithecene-io/quarry-sdk'
 
 interface MyJob {
   url: string
@@ -107,7 +107,7 @@ payloads or when chunk-level progress tracking is needed.
 Export these from your script module for lifecycle control:
 
 ```typescript
-import type { QuarryScriptModule } from '@justapithecus/quarry-sdk'
+import type { QuarryScriptModule } from '@pithecene-io/quarry-sdk'
 
 const module: QuarryScriptModule<MyJob> = {
   async default(ctx) {

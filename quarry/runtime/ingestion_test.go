@@ -9,9 +9,9 @@ import (
 
 	"github.com/vmihailenco/msgpack/v5"
 
-	"github.com/justapithecus/quarry/log"
-	"github.com/justapithecus/quarry/policy"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/log"
+	"github.com/pithecene-io/quarry/policy"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // encodeFrame encodes a payload with length prefix

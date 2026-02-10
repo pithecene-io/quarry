@@ -1,4 +1,4 @@
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.emit.item({

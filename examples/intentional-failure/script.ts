@@ -1,4 +1,4 @@
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 /**
  * Intentional failure example for testing error paths.

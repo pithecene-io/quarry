@@ -1,4 +1,4 @@
-import type { ArtifactId, EmitSink, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
+import type { ArtifactId, EmitSink, EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ObservingSink, SinkAlreadyFailedError } from '../../src/ipc/observing-sink.js'
 

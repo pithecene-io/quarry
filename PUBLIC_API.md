@@ -26,14 +26,14 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:justapithecus/quarry@0.6.2
+mise install github:pithecene-io/quarry@0.6.2
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:justapithecus/quarry" = "0.6.2"
+"github:pithecene-io/quarry" = "0.6.2"
 ```
 
 ### SDK
@@ -41,19 +41,19 @@ Or pin in your `mise.toml`:
 Install the SDK in your script project:
 
 ```bash
-npx jsr add @justapithecus/quarry-sdk
+npx jsr add @pithecene-io/quarry-sdk
 ```
 
 Or via pnpm with GitHub Packages:
 
 ```bash
-pnpm add @justapithecus/quarry-sdk
+pnpm add @pithecene-io/quarry-sdk
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/justapithecus/quarry.git
+git clone https://github.com/pithecene-io/quarry.git
 cd quarry
 pnpm install
 task build
@@ -66,7 +66,7 @@ task build
 ### 1. Clone and Build
 
 ```bash
-git clone https://github.com/justapithecus/quarry.git
+git clone https://github.com/pithecene-io/quarry.git
 cd quarry
 pnpm install
 task build
@@ -99,7 +99,7 @@ run_id=my-first-run, attempt=1, outcome=success, duration=...
 Scripts **must** export a default async function:
 
 ```typescript
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   // Your extraction logic here
@@ -341,7 +341,7 @@ See `examples/integration-patterns/` for downstream ETL trigger examples:
 
 ```typescript
 // examples/demo.ts
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.emit.item({
@@ -355,7 +355,7 @@ export default async function run(ctx: QuarryContext): Promise<void> {
 
 ```typescript
 // examples/artifact-snapshot/script.ts
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.page.setContent("<h1>Hello</h1>");
@@ -506,6 +506,6 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:justapithecus/quarry@0.6.2` |
-| SDK | JSR | `npx jsr add @justapithecus/quarry-sdk` |
-| SDK | GitHub Packages | `pnpm add @justapithecus/quarry-sdk` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.6.2` |
+| SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
+| SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |

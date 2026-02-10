@@ -28,7 +28,7 @@ import {
   type RunId,
   type RunMeta,
   TerminalEventError
-} from '@justapithecus/quarry-sdk'
+} from '@pithecene-io/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
 import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
 import { ObservingSink, type SinkState } from './ipc/observing-sink.js'

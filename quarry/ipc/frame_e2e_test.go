@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // testPaths holds resolved paths for E2E tests.

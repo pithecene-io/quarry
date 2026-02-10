@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/justapithecus/lode/lode"
+	"github.com/pithecene-io/lode/lode"
 
-	"github.com/justapithecus/quarry/metrics"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/metrics"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // checksumEnabled controls whether MD5 checksums are computed for chunks.

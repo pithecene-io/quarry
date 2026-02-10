@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justapithecus/quarry/adapter"
+	"github.com/pithecene-io/quarry/adapter"
 )
 
 func testEvent() *adapter.RunCompletedEvent {

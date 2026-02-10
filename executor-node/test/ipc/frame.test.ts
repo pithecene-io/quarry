@@ -1,5 +1,5 @@
-import type { ArtifactId, EventEnvelope, EventId, RunId } from '@justapithecus/quarry-sdk'
 import { decode as msgpackDecode } from '@msgpack/msgpack'
+import type { ArtifactId, EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { describe, expect, it } from 'vitest'
 import {
   type ArtifactChunkFrame,

@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // Sink abstracts persistence for policies.

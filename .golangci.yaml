@@ -39,7 +39,7 @@ formatters:
     gofumpt:
       extra-rules: true
     goimports:
-      local-prefixes: github.com/justapithecus/quarry
+      local-prefixes: github.com/pithecene-io/quarry
 
 linters-settings:
   contextcheck:

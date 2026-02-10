@@ -16,17 +16,17 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/justapithecus/quarry/adapter"
-	redisadapter "github.com/justapithecus/quarry/adapter/redis"
-	"github.com/justapithecus/quarry/adapter/webhook"
-	quarryconfig "github.com/justapithecus/quarry/cli/config"
-	"github.com/justapithecus/quarry/executor"
-	"github.com/justapithecus/quarry/lode"
-	"github.com/justapithecus/quarry/metrics"
-	"github.com/justapithecus/quarry/policy"
-	"github.com/justapithecus/quarry/proxy"
-	"github.com/justapithecus/quarry/runtime"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/adapter"
+	redisadapter "github.com/pithecene-io/quarry/adapter/redis"
+	"github.com/pithecene-io/quarry/adapter/webhook"
+	quarryconfig "github.com/pithecene-io/quarry/cli/config"
+	"github.com/pithecene-io/quarry/executor"
+	"github.com/pithecene-io/quarry/lode"
+	"github.com/pithecene-io/quarry/metrics"
+	"github.com/pithecene-io/quarry/policy"
+	"github.com/pithecene-io/quarry/proxy"
+	"github.com/pithecene-io/quarry/runtime"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // Exit codes per CONTRACT_RUN.md.

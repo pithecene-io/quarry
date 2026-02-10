@@ -3,8 +3,8 @@ package lode
 import (
 	"time"
 
-	"github.com/justapithecus/quarry/metrics"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/metrics"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // RecordKind discriminator values per CONTRACT_LODE.md.

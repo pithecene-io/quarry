@@ -1,6 +1,6 @@
 # Quarry
 
-[![CI](https://github.com/justapithecus/quarry/actions/workflows/ci.yml/badge.svg)](https://github.com/justapithecus/quarry/actions/workflows/ci.yml)
+[![CI](https://github.com/pithecene-io/quarry/actions/workflows/ci.yml/badge.svg)](https://github.com/pithecene-io/quarry/actions/workflows/ci.yml)
 
 **A CLI-first web extraction runtime for browser-driven crawling and durable ingestion**
 
@@ -15,13 +15,13 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:justapithecus/quarry@0.6.2
+mise install github:pithecene-io/quarry@0.6.2
 ```
 
 ### SDK
 
 ```bash
-npx jsr add @justapithecus/quarry-sdk
+npx jsr add @pithecene-io/quarry-sdk
 ```
 
 See [PUBLIC_API.md](PUBLIC_API.md) for full setup and usage guide.
@@ -108,7 +108,7 @@ They should:
 ### Example
 
 ```ts
-import type { QuarryContext } from '@justapithecus/quarry-sdk'
+import type { QuarryContext } from '@pithecene-io/quarry-sdk'
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.page.goto(ctx.job.url)
