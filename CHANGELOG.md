@@ -17,19 +17,26 @@ _No unreleased changes._
 
 ### Added
 
+- **Runtime**: Transparent browser reuse across `quarry run` invocations — Chromium persists as a detached process and auto-terminates after idle timeout, eliminating cold-start cost for sequential runs (#149)
+- **CLI**: `--no-browser-reuse` flag and `no_browser_reuse` config option to disable transparent browser reuse (#149)
+- **Runtime**: `QUARRY_BROWSER_IDLE_TIMEOUT` environment variable for configuring browser server idle timeout (default 60s) (#149)
+- **Executor**: `--browser-server` mode — self-managing browser server with idle monitoring via `/json/list` polling and graceful shutdown (#149)
 - **Policy**: `streaming` ingestion policy — combines strict's no-drop guarantee with buffered's batched write efficiency for long-running crawl workloads (#140)
 - **Policy**: Configurable flush triggers: `--flush-count` (event count threshold) and `--flush-interval` (time-based periodic flush) (#140)
 - **Policy**: Capacity-triggered emergency flush prevents deadlock when internal buffer bounds are reached before configured triggers fire (#140)
 - **Policy**: Backpressure-based flow control — ingestion blocks when buffer is full rather than dropping events (#140)
 - **Proxy**: `recency_window` pool option — maintains a ring buffer of recently-used endpoint indices and excludes them from random selection, reducing endpoint reuse (#143)
 - **Proxy**: LRU fallback when recency window >= endpoint count (selection never blocks) (#143)
+- **Testing**: E2E browser reuse tests gated behind `-e2e` flag for mutual test exclusivity (#149)
 - **Testing**: Performance benchmarks for all ingestion policies (strict, buffered, streaming) with contention analysis (#144)
+- **Infra**: yamllint added to lint pipeline via project-scoped mise (#149)
 - **Docs**: Streaming policy contract section in CONTRACT_POLICY.md (#139)
 
 ### Changed
 
 - **Metrics**: `flush_triggers` counter added to metrics snapshot — per-trigger-type flush counts (`count`, `interval`, `termination`, `capacity`) for streaming policy observability (#140)
 - **Internal**: `statsRecorder` converted from mutex-based to `sync/atomic` counters — 3.7x improvement in 8-goroutine contention benchmarks (#144)
+- **AGENTS.md**: Release checklist expanded with changelog promotion and golden fixture update steps (#148)
 
 ---
 
