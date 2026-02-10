@@ -135,6 +135,21 @@ CONTRACT_EMIT.md and CONTRACT_POLICY.md.
 
 No other command may initiate or control execution.
 
+### Exit Codes
+
+The `run` command exit code is determined by execution outcome:
+
+| Exit Code | OutcomeStatus | Meaning |
+|-----------|---------------|---------|
+| 0 | `success` | Run completed successfully |
+| 1 | `script_error` | Script emitted `run_error` |
+| 2 | `executor_crash` | Executor crashed or exited abnormally |
+| 3 | `policy_failure` | Ingestion policy failed (non-retryable) |
+| 3 | `version_mismatch` | SDK/CLI contract version mismatch (non-retryable) |
+
+`policy_failure` and `version_mismatch` share exit code 3 because both
+are non-retryable configuration errors that cannot be resolved by re-running.
+
 ### Adapter Flags (v0.5.0+)
 
 `quarry run` supports optional event-bus adapter notification.
@@ -373,8 +388,9 @@ MetricsSnapshot:
   lode_write_retry_total: number
 ```
 
-Metric names match CONTRACT_METRICS.md. Dimensions are included for
-traceability.
+Metric names match CONTRACT_METRICS.md. See CONTRACT_METRICS.md for the
+outcome-to-metric mapping (which outcomes increment which counters).
+Dimensions are included for traceability.
 
 Usage examples:
 ```
