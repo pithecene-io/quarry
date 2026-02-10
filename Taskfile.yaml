@@ -32,9 +32,7 @@ tasks:
     deps: [ts:build]
     dir: quarry
     cmds:
-      - go test -v -run TestE2E -timeout 120s ./runtime/
-    env:
-      QUARRY_E2E: "1"
+      - go test -v -timeout 120s ./runtime/ -e2e
 
   examples:
     desc: Run and validate all examples
@@ -119,11 +117,11 @@ tasks:
       - golangci-lint run ./...
 
   go:test:
-    desc: Test Go module (excludes E2E)
+    desc: Test Go module
     aliases: [go:t]
     dir: quarry
     cmds:
-      - go test -skip TestE2E ./...
+      - go test ./...
 
   cli:parity:
     desc: Validate CLI/config parity artifact
@@ -132,11 +130,11 @@ tasks:
       - go test ./cli/cmd -run Parity -v
 
   go:test:race:
-    desc: Test Go module with race detector (excludes E2E)
+    desc: Test Go module with race detector
     aliases: [go:tr]
     dir: quarry
     cmds:
-      - go test -race -skip TestE2E ./...
+      - go test -v -race ./...
 
   go:format:
     desc: Format Go module

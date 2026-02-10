@@ -5,12 +5,13 @@
 // idle timeout, and proxy mismatch handling.
 //
 // Test gating:
-//   - All tests require QUARRY_E2E=1 (slow, requires Node + Puppeteer + Chromium)
+//   - All tests require the -e2e flag (slow, requires Node + Puppeteer + Chromium)
 //   - The executor must be built: pnpm -C executor-node run build
 package runtime
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,6 +25,10 @@ import (
 
 	"github.com/pithecene-io/quarry/types"
 )
+
+// e2e gates all browser reuse E2E tests behind an explicit flag.
+// Usage: go test ./runtime/ -e2e
+var e2e = flag.Bool("e2e", false, "run E2E browser reuse tests (requires Node + Chromium)")
 
 // e2ePaths holds resolved paths for browser reuse E2E tests.
 type e2ePaths struct {
@@ -48,14 +53,6 @@ func resolveE2EPaths(t *testing.T) e2ePaths {
 	return e2ePaths{
 		repoRoot:    repoRoot,
 		executorBin: filepath.Join(repoRoot, "executor-node", "dist", "bin", "executor.js"),
-	}
-}
-
-// skipUnlessE2E skips the test if QUARRY_E2E=1 is not set.
-func skipUnlessE2E(t *testing.T) {
-	t.Helper()
-	if os.Getenv("QUARRY_E2E") != "1" {
-		t.Skip("QUARRY_E2E=1 not set, skipping browser reuse E2E test")
 	}
 }
 
@@ -125,7 +122,9 @@ func cleanupBrowserServer(t *testing.T, discoveryPath string) {
 // TestE2E_BrowserReuse_SequentialAcquire verifies that two sequential
 // AcquireReusableBrowser calls reuse the same browser (same WS endpoint).
 func TestE2E_BrowserReuse_SequentialAcquire(t *testing.T) {
-	skipUnlessE2E(t)
+	if !*e2e {
+		t.Skip("-e2e flag not set")
+	}
 	skipUnlessNode(t)
 	paths := resolveE2EPaths(t)
 	skipUnlessExecutorBuilt(t, paths)
@@ -182,7 +181,9 @@ func TestE2E_BrowserReuse_SequentialAcquire(t *testing.T) {
 // TestE2E_BrowserReuse_ProxyMismatch verifies that a proxy mismatch causes
 // AcquireReusableBrowser to return an error (fallback to per-run launch).
 func TestE2E_BrowserReuse_ProxyMismatch(t *testing.T) {
-	skipUnlessE2E(t)
+	if !*e2e {
+		t.Skip("-e2e flag not set")
+	}
 	skipUnlessNode(t)
 	paths := resolveE2EPaths(t)
 	skipUnlessExecutorBuilt(t, paths)
@@ -238,7 +239,9 @@ func TestE2E_BrowserReuse_ProxyMismatch(t *testing.T) {
 // TestE2E_BrowserReuse_StaleRecovery verifies that a stale discovery file
 // (browser process dead) triggers a relaunch.
 func TestE2E_BrowserReuse_StaleRecovery(t *testing.T) {
-	skipUnlessE2E(t)
+	if !*e2e {
+		t.Skip("-e2e flag not set")
+	}
 	skipUnlessNode(t)
 	paths := resolveE2EPaths(t)
 	skipUnlessExecutorBuilt(t, paths)
@@ -307,7 +310,9 @@ func TestE2E_BrowserReuse_StaleRecovery(t *testing.T) {
 // TestE2E_BrowserReuse_HealthCheck verifies that the health check correctly
 // detects a live browser server.
 func TestE2E_BrowserReuse_HealthCheck(t *testing.T) {
-	skipUnlessE2E(t)
+	if !*e2e {
+		t.Skip("-e2e flag not set")
+	}
 	skipUnlessNode(t)
 	paths := resolveE2EPaths(t)
 	skipUnlessExecutorBuilt(t, paths)
@@ -362,7 +367,9 @@ func TestE2E_BrowserReuse_HealthCheck(t *testing.T) {
 // TestE2E_BrowserReuse_IdleShutdown verifies that the browser server
 // self-terminates after the idle timeout expires.
 func TestE2E_BrowserReuse_IdleShutdown(t *testing.T) {
-	skipUnlessE2E(t)
+	if !*e2e {
+		t.Skip("-e2e flag not set")
+	}
 	skipUnlessNode(t)
 	paths := resolveE2EPaths(t)
 	skipUnlessExecutorBuilt(t, paths)
