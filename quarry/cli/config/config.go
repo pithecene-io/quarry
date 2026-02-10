@@ -35,10 +35,12 @@ type StorageConfig struct {
 
 // PolicyConfig holds policy defaults from the config file.
 type PolicyConfig struct {
-	Name         string `yaml:"name"`
-	FlushMode    string `yaml:"flush_mode"`
-	BufferEvents int    `yaml:"buffer_events"`
-	BufferBytes  int64  `yaml:"buffer_bytes"`
+	Name          string   `yaml:"name"`
+	FlushMode     string   `yaml:"flush_mode"`
+	BufferEvents  int      `yaml:"buffer_events"`
+	BufferBytes   int64    `yaml:"buffer_bytes"`
+	FlushCount    int      `yaml:"flush_count"`
+	FlushInterval Duration `yaml:"flush_interval"`
 }
 
 // ProxyPoolConfig is a proxy pool definition within the config file.

@@ -3,7 +3,7 @@ package policy
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 
 	"github.com/pithecene-io/quarry/types"
 )
@@ -60,6 +60,10 @@ type Stats struct {
 	FlushCount int64
 	// Errors is the count of non-fatal errors encountered.
 	Errors int64
+	// FlushTriggers is a per-trigger-type flush counter.
+	// Only populated by streaming policy; nil for strict/buffered.
+	// Keys are trigger names: "count", "interval", "termination", "capacity".
+	FlushTriggers map[string]int64
 }
 
 // droppableTypes defines which event types may be dropped per CONTRACT_POLICY.md.
@@ -85,119 +89,96 @@ func DroppableTypes() map[types.EventType]bool {
 }
 
 // statsRecorder is an internal helper for thread-safe stats management.
-// Policies call explicit methods to record mutations; recorder does not
-// infer or automate any policy decisions.
+// Uses atomic.Int64 for hot-path counters to eliminate lock contention.
 //
-// Lock discipline:
-//   - StrictPolicy uses the locking methods (incTotalEvents, snapshot, etc.)
-//   - BufferedPolicy uses the Locked methods (incTotalEventsLocked, snapshotLocked, etc.)
-//     only while holding BufferedPolicy.mu. This ensures atomicity between buffer
-//     state and stats counters.
+// Synchronization model:
+//   - Counter methods use atomics (lock-free): incTotalEvents, incFlush, etc.
+//   - droppedByType map requires caller-provided synchronization:
+//     StrictPolicy never writes (safe without lock);
+//     Buffered/StreamingPolicy guard under their own mu.
+//   - snapshot() reads atomics individually (relaxed consistency, suitable for observability).
+//   - snapshotLocked() reads atomics under caller's mu (consistent with buffer state).
 type statsRecorder struct {
-	mu    sync.Mutex
-	stats Stats
+	totalEvents     atomic.Int64
+	eventsPersisted atomic.Int64
+	eventsDropped   atomic.Int64
+	totalChunks     atomic.Int64
+	chunksPersisted atomic.Int64
+	bufferSize      atomic.Int64
+	flushCount      atomic.Int64
+	errors          atomic.Int64
+
+	// droppedByType is a map requiring external synchronization.
+	// StrictPolicy never writes to it (snapshot is safe without locking).
+	// Buffered/StreamingPolicy guard it under their own mu.
+	droppedByType map[types.EventType]int64
 }
 
-// newStatsRecorder creates a new recorder with initialized DroppedByType map.
+// newStatsRecorder creates a new recorder with initialized droppedByType map.
 func newStatsRecorder() *statsRecorder {
 	return &statsRecorder{
-		stats: Stats{
-			DroppedByType: make(map[types.EventType]int64),
-		},
+		droppedByType: make(map[types.EventType]int64),
 	}
 }
 
-func (r *statsRecorder) incTotalEvents() {
-	r.mu.Lock()
-	r.stats.TotalEvents++
-	r.mu.Unlock()
-}
-
-func (r *statsRecorder) incEventsPersisted(n int64) {
-	r.mu.Lock()
-	r.stats.EventsPersisted += n
-	r.mu.Unlock()
-}
-
-func (r *statsRecorder) incTotalChunks() {
-	r.mu.Lock()
-	r.stats.TotalChunks++
-	r.mu.Unlock()
-}
-
-func (r *statsRecorder) incChunksPersisted(n int64) {
-	r.mu.Lock()
-	r.stats.ChunksPersisted += n
-	r.mu.Unlock()
-}
-
-func (r *statsRecorder) incErrors() {
-	r.mu.Lock()
-	r.stats.Errors++
-	r.mu.Unlock()
-}
-
-func (r *statsRecorder) incFlush() {
-	r.mu.Lock()
-	r.stats.FlushCount++
-	r.mu.Unlock()
-}
+func (r *statsRecorder) incTotalEvents()            { r.totalEvents.Add(1) }
+func (r *statsRecorder) incEventsPersisted(n int64)  { r.eventsPersisted.Add(n) }
+func (r *statsRecorder) incTotalChunks()             { r.totalChunks.Add(1) }
+func (r *statsRecorder) incChunksPersisted(n int64)  { r.chunksPersisted.Add(n) }
+func (r *statsRecorder) incErrors()                  { r.errors.Add(1) }
+func (r *statsRecorder) incFlush()                   { r.flushCount.Add(1) }
 
 func (r *statsRecorder) snapshot() Stats {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	s := r.stats
-	s.DroppedByType = make(map[types.EventType]int64, len(r.stats.DroppedByType))
-	for k, v := range r.stats.DroppedByType {
+	s := Stats{
+		TotalEvents:     r.totalEvents.Load(),
+		EventsPersisted: r.eventsPersisted.Load(),
+		EventsDropped:   r.eventsDropped.Load(),
+		TotalChunks:     r.totalChunks.Load(),
+		ChunksPersisted: r.chunksPersisted.Load(),
+		BufferSize:      r.bufferSize.Load(),
+		FlushCount:      r.flushCount.Load(),
+		Errors:          r.errors.Load(),
+		DroppedByType:   make(map[types.EventType]int64, len(r.droppedByType)),
+	}
+	for k, v := range r.droppedByType {
 		s.DroppedByType[k] = v
 	}
 	return s
 }
 
-// --- Locked methods for BufferedPolicy ---
-// Caller must hold BufferedPolicy.mu.
+// --- Caller-locked methods ---
+// These use atomic operations for counters (lock-free). Map operations on
+// droppedByType still require the caller to hold its policy mu.
 
-func (r *statsRecorder) incTotalEventsLocked() {
-	r.stats.TotalEvents++
-}
-
-func (r *statsRecorder) incEventsPersistedLocked(n int64) {
-	r.stats.EventsPersisted += n
-}
+func (r *statsRecorder) incTotalEventsLocked()            { r.totalEvents.Add(1) }
+func (r *statsRecorder) incEventsPersistedLocked(n int64) { r.eventsPersisted.Add(n) }
 
 func (r *statsRecorder) incEventsDroppedLocked(eventType types.EventType) {
-	r.stats.EventsDropped++
-	r.stats.DroppedByType[eventType]++
+	r.eventsDropped.Add(1)
+	r.droppedByType[eventType]++
 }
 
-func (r *statsRecorder) incTotalChunksLocked() {
-	r.stats.TotalChunks++
-}
+func (r *statsRecorder) incTotalChunksLocked()            { r.totalChunks.Add(1) }
+func (r *statsRecorder) incChunksPersistedLocked(n int64) { r.chunksPersisted.Add(n) }
+func (r *statsRecorder) incErrorsLocked()                 { r.errors.Add(1) }
+func (r *statsRecorder) incFlushLocked()                  { r.flushCount.Add(1) }
+func (r *statsRecorder) setBufferSizeLocked(bytes int64)  { r.bufferSize.Store(bytes) }
 
-func (r *statsRecorder) incChunksPersistedLocked(n int64) {
-	r.stats.ChunksPersisted += n
-}
-
-func (r *statsRecorder) incErrorsLocked() {
-	r.stats.Errors++
-}
-
-func (r *statsRecorder) incFlushLocked() {
-	r.stats.FlushCount++
-}
-
-func (r *statsRecorder) setBufferSizeLocked(bytes int64) {
-	r.stats.BufferSize = bytes
-}
-
-// snapshotLocked returns an atomic snapshot of stats with the given bufferSize.
-// Caller must hold BufferedPolicy.mu.
+// snapshotLocked returns a snapshot of stats with the given bufferSize.
+// Caller must hold its policy mu (required for droppedByType map access).
 func (r *statsRecorder) snapshotLocked(bufferSize int64) Stats {
-	s := r.stats
-	s.BufferSize = bufferSize
-	s.DroppedByType = make(map[types.EventType]int64, len(r.stats.DroppedByType))
-	for k, v := range r.stats.DroppedByType {
+	s := Stats{
+		TotalEvents:     r.totalEvents.Load(),
+		EventsPersisted: r.eventsPersisted.Load(),
+		EventsDropped:   r.eventsDropped.Load(),
+		TotalChunks:     r.totalChunks.Load(),
+		ChunksPersisted: r.chunksPersisted.Load(),
+		BufferSize:      bufferSize,
+		FlushCount:      r.flushCount.Load(),
+		Errors:          r.errors.Load(),
+		DroppedByType:   make(map[types.EventType]int64, len(r.droppedByType)),
+	}
+	for k, v := range r.droppedByType {
 		s.DroppedByType[k] = v
 	}
 	return s

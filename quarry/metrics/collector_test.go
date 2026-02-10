@@ -90,7 +90,7 @@ func TestCollector_AbsorbPolicyStats(t *testing.T) {
 		"enqueue":      2,
 		"rotate_proxy": 1,
 	}
-	c.AbsorbPolicyStats(100, 92, 8, droppedByType)
+	c.AbsorbPolicyStats(100, 92, 8, droppedByType, nil)
 
 	s := c.Snapshot()
 
@@ -115,13 +115,44 @@ func TestCollector_AbsorbPolicyStats(t *testing.T) {
 	if s.DroppedByType["rotate_proxy"] != 1 {
 		t.Errorf("DroppedByType[rotate_proxy] = %d, want 1", s.DroppedByType["rotate_proxy"])
 	}
+	if s.FlushTriggers != nil {
+		t.Errorf("FlushTriggers should be nil when nil passed, got %v", s.FlushTriggers)
+	}
+}
+
+func TestCollector_AbsorbPolicyStats_FlushTriggers(t *testing.T) {
+	c := NewCollector("streaming", "node", "fs", "run-001", "")
+
+	triggers := map[string]int64{"count": 3, "interval": 7, "termination": 1}
+	c.AbsorbPolicyStats(100, 100, 0, nil, triggers)
+
+	s := c.Snapshot()
+	if s.FlushTriggers == nil {
+		t.Fatal("FlushTriggers should be populated")
+	}
+	if s.FlushTriggers["count"] != 3 {
+		t.Errorf("FlushTriggers[count] = %d, want 3", s.FlushTriggers["count"])
+	}
+	if s.FlushTriggers["interval"] != 7 {
+		t.Errorf("FlushTriggers[interval] = %d, want 7", s.FlushTriggers["interval"])
+	}
+	if s.FlushTriggers["termination"] != 1 {
+		t.Errorf("FlushTriggers[termination] = %d, want 1", s.FlushTriggers["termination"])
+	}
+
+	// Mutate original — collector should be isolated
+	triggers["count"] = 999
+	s2 := c.Snapshot()
+	if s2.FlushTriggers["count"] != 3 {
+		t.Errorf("FlushTriggers[count] = %d, want 3 (should be isolated)", s2.FlushTriggers["count"])
+	}
 }
 
 func TestCollector_AbsorbPolicyStats_MapIsolation(t *testing.T) {
 	c := NewCollector("strict", "node", "fs", "run-001", "")
 
 	original := map[string]int64{"log": 5}
-	c.AbsorbPolicyStats(10, 5, 5, original)
+	c.AbsorbPolicyStats(10, 5, 5, original, nil)
 
 	// Mutate the original map after absorption
 	original["log"] = 999
@@ -168,7 +199,7 @@ func TestCollector_SnapshotImmutability(t *testing.T) {
 
 func TestCollector_SnapshotDroppedByTypeIsolation(t *testing.T) {
 	c := NewCollector("strict", "node", "fs", "run-001", "")
-	c.AbsorbPolicyStats(10, 5, 5, map[string]int64{"log": 3})
+	c.AbsorbPolicyStats(10, 5, 5, map[string]int64{"log": 3}, nil)
 
 	s := c.Snapshot()
 
@@ -200,7 +231,7 @@ func TestCollector_NilReceiverSafety(t *testing.T) {
 	c.IncIPCDecodeErrors()
 	c.IncLodeWriteSuccess()
 	c.IncLodeWriteFailure()
-	c.AbsorbPolicyStats(10, 8, 2, map[string]int64{"log": 2})
+	c.AbsorbPolicyStats(10, 8, 2, map[string]int64{"log": 2}, nil)
 
 	s := c.Snapshot()
 	if s.RunsStarted != 0 {

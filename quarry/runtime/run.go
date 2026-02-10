@@ -422,7 +422,7 @@ func (r *RunOrchestrator) buildResult(
 	for k, v := range ps.DroppedByType {
 		droppedByType[string(k)] = v
 	}
-	r.config.Collector.AbsorbPolicyStats(ps.TotalEvents, ps.EventsPersisted, ps.EventsDropped, droppedByType)
+	r.config.Collector.AbsorbPolicyStats(ps.TotalEvents, ps.EventsPersisted, ps.EventsDropped, droppedByType, ps.FlushTriggers)
 
 	return result
 }
