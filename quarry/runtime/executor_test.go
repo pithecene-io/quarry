@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 func TestExecutorInputJSON_IncludesBrowserWSEndpoint(t *testing.T) {

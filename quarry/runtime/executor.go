@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // ExecutorConfig configures executor execution.

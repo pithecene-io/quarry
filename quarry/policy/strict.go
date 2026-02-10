@@ -3,7 +3,7 @@ package policy
 import (
 	"context"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // StrictPolicy implements synchronous, unbuffered persistence.

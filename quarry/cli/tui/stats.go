@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/justapithecus/quarry/cli/reader"
+	"github.com/pithecene-io/quarry/cli/reader"
 )
 
 // StatsModel is a Bubble Tea model for stats views.

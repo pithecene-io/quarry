@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 func TestSelector_RoundRobin(t *testing.T) {

@@ -23,7 +23,7 @@
  *
  * @module
  */
-import type { ProxyEndpoint } from '@justapithecus/quarry-sdk'
+import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 
 /**

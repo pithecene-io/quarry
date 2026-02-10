@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	quarryconfig "github.com/justapithecus/quarry/cli/config"
-	"github.com/justapithecus/quarry/runtime"
-	"github.com/justapithecus/quarry/types"
+	quarryconfig "github.com/pithecene-io/quarry/cli/config"
+	"github.com/pithecene-io/quarry/runtime"
+	"github.com/pithecene-io/quarry/types"
 	"github.com/urfave/cli/v2"
 )
 

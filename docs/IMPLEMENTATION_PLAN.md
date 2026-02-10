@@ -690,9 +690,9 @@ types without pulling in CLI, TUI, or unrelated dependencies.
 
 | Module | Go Module Path | Contains |
 |--------|---------------|----------|
-| `quarry-core/` | `github.com/justapithecus/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
-| `quarry-cli/` | `github.com/justapithecus/quarry-cli` | CLI commands, TUI, config, reader |
-| `quarry-temporal/` | `github.com/justapithecus/quarry-temporal` | activity, workflow, worker binary |
+| `quarry-core/` | `github.com/pithecene-io/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
+| `quarry-cli/` | `github.com/pithecene-io/quarry-cli` | CLI commands, TUI, config, reader |
+| `quarry-temporal/` | `github.com/pithecene-io/quarry-temporal` | activity, workflow, worker binary |
 | `quarry-sdk/` | (npm: `@aspect/quarry-sdk`) | TypeScript SDK (rename from `sdk/`) |
 | `quarry-executor/` | (npm: `@aspect/quarry-executor`) | Node executor (rename from `executor-node/`) |
 
@@ -805,8 +805,8 @@ TUI, or unrelated dependencies.
 
 | Module | Go Module Path | Contains |
 |--------|---------------|----------|
-| `quarry-core/` | `github.com/justapithecus/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
-| `quarry-cli/` | `github.com/justapithecus/quarry-cli` | CLI commands, TUI, config, reader |
+| `quarry-core/` | `github.com/pithecene-io/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
+| `quarry-cli/` | `github.com/pithecene-io/quarry-cli` | CLI commands, TUI, config, reader |
 
 ### Prerequisites
 

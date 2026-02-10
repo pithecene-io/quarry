@@ -1,5 +1,5 @@
 {
-  "name": "@justapithecus/quarry-executor-node",
+  "name": "@pithecene-io/quarry-executor-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@justapithecus/quarry-sdk": "workspace:*",
+    "@pithecene-io/quarry-sdk": "workspace:*",
     "@msgpack/msgpack": "^3.1.3"
   },
   "peerDependencies": {

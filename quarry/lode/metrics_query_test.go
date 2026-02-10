@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justapithecus/lode/lode"
+	"github.com/pithecene-io/lode/lode"
 
-	"github.com/justapithecus/quarry/metrics"
+	"github.com/pithecene-io/quarry/metrics"
 )
 
 // toInt64 converts a value to int64 for test assertions on raw map fields.

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/justapithecus/quarry/metrics"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/metrics"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // failingSink is a test double that returns errors on writes.

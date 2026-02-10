@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream'
+import { decode as msgpackDecode } from '@msgpack/msgpack'
 import type {
   ArtifactId,
   EmitSink,
@@ -7,8 +8,7 @@ import type {
   JobId,
   ProxyEndpoint,
   RunId
-} from '@justapithecus/quarry-sdk'
-import { decode as msgpackDecode } from '@msgpack/msgpack'
+} from '@pithecene-io/quarry-sdk'
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 import {
   _resetPuppeteerForTesting,

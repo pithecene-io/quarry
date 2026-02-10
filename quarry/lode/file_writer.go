@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/justapithecus/lode/lode"
+	"github.com/pithecene-io/lode/lode"
 )
 
 // FileWriter writes sidecar files to Lode Store.

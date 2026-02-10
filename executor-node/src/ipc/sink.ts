@@ -16,7 +16,7 @@
  * @module
  */
 import type { Writable } from 'node:stream'
-import type { ArtifactId, EmitSink, EventEnvelope } from '@justapithecus/quarry-sdk'
+import type { ArtifactId, EmitSink, EventEnvelope } from '@pithecene-io/quarry-sdk'
 import {
   encodeArtifactChunks,
   encodeEventFrame,

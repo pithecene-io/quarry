@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/justapithecus/quarry/log"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/log"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // FlushMode controls flush semantics for BufferedPolicy.

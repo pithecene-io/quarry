@@ -5,8 +5,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/justapithecus/quarry/cli/reader"
-	"github.com/justapithecus/quarry/cli/render"
+	"github.com/pithecene-io/quarry/cli/reader"
+	"github.com/pithecene-io/quarry/cli/render"
 )
 
 // InspectCommand returns the inspect command with subcommands.

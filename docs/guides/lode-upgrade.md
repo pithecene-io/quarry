@@ -7,7 +7,7 @@ upgrade shipped in Quarry v0.3.0.
 
 ## Upgrade Path
 
-Quarry previously pinned `github.com/justapithecus/lode v0.2.0`.
+Quarry previously pinned `github.com/pithecene-io/lode v0.2.0`.
 The upgrade skips v0.3.0 and v0.4.0, landing on v0.4.1.
 
 ### Lode v0.3.0 (docs/test only)

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/justapithecus/lode/lode"
+	"github.com/pithecene-io/lode/lode"
 )
 
 // ErrNoMetricsFound is returned when no metrics records exist in the dataset.

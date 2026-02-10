@@ -236,7 +236,7 @@ jobs:
         with:
           node-version: "24.13.0"  # Matches mise.toml pin
           registry-url: "https://npm.pkg.github.com"
-          scope: "@justapithecus"
+          scope: "@pithecene-io"
       - name: "📦 Setup pnpm via Corepack"
         run: |
           EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
@@ -266,7 +266,7 @@ jobs:
           echo "📦 Package: $(jq -r '.name' package.json)"
           echo "📦 Version: $(jq -r '.version' package.json)"
           echo "📦 Registry: $(npm config get registry)"
-          echo "📦 Scope registry: $(npm config get @justapithecus:registry || echo 'not set')"
+          echo "📦 Scope registry: $(npm config get @pithecene-io:registry || echo 'not set')"
       - name: "📦 Publish"
         working-directory: sdk
         env:

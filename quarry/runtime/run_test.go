@@ -11,8 +11,8 @@ import (
 
 	"github.com/vmihailenco/msgpack/v5"
 
-	"github.com/justapithecus/quarry/policy"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/policy"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // mockExecutor is a test executor that produces configurable stdout.

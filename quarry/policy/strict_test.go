@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/justapithecus/quarry/policy"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/policy"
+	"github.com/pithecene-io/quarry/types"
 )
 
 func TestStrictPolicy_IngestEvent_ImmediateWrite(t *testing.T) {

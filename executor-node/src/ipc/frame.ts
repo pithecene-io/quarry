@@ -21,8 +21,8 @@
  * @remarks Node.js only. Uses Buffer for transport efficiency.
  */
 
-import type { ArtifactId, EventEnvelope } from '@justapithecus/quarry-sdk'
 import { encode as msgpackEncode } from '@msgpack/msgpack'
+import type { ArtifactId, EventEnvelope } from '@pithecene-io/quarry-sdk'
 
 /**
  * Maximum frame size in bytes (16 MiB), including length prefix.

@@ -8,7 +8,7 @@
 
 import { isAbsolute, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { QuarryScript, QuarryScriptModule } from '@justapithecus/quarry-sdk'
+import type { QuarryScript, QuarryScriptModule } from '@pithecene-io/quarry-sdk'
 
 /**
  * Error thrown when a script module is invalid.

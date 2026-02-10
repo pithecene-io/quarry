@@ -25,6 +25,9 @@ _No unreleased changes._
 - **Runtime**: Version mismatch errors increment `run_failed` (not `run_crashed`) and do not fire `executor_crash` metric (#132)
 - **CLI**: `version_mismatch` outcome maps to exit code 3 (non-retryable, same as `policy_failure`) (#132)
 - **Contracts**: `CONTRACT_RUN.md` and `CONTRACT_INTEGRATION.md` now enumerate `version_mismatch` as a fifth outcome status (#132)
+- **Infra**: Migrated npm/JSR scope from `@justapithecus` to `@pithecene-io` (#137)
+- **Infra**: Migrated Go module path from `github.com/justapithecus/quarry` to `github.com/pithecene-io/quarry` (#137)
+- **Lode**: Upgraded to Lode v0.7.2 (`github.com/pithecene-io/lode`) (#137)
 
 ---
 
@@ -177,8 +180,8 @@ _No unreleased changes._
 ### Added
 
 - **Release**: Cross-compiled platform binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64) included in GitHub Releases (#82)
-- **Release**: mise install support — `mise install github:justapithecus/quarry@<version>` (#82)
-- **Release**: JSR publishing via OIDC (zero-secret) — `npx jsr add @justapithecus/quarry-sdk` (#83)
+- **Release**: mise install support — `mise install github:pithecene-io/quarry@<version>` (#82)
+- **Release**: JSR publishing via OIDC (zero-secret) — `npx jsr add @pithecene-io/quarry-sdk` (#83)
 - **Release**: Dual SDK distribution on JSR (public) and GitHub Packages (restricted) (#82, #83)
 - **Release**: Checksums manifest (`checksums.txt`) included in every release (#82)
 - **Docs**: Installation docs updated across README, PUBLIC_API.md, and SDK README (#82)
@@ -242,7 +245,7 @@ _No unreleased changes._
 
 ### Fixed
 
-- **IPC**: Fixed race condition where fast-completing scripts intermittently reported `executor_crash` outcome despite successful completion ([#56](https://github.com/justapithecus/quarry/issues/56)). Root cause was Go's `exec.Cmd.Wait()` closing stdout pipe before ingestion completed reading all data.
+- **IPC**: Fixed race condition where fast-completing scripts intermittently reported `executor_crash` outcome despite successful completion ([#56](https://github.com/pithecene-io/quarry/issues/56)). Root cause was Go's `exec.Cmd.Wait()` closing stdout pipe before ingestion completed reading all data.
 
 ---
 
@@ -265,7 +268,7 @@ _No unreleased changes._
 
 ### Known Issues
 
-- **IPC race condition** ([#56](https://github.com/justapithecus/quarry/issues/56)): Fast-completing scripts may intermittently report `executor_crash` outcome despite successful completion. **Fixed in v0.2.1.**
+- **IPC race condition** ([#56](https://github.com/pithecene-io/quarry/issues/56)): Fast-completing scripts may intermittently report `executor_crash` outcome despite successful completion. **Fixed in v0.2.1.**
 
 ---
 
@@ -276,7 +279,7 @@ _No unreleased changes._
 - **CLI**: `quarry run` command for executing extraction scripts
 - **CLI**: `quarry inspect` command for viewing run data (read-only)
 - **CLI**: `quarry stats` command for run statistics
-- **SDK**: `@justapithecus/quarry-sdk` npm package with emit API
+- **SDK**: `@pithecene-io/quarry-sdk` npm package with emit API
 - **Emit API**: `emit.item()`, `emit.artifact()`, `emit.checkpoint()`, `emit.log()`
 - **Terminal events**: `emit.runComplete()`, `emit.runError()`
 - **Storage**: Filesystem backend with Hive-partitioned layout
@@ -333,19 +336,20 @@ _No unreleased changes._
 
 ---
 
-[0.6.2]: https://github.com/justapithecus/quarry/releases/tag/v0.6.2
-[0.6.0]: https://github.com/justapithecus/quarry/releases/tag/v0.6.0
-[0.5.1]: https://github.com/justapithecus/quarry/releases/tag/v0.5.1
-[0.5.0]: https://github.com/justapithecus/quarry/releases/tag/v0.5.0
-[0.4.1]: https://github.com/justapithecus/quarry/releases/tag/v0.4.1
-[0.4.0]: https://github.com/justapithecus/quarry/releases/tag/v0.4.0
-[0.3.5]: https://github.com/justapithecus/quarry/releases/tag/v0.3.5
-[0.3.4]: https://github.com/justapithecus/quarry/releases/tag/v0.3.4
-[0.3.3]: https://github.com/justapithecus/quarry/releases/tag/v0.3.3
-[0.3.2]: https://github.com/justapithecus/quarry/releases/tag/v0.3.2
-[0.3.1]: https://github.com/justapithecus/quarry/releases/tag/v0.3.1
-[0.3.0]: https://github.com/justapithecus/quarry/releases/tag/v0.3.0
-[0.2.2]: https://github.com/justapithecus/quarry/releases/tag/v0.2.2
-[0.2.1]: https://github.com/justapithecus/quarry/releases/tag/v0.2.1
-[0.2.0]: https://github.com/justapithecus/quarry/releases/tag/v0.2.0
-[0.1.0]: https://github.com/justapithecus/quarry/releases/tag/v0.1.0
+[0.6.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.3
+[0.6.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.2
+[0.6.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.0
+[0.5.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.5.1
+[0.5.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.5.0
+[0.4.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.4.1
+[0.4.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.4.0
+[0.3.5]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.5
+[0.3.4]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.4
+[0.3.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.3
+[0.3.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.2
+[0.3.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.1
+[0.3.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.3.0
+[0.2.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.2.2
+[0.2.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.2.1
+[0.2.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.2.0
+[0.1.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.1.0

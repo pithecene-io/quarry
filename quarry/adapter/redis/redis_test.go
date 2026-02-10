@@ -8,7 +8,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/justapithecus/quarry/adapter"
+	"github.com/pithecene-io/quarry/adapter"
 )
 
 func testEvent() *adapter.RunCompletedEvent {

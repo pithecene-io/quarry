@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { QuarryContext } from "@justapithecus/quarry-sdk";
+import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pages = ["page1.html", "page2.html"];

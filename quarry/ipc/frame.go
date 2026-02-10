@@ -9,7 +9,7 @@ import (
 
 	"github.com/vmihailenco/msgpack/v5"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // Frame size constants per CONTRACT_IPC.md.

@@ -13,7 +13,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/justapithecus/quarry/adapter"
+	"github.com/pithecene-io/quarry/adapter"
 )
 
 // DefaultChannel is the default pub/sub channel name.

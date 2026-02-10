@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/justapithecus/quarry/ipc"
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/ipc"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // MaxArtifactSize is the maximum allowed artifact size (1 GiB).

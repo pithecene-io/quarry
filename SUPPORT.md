@@ -77,7 +77,7 @@ The following are available but not production-hardened:
 ## Bug Reports
 
 Report bugs via GitHub Issues:
-- https://github.com/justapithecus/quarry/issues
+- https://github.com/pithecene-io/quarry/issues
 
 ### Issue Template
 
@@ -106,7 +106,7 @@ When reporting issues, include:
 ## Security
 
 Report security vulnerabilities privately:
-- Email: security@justapithecus.com (if applicable)
+- Email: security@pithecene-io.com (if applicable)
 - Do **not** file security issues publicly
 
 ---

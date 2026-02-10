@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/justapithecus/quarry/types"
+	"github.com/pithecene-io/quarry/types"
 )
 
 // NoopPolicy is a no-op policy for testing.
