@@ -243,6 +243,12 @@
           "default": 1,
           "description": "Maximum concurrent child runs",
           "dependsOn": ["depth>0"]
+        },
+        "no-browser-reuse": {
+          "type": "bool",
+          "required": false,
+          "description": "Disable transparent browser reuse across runs",
+          "notes": "When set, each run launches and closes its own Chromium instance. By default, a reusable browser server is started and shared across sequential runs."
         }
       }
     },

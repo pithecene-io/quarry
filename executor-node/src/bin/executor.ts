@@ -24,6 +24,7 @@
  * @module
  */
 import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
+import { unlinkSync } from 'node:fs'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 
 /**
@@ -97,6 +98,121 @@ async function readStdin(): Promise<string> {
 }
 
 /**
+ * Run a long-lived browser server that self-terminates after idle timeout.
+ *
+ * Unlike --launch-browser (which waits for stdin EOF), this mode manages its
+ * own lifetime via idle monitoring. The Go runtime launches this as a detached
+ * process that outlives the parent quarry run.
+ *
+ * Lifecycle:
+ * 1. Launch browser with plugins
+ * 2. Print WS endpoint to stdout
+ * 3. Monitor /json/list for active pages every 5s
+ * 4. After idle timeout with no active pages, shut down
+ * 5. Remove discovery file on exit
+ */
+async function browserServer(scriptPath: string): Promise<never> {
+  const { getPuppeteer: getBrowserPuppeteer } = await import('../executor.js')
+
+  const puppeteer = await getBrowserPuppeteer(scriptPath, {
+    stealth: process.env.QUARRY_STEALTH !== '0',
+    adblocker: process.env.QUARRY_ADBLOCKER === '1'
+  })
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+  })
+
+  const wsEndpoint = browser.wsEndpoint()
+  process.stdout.write(`${wsEndpoint}\n`)
+
+  // Handle SIGPIPE gracefully (parent may close stdout after reading endpoint)
+  process.on('SIGPIPE', () => {
+    // Ignore — parent read the endpoint and closed its pipe
+  })
+
+  const idleTimeoutMs = Number.parseInt(process.env.QUARRY_BROWSER_IDLE_TIMEOUT ?? '60', 10) * 1000
+  const discoveryFile = process.env.QUARRY_BROWSER_DISCOVERY_FILE ?? ''
+
+  // Extract port from WS endpoint for HTTP health queries
+  const wsUrl = new URL(wsEndpoint)
+  const baseUrl = `http://127.0.0.1:${wsUrl.port}`
+
+  let idleStartedAt: number | null = null
+  const pollIntervalMs = 5_000
+
+  /**
+   * Count active page targets (excluding the default about:blank).
+   * Uses Chromium's /json/list endpoint — no CDP protocol needed.
+   */
+  async function countActivePages(): Promise<number> {
+    const res = await fetch(`${baseUrl}/json/list`)
+    if (!res.ok) return 0
+    const targets = (await res.json()) as Array<{ type: string; url: string }>
+    return targets.filter((t) => t.type === 'page' && t.url !== 'about:blank').length
+  }
+
+  /** Remove the discovery file on shutdown (best effort). */
+  function removeDiscoveryFile(): void {
+    if (!discoveryFile) return
+    try {
+      unlinkSync(discoveryFile)
+    } catch {
+      // Already removed or inaccessible — fine
+    }
+  }
+
+  async function shutdown(): Promise<never> {
+    const idleSec = idleStartedAt ? Math.round((Date.now() - idleStartedAt) / 1000) : 0
+    process.stderr.write(`Browser server idle for ${idleSec}s, shutting down\n`)
+    removeDiscoveryFile()
+    await browser.close()
+    process.exit(0)
+  }
+
+  // Graceful shutdown on signals
+  process.on('SIGTERM', () => void shutdown())
+  process.on('SIGINT', () => void shutdown())
+
+  // Idle monitoring loop
+  const timer = setInterval(async () => {
+    try {
+      const activePages = await countActivePages()
+
+      if (activePages > 0) {
+        // Active work — reset idle timer
+        idleStartedAt = null
+        return
+      }
+
+      // No active pages
+      if (idleStartedAt === null) {
+        idleStartedAt = Date.now()
+        return
+      }
+
+      // Check if idle timeout exceeded
+      if (Date.now() - idleStartedAt >= idleTimeoutMs) {
+        clearInterval(timer)
+        await shutdown()
+      }
+    } catch {
+      // /json/list failed — browser may have crashed, exit
+      clearInterval(timer)
+      removeDiscoveryFile()
+      process.exit(1)
+    }
+  }, pollIntervalMs)
+
+  // Block forever — process exits via shutdown() or signal handlers
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await new Promise((resolve) => setTimeout(resolve, 2_147_483_647))
+  }
+}
+
+/**
  * Launch a shared browser and print its WebSocket endpoint to stdout.
  * Stays alive until stdin closes, then shuts down the browser.
  *
@@ -139,7 +255,17 @@ async function launchBrowserServer(scriptPath: string): Promise<never> {
 async function main(): Promise<never> {
   const args = process.argv.slice(2)
 
-  // Browser server mode: launch shared browser for fan-out
+  // Reusable browser server mode: self-managing lifetime with idle timeout
+  if (args[0] === '--browser-server') {
+    const scriptPath = args[1]
+    if (!scriptPath) {
+      process.stderr.write('Usage: quarry-executor --browser-server <script-path>\n')
+      process.exit(3)
+    }
+    return browserServer(scriptPath)
+  }
+
+  // Legacy browser server mode: stdin-managed lifetime for fan-out
   if (args[0] === '--launch-browser') {
     const scriptPath = args[1]
     if (!scriptPath) {

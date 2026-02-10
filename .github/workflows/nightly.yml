@@ -22,9 +22,32 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-test-logs
+          name: nightly-race-logs
           path: |
             quarry/**/*.log
             sdk/**/*.log
             executor-node/**/*.log
+          retention-days: 14
+
+  test-e2e:
+    name: "🔌 E2E Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📥 Checkout"
+        uses: actions/checkout@v4
+      - name: "🧰 Setup"
+        uses: jdx/mise-action@v2
+      - name: "📦 Install dependencies"
+        run: pnpm install
+      - name: "🔌 E2E Tests"
+        run: task test:e2e
+        env:
+          QUARRY_NO_SANDBOX: "1"
+      - name: "⬆️ Upload E2E Logs"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-e2e-logs
+          path: |
+            quarry/**/*.log
           retention-days: 14
