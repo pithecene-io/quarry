@@ -66,6 +66,21 @@ increment `executor_crash_total`.
 - `events_received_total` (counter)
 - `events_persisted_total` (counter)
 - `events_dropped_total` (counter, by event type)
+- `flush_triggers` (counter, by trigger type — streaming policy only)
+
+#### Flush Triggers (streaming policy)
+
+When `policy=streaming`, the runtime tracks per-trigger-type flush counts:
+
+| Trigger | Key | Description |
+|---------|-----|-------------|
+| Count threshold | `count` | Flush fired when `--flush-count` events accumulated |
+| Time interval | `interval` | Flush fired on `--flush-interval` tick |
+| Run termination | `termination` | Flush fired on `run_complete`, `run_error`, or runtime exit |
+| Buffer capacity | `capacity` | Emergency flush when internal buffer bounds reached |
+
+These are additive to the base policy counters. `flush_triggers` is `nil` for
+strict and buffered policies.
 
 ### Executor
 - `executor_launch_success_total` (counter)

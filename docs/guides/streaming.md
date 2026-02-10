@@ -1,8 +1,13 @@
 # Streaming & Artifacts
 
 This document explains how events and artifacts flow between the executor
-and runtime. It is user-facing; the authoritative contract is
-`docs/contracts/CONTRACT_IPC.md`.
+and runtime (IPC-level streaming). It is user-facing; the authoritative
+contract is `docs/contracts/CONTRACT_IPC.md`.
+
+> **Not to be confused with** the `streaming` ingestion policy, which controls
+> write batching and flush triggers on the runtime side. For the streaming
+> ingestion policy, see `docs/guides/policy.md` and
+> `docs/contracts/CONTRACT_POLICY.md`.
 
 ---
 

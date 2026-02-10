@@ -23,7 +23,7 @@ At a high level:
 - **Job**: logical unit of work requested by a user or scheduler.
 - **Run**: a single execution attempt of a job.
 - **Attempt**: an integer counter for retries of the same job.
-- **Policy**: ingestion behavior (strict vs buffered).
+- **Policy**: ingestion behavior (strict, buffered, or streaming).
 
 ---
 

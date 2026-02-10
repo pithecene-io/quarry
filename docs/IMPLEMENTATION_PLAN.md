@@ -13,13 +13,13 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.6.3)
+## Current Status (as of v0.7.0-dev)
 - Latest release: v0.6.3 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
+- v0.7.0 features merged to main: streaming ingestion policy, recency window for proxy rotation, performance benchmarks. Version bump pending.
 - v0.6.x adds derived work execution (fan-out flags on `quarry run`).
 - v0.5.x adds webhook and Redis pub/sub event-bus adapters.
 - v0.4.x added `--config` for YAML project-level defaults and `ctx.storage.put()`.
-- Next priority: v0.7.0 streaming policy and advanced proxy rotation — see roadmap below.
 
 ---
 
@@ -588,15 +588,15 @@ When `--max-runs` is reached mid-execution:
 
 ### Mini-milestones
 
-- [ ] Contract updates (CONTRACT_EMIT.md enqueue semantics, CONTRACT_RUN.md
+- [x] Contract updates (CONTRACT_EMIT.md enqueue semantics, CONTRACT_RUN.md
       lineage fields, CONTRACT_CLI.md fan-out flags)
-- [ ] In-process scheduler: enqueue event interception, dedup, depth tracking
-- [ ] Child run spawning with concurrency limiter
-- [ ] `parent_run_id` and `depth` threading through run metadata
-- [ ] Fan-out flag wiring in `quarry/cli/cmd/run.go`
-- [ ] Summary output and exit code semantics
+- [x] In-process scheduler: enqueue event interception, dedup, depth tracking
+- [x] Child run spawning with concurrency limiter
+- [x] `parent_run_id` and `depth` threading through run metadata
+- [x] Fan-out flag wiring in `quarry/cli/cmd/run.go`
+- [x] Summary output and exit code semantics
 - [ ] `quarry inspect` fan-out lineage view
-- [ ] Tests: depth bounds, max-runs cap, concurrency, dedup, scheduling
+- [x] Tests: depth bounds, max-runs cap, concurrency, dedup, scheduling
       independence from ingestion policy
 
 ### Scope Boundary
@@ -660,11 +660,12 @@ near-real-time downstream visibility.
 
 #### Mini-milestones
 - [x] Contract sketch (CONTRACT_POLICY.md streaming section)
-- [ ] `StreamingPolicy` struct with count + interval flush triggers
-- [ ] Runtime integration: flush trigger goroutine in `Execute()`
-- [ ] CLI flag wiring and validation (`--policy=streaming` requires triggers)
-- [ ] Config YAML support (`policy.flush_count`, `policy.flush_interval`)
-- [ ] Tests: count trigger, interval trigger, combined, ordering, artifact integrity
+- [x] `StreamingPolicy` struct with count + interval flush triggers
+- [x] Runtime integration: flush trigger goroutine in `Execute()`
+- [x] CLI flag wiring and validation (`--policy=streaming` requires triggers)
+- [x] Config YAML support (`policy.flush_count`, `policy.flush_interval`)
+- [x] Tests: count trigger, interval trigger, combined, ordering, artifact integrity
+- [x] Performance benchmarks: strict, buffered, streaming contention analysis
 - [ ] Guide and configuration doc updates
 
 ### Advanced Proxy Rotation
@@ -694,12 +695,12 @@ recently-used endpoint indices and excludes them from random selection.
 - `quarry/cli/reader/types.go` — `RecencyWindow`/`RecencyFill` in `ProxyRuntime`
 
 #### Mini-milestones
-- [ ] Contract updated (`CONTRACT_PROXY.md` — recency semantics)
-- [ ] Guide updated (`docs/guides/proxy.md` — user-facing docs)
-- [ ] Go types and validation (`quarry/types/proxy.go`)
-- [ ] Selector ring buffer and recency-aware random (`quarry/proxy/selector.go`)
-- [ ] SDK types and validation (`sdk/src/types/proxy.ts`, `sdk/src/proxy.ts`)
-- [ ] Tests: type validation, selector avoidance, LRU fallback, peek semantics
+- [x] Contract updated (`CONTRACT_PROXY.md` — recency semantics)
+- [x] Guide updated (`docs/guides/proxy.md` — user-facing docs)
+- [x] Go types and validation (`quarry/types/proxy.go`)
+- [x] Selector ring buffer and recency-aware random (`quarry/proxy/selector.go`)
+- [x] SDK types and validation (`sdk/src/types/proxy.ts`, `sdk/src/proxy.ts`)
+- [x] Tests: type validation, selector avoidance, LRU fallback, peek semantics
 
 ### Phase 2: Pluggable Recency Backend (Future)
 
