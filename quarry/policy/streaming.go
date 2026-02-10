@@ -327,6 +327,7 @@ func (p *StreamingPolicy) FlushTriggerStats() map[FlushTrigger]int64 {
 		FlushTriggerCount:       p.flushByCount,
 		FlushTriggerInterval:    p.flushByInterval,
 		FlushTriggerTermination: p.flushByTermination,
+		FlushTriggerCapacity:    p.flushByCapacity,
 	}
 }
 
