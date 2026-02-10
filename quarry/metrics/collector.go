@@ -21,6 +21,7 @@ type Snapshot struct {
 	EventsPersisted int64
 	EventsDropped   int64
 	DroppedByType   map[string]int64
+	FlushTriggers   map[string]int64 // streaming policy per-trigger flush counts; nil for non-streaming
 
 	// Executor
 	ExecutorLaunchSuccess int64
@@ -67,6 +68,7 @@ type Collector struct {
 	eventsPersisted int64
 	eventsDropped   int64
 	droppedByType   map[string]int64
+	flushTriggers   map[string]int64
 
 	// Dimensions
 	policy         string
@@ -203,9 +205,10 @@ func (c *Collector) IncLodeWriteFailure() {
 
 // AbsorbPolicyStats copies ingestion counters from policy.Stats into the collector.
 // Called once after run completion with the final policy stats snapshot.
-// The droppedByType map keys are string-typed event types to keep this package
-// free of dependencies on the types package.
-func (c *Collector) AbsorbPolicyStats(totalEvents, persisted, dropped int64, droppedByType map[string]int64) {
+// The droppedByType and flushTriggers map keys are string-typed to keep this
+// package free of dependencies on the types package.
+// flushTriggers may be nil (non-streaming policies).
+func (c *Collector) AbsorbPolicyStats(totalEvents, persisted, dropped int64, droppedByType, flushTriggers map[string]int64) {
 	if c == nil {
 		return
 	}
@@ -216,6 +219,12 @@ func (c *Collector) AbsorbPolicyStats(totalEvents, persisted, dropped int64, dro
 	c.droppedByType = make(map[string]int64, len(droppedByType))
 	for k, v := range droppedByType {
 		c.droppedByType[k] = v
+	}
+	if flushTriggers != nil {
+		c.flushTriggers = make(map[string]int64, len(flushTriggers))
+		for k, v := range flushTriggers {
+			c.flushTriggers[k] = v
+		}
 	}
 	c.mu.Unlock()
 }
@@ -237,6 +246,14 @@ func (c *Collector) Snapshot() Snapshot {
 		dropped[k] = v
 	}
 
+	var triggers map[string]int64
+	if c.flushTriggers != nil {
+		triggers = make(map[string]int64, len(c.flushTriggers))
+		for k, v := range c.flushTriggers {
+			triggers[k] = v
+		}
+	}
+
 	return Snapshot{
 		RunsStarted:   c.runsStarted,
 		RunsCompleted: c.runsCompleted,
@@ -247,6 +264,7 @@ func (c *Collector) Snapshot() Snapshot {
 		EventsPersisted: c.eventsPersisted,
 		EventsDropped:   c.eventsDropped,
 		DroppedByType:   dropped,
+		FlushTriggers:   triggers,
 
 		ExecutorLaunchSuccess: c.executorLaunchSuccess,
 		ExecutorLaunchFailure: c.executorLaunchFailure,

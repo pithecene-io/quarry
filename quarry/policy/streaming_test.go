@@ -791,6 +791,112 @@ func TestStreamingPolicy_Stats_FlushTriggers_NilForOtherPolicies(t *testing.T) {
 	}
 }
 
+func TestStreamingPolicy_ChunkOnlyCountMode_NoDeadlock(t *testing.T) {
+	// Regression test: in count-only mode (no FlushInterval), chunks alone
+	// would fill the buffer and block forever since only events contribute
+	// to the count threshold. After the fix, IngestArtifactChunk triggers
+	// a capacity-based flush when the buffer is full.
+	baseSink := policy.NewStubSink()
+	slowSink := &streamingSlowSink{
+		StubSink:   baseSink,
+		writeDelay: 10 * time.Millisecond,
+	}
+
+	pol, err := policy.NewStreamingPolicy(slowSink, policy.StreamingConfig{
+		FlushCount: 1000, // high threshold — chunks won't trigger count-based flush
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = pol.Close() })
+
+	ctx := t.Context()
+	done := make(chan struct{})
+	const totalChunks = 100
+
+	go func() {
+		defer close(done)
+		for i := range totalChunks {
+			chunk := &types.ArtifactChunk{
+				ArtifactID: "a1",
+				Seq:        int64(i),
+				Data:       make([]byte, 2*1024*1024), // 2 MiB each → fills 128 MiB buffer quickly
+			}
+			if err := pol.IngestArtifactChunk(ctx, chunk); err != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+		// All chunks eventually ingested (capacity flush drained the buffer)
+	case <-time.After(10 * time.Second):
+		t.Fatal("chunk ingestion timed out — likely deadlocked (count-only mode with chunks)")
+	}
+
+	if err := pol.Flush(ctx); err != nil {
+		t.Fatalf("final flush failed: %v", err)
+	}
+
+	stats := pol.Stats()
+	if stats.TotalChunks != totalChunks {
+		t.Errorf("expected TotalChunks=%d, got %d", totalChunks, stats.TotalChunks)
+	}
+	if stats.ChunksPersisted != totalChunks {
+		t.Errorf("expected ChunksPersisted=%d, got %d", totalChunks, stats.ChunksPersisted)
+	}
+}
+
+func TestStreamingPolicy_OversizedEntry_AcceptedWhenBufferEmpty(t *testing.T) {
+	// A single entry larger than streamingMaxBufferBytes should be accepted
+	// when the buffer is empty (not deadlock), and flushed normally.
+	sink := policy.NewStubSink()
+	pol, err := policy.NewStreamingPolicy(sink, policy.StreamingConfig{
+		FlushCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = pol.Close() })
+
+	ctx := t.Context()
+
+	// 200 MiB chunk — larger than the 128 MiB internal cap
+	bigChunk := &types.ArtifactChunk{
+		ArtifactID: "a-big",
+		Seq:        0,
+		Data:       make([]byte, 200*1024*1024),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- pol.IngestArtifactChunk(ctx, bigChunk)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("IngestArtifactChunk failed for oversized chunk: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("oversized chunk ingestion timed out — likely deadlocked")
+	}
+
+	// Flush should write the oversized chunk
+	if err := pol.Flush(ctx); err != nil {
+		t.Fatalf("flush failed: %v", err)
+	}
+
+	stats := pol.Stats()
+	if stats.TotalChunks != 1 {
+		t.Errorf("expected TotalChunks=1, got %d", stats.TotalChunks)
+	}
+	if stats.ChunksPersisted != 1 {
+		t.Errorf("expected ChunksPersisted=1, got %d", stats.ChunksPersisted)
+	}
+}
+
 // streamingSlowSink adds a delay to writes for backpressure testing.
 type streamingSlowSink struct {
 	*policy.StubSink

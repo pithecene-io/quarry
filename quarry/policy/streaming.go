@@ -128,13 +128,13 @@ func NewStreamingPolicy(sink Sink, config StreamingConfig) (*StreamingPolicy, er
 func (p *StreamingPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
 	p.mu.Lock()
 
-	// Block until buffer has room (backpressure per CONTRACT_POLICY.md)
-	for p.isBufferFullLocked() {
-		p.bufferCond.Wait()
-	}
+	eventSize := p.estimateEventSize(envelope)
+
+	// Block until buffer has room for this item (backpressure per CONTRACT_POLICY.md).
+	// Allow single-item overflow when buffer is empty to prevent deadlock for oversized entries.
+	p.waitForRoomLocked(eventSize)
 
 	p.stats.incTotalEventsLocked()
-	eventSize := p.estimateEventSize(envelope)
 	p.eventBuffer = append(p.eventBuffer, envelope)
 	p.bufferBytes += eventSize
 	p.stats.setBufferSizeLocked(p.bufferBytes)
@@ -152,21 +152,32 @@ func (p *StreamingPolicy) IngestEvent(ctx context.Context, envelope *types.Event
 
 // IngestArtifactChunk adds the chunk to the buffer.
 // Artifact chunks are never dropped. Blocks if buffer is at capacity.
-func (p *StreamingPolicy) IngestArtifactChunk(_ context.Context, chunk *types.ArtifactChunk) error {
+// Triggers a flush if buffer is at capacity after append, preventing deadlock
+// in count-only mode where chunks don't contribute to the event count trigger.
+func (p *StreamingPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.ArtifactChunk) error {
 	p.mu.Lock()
 
-	// Block until buffer has room (backpressure per CONTRACT_POLICY.md)
-	for p.isBufferFullLocked() {
-		p.bufferCond.Wait()
-	}
+	chunkSize := int64(len(chunk.Data))
+
+	// Block until buffer has room for this chunk (backpressure per CONTRACT_POLICY.md).
+	// Allow single-item overflow when buffer is empty to prevent deadlock for oversized chunks.
+	p.waitForRoomLocked(chunkSize)
 
 	p.stats.incTotalChunksLocked()
-	chunkSize := int64(len(chunk.Data))
 	p.chunkBuffer = append(p.chunkBuffer, chunk)
 	p.bufferBytes += chunkSize
 	p.stats.setBufferSizeLocked(p.bufferBytes)
 
+	// Trigger flush if buffer is at capacity after this append.
+	// This prevents deadlock in count-only mode: without an interval trigger,
+	// chunks alone would fill the buffer and block forever since only events
+	// contribute to the count threshold.
+	shouldFlush := p.isBufferFullLocked()
 	p.mu.Unlock()
+
+	if shouldFlush {
+		return p.triggerFlush(ctx, FlushTriggerCount)
+	}
 
 	return nil
 }
@@ -349,7 +360,30 @@ func (p *StreamingPolicy) recalculateBufferBytes() {
 	p.stats.setBufferSizeLocked(p.bufferBytes)
 }
 
+// waitForRoomLocked blocks until the buffer can accept an item of additionalBytes.
+// If the buffer is non-empty and would exceed capacity with the new item, blocks
+// on bufferCond until a flush drains enough space.
+// If the buffer is empty, always proceeds — a single oversized item is accepted
+// rather than deadlocking (it will be flushed on the next trigger).
+// Caller must hold mu.
+func (p *StreamingPolicy) waitForRoomLocked(additionalBytes int64) {
+	for p.bufferBytes > 0 && p.wouldExceedCapacityLocked(additionalBytes) {
+		p.bufferCond.Wait()
+	}
+}
+
+// wouldExceedCapacityLocked returns true if adding additionalBytes would exceed
+// internal buffer capacity.
+// Caller must hold mu.
+func (p *StreamingPolicy) wouldExceedCapacityLocked(additionalBytes int64) bool {
+	if len(p.eventBuffer)+len(p.chunkBuffer) >= streamingMaxBufferEvents {
+		return true
+	}
+	return p.bufferBytes+additionalBytes > streamingMaxBufferBytes
+}
+
 // isBufferFullLocked returns true if the buffer has reached internal capacity.
+// Used after an append to decide if a capacity-triggered flush is needed.
 // Caller must hold mu.
 func (p *StreamingPolicy) isBufferFullLocked() bool {
 	if len(p.eventBuffer)+len(p.chunkBuffer) >= streamingMaxBufferEvents {
