@@ -1,8 +1,8 @@
-name: "🤖 CI"
+name: 🤖 CI
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -12,12 +12,13 @@ concurrency:
 
 jobs:
   version-lockstep:
-    name: "🔒 Version Lockstep"
+    name: 🔒 Version Lockstep
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🔒 Check Version Lockstep"
+
+      - name: 🔒 Check Version Lockstep
         run: |
           GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
           SDK_VERSION=$(jq -r '.version' sdk/package.json)
@@ -30,14 +31,16 @@ jobs:
           echo "✅ Versions match: $GO_VERSION"
 
   cli-parity:
-    name: "📋 CLI Parity"
+    name: 📋 CLI Parity
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📋 Check CLI Parity"
+
+      - name: 📋 Check CLI Parity
         run: |
           cd quarry
           # Guard: ensure at least one parity test exists (prevents false-pass)
@@ -51,44 +54,54 @@ jobs:
           echo "✅ CLI parity artifact is in sync"
 
   lint:
-    name: "🧹 Lint"
+    name: 🧹 Lint
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧹 Lint"
+
+      - name: 🧹 Lint
         run: task lint
 
   test:
-    name: "🧪 Test"
+    name: 🧪 Test
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧪 Test"
+
+      - name: 🧪 Test
         run: task test
 
   bundle-freshness:
-    name: "📦 Bundle Freshness"
+    name: 📦 Bundle Freshness
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Regenerate bundle"
+
+      - name: 📦 Regenerate bundle
         run: task executor:bundle
-      - name: "🔍 Check for drift"
+
+      - name: 🔍 Check for drift
         run: |
           if ! git diff --exit-code quarry/executor/bundle/executor.mjs; then
             echo "::error::Embedded executor bundle is stale. Run 'task executor:bundle' and commit the result."
@@ -97,33 +110,40 @@ jobs:
           echo "✅ Bundle is fresh"
 
   build:
-    name: "🏗️ Build"
+    name: 🏗️ Build
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🏗️ Build"
+
+      - name: 🏗️ Build
         run: task build
 
   examples:
-    name: "📦 Examples"
+    name: 📦 Examples
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Run Examples"
+
+      - name: 📦 Run Examples
         run: task examples
         env:
           QUARRY_NO_SANDBOX: "1"
-      - name: "⬆️ Upload Example Logs"
+
+      - name: ⬆️ Upload Example Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:

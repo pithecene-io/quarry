@@ -1,24 +1,28 @@
-name: "🌙 Nightly"
+name: 🌙 Nightly
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: 0 4 * * *
   workflow_dispatch:
 
 jobs:
-  test-race:
-    name: "🧪 Race Tests"
+  race:
+    name: 🧪 Race Tests
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧪 Race Tests"
+
+      - name: 🧪 Race Tests
         run: task test:race
-      - name: "⬆️ Upload Test Logs"
+
+      - name: ⬆️ Upload Test Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -29,21 +33,25 @@ jobs:
             executor-node/**/*.log
           retention-days: 14
 
-  test-e2e:
-    name: "🔌 E2E Tests"
+  e2e:
+    name: 🔌 E2E Tests
     runs-on: ubuntu-latest
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🔌 E2E Tests"
+
+      - name: 🔌 E2E Tests
         run: task test:e2e
         env:
           QUARRY_NO_SANDBOX: "1"
-      - name: "⬆️ Upload E2E Logs"
+
+      - name: ⬆️ Upload E2E Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:

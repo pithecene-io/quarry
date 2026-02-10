@@ -14,8 +14,8 @@ tasks:
     deps: [go:build]
 
   lint:
-    desc: Lint all packages (Go + TS)
-    deps: [go:lint, ts:lint]
+    desc: Lint all packages (Go + TS + YAML)
+    deps: [go:lint, ts:lint, yaml:lint]
 
   test:
     desc: Run all tests (Go + TS)
@@ -188,3 +188,13 @@ tasks:
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run format
+
+  # ==================
+  # YAML tasks
+  # ==================
+
+  yaml:lint:
+    desc: Lint YAML files
+    aliases: [yaml:l]
+    cmds:
+      - yamllint .

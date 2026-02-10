@@ -1,8 +1,8 @@
-name: "📦 Release"
+name: 📦 Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: [v*]
 
 permissions:
   contents: write
@@ -10,27 +10,28 @@ permissions:
 
 jobs:
   tag_check:
-    name: "🔎 Tag Check"
+    name: 🔎 Tag Check
     runs-on: ubuntu-latest
     outputs:
       semver_match: ${{ steps.regex-match.outputs.match }}
     steps:
-      - name: "🔎 Match SemVer Tag"
+      - name: 🔎 Match SemVer Tag
         uses: actions-ecosystem/action-regex-match@v2
         id: regex-match
         with:
           text: ${{ github.ref_name }}
-          regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+          regex: ^v[0-9]+\.[0-9]+\.[0-9]+$
 
   version_lockstep:
-    name: "🔒 Version Lockstep"
+    name: 🔒 Version Lockstep
     runs-on: ubuntu-latest
     needs: [tag_check]
     if: ${{ needs.tag_check.outputs.semver_match != '' }}
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🔒 Check Version Matches Tag"
+
+      - name: 🔒 Check Version Matches Tag
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
@@ -49,68 +50,80 @@ jobs:
           echo "✅ All versions match: $TAG_VERSION"
 
   lint:
-    name: "🧹 Lint"
+    name: 🧹 Lint
     runs-on: ubuntu-latest
     needs: [tag_check]
     if: ${{ needs.tag_check.outputs.semver_match != '' }}
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧹 Lint"
+
+      - name: 🧹 Lint
         run: task lint
 
   test:
-    name: "🧪 Test"
+    name: 🧪 Test
     runs-on: ubuntu-latest
     needs: [tag_check]
     if: ${{ needs.tag_check.outputs.semver_match != '' }}
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧪 Test"
+
+      - name: 🧪 Test
         run: task test
 
   build:
-    name: "🏗️ Build"
+    name: 🏗️ Build
     runs-on: ubuntu-latest
     needs: [tag_check]
     if: ${{ needs.tag_check.outputs.semver_match != '' }}
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🏗️ Build"
+
+      - name: 🏗️ Build
         run: task build
 
   examples:
-    name: "📦 Examples"
+    name: 📦 Examples
     runs-on: ubuntu-latest
     needs: [build]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Run Examples"
+
+      - name: 📦 Run Examples
         run: task examples
         env:
           QUARRY_NO_SANDBOX: "1"
 
   cross-compile:
-    name: "🔨 Build (${{ matrix.goos }}/${{ matrix.goarch }})"
+    name: 🔨 Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     needs: [version_lockstep, lint, test, build, examples]
     if: ${{ needs.version_lockstep.result == 'success' }}
@@ -126,46 +139,55 @@ jobs:
           - goos: darwin
             goarch: arm64
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Bundle executor"
+
+      - name: 📦 Bundle executor
         run: task executor:bundle
-      - name: "🔨 Build"
+
+      - name: 🔨 Build
         working-directory: quarry
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -o quarry ./cmd/quarry
-      - name: "📦 Archive"
+
+      - name: 📦 Archive
         run: |
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME}"
           ARCHIVE="quarry_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
           tar -czf "dist/${ARCHIVE}" -C quarry quarry
           sha256sum "dist/${ARCHIVE}" > "dist/${ARCHIVE}.sha256"
-      - name: "⬆️ Upload"
+
+      - name: ⬆️ Upload
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
 
   package:
-    name: "📦 Package"
+    name: 📦 Package
     runs-on: ubuntu-latest
     needs: [cross-compile]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Package source & SDK"
+
+      - name: 📦 Package source & SDK
         run: |
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME}"
@@ -177,44 +199,48 @@ jobs:
           cd ..
           mv "sdk/${SDK_TARBALL}" "dist/quarry-sdk-${VERSION}.tgz"
           sha256sum "dist/quarry-sdk-${VERSION}.tgz" > "dist/quarry-sdk-${VERSION}.tgz.sha256"
-      - name: "⬇️ Download platform binaries"
+
+      - name: ⬇️ Download platform binaries
         uses: actions/download-artifact@v4
         with:
           pattern: dist-*
           path: dist/
           merge-multiple: true
-      - name: "📋 Generate checksums manifest"
+
+      - name: 📋 Generate checksums manifest
         run: |
           cd dist
           sha256sum quarry_*.tar.gz > checksums.txt
           cat checksums.txt
-      - name: "⬆️ Upload Artifacts"
+
+      - name: ⬆️ Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-dist
           path: dist/
 
   hold:
-    name: "⏸️ Release Approval"
+    name: ⏸️ Release Approval
     runs-on: ubuntu-latest
     needs: [package]
     environment:
       name: release
     steps:
-      - name: "✅ Await Approval"
+      - name: ✅ Await Approval
         run: echo "Release approved; continuing."
 
   release:
-    name: "🚀 GitHub Release"
+    name: 🚀 GitHub Release
     runs-on: ubuntu-latest
     needs: [hold]
     steps:
-      - name: "⬇️ Download Artifacts"
+      - name: ⬇️ Download Artifacts
         uses: actions/download-artifact@v4
         with:
           name: release-dist
           path: dist
-      - name: "🚀 Create Release"
+
+      - name: 🚀 Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -222,28 +248,31 @@ jobs:
           files: dist/*
 
   publish_ghpr:
-    name: "📦 Publish SDK (GitHub Packages)"
+    name: 📦 Publish SDK (GitHub Packages)
     runs-on: ubuntu-latest
     needs: [hold]
     permissions:
       contents: read
       packages: write
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup Node for GitHub Packages"
+
+      - name: 🧰 Setup Node for GitHub Packages
         uses: actions/setup-node@v4
         with:
-          node-version: "24.13.0"  # Matches mise.toml pin
-          registry-url: "https://npm.pkg.github.com"
+          node-version: 24.13.0
+          registry-url: https://npm.pkg.github.com
           scope: "@pithecene-io"
-      - name: "📦 Setup pnpm via Corepack"
+
+      - name: 📦 Setup pnpm via Corepack
         run: |
           EXPECTED_PNPM=$(jq -r '.packageManager' package.json | sed 's/pnpm@\([^+]*\).*/\1/')
           echo "🔧 Preparing pnpm@${EXPECTED_PNPM} via Corepack"
           corepack enable
           corepack prepare "pnpm@${EXPECTED_PNPM}" --activate
-      - name: "🔍 Verify Toolchain Pinning"
+
+      - name: 🔍 Verify Toolchain Pinning
         run: |
           echo "🔧 Node version: $(node --version)"
           ACTUAL_PNPM=$(pnpm --version)
@@ -255,39 +284,46 @@ jobs:
             exit 1
           fi
           echo "✅ pnpm version matches pin"
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🏗️ Build SDK"
+
+      - name: 🏗️ Build SDK
         working-directory: sdk
         run: pnpm run build
-      - name: "🔍 Publish Diagnostics"
+
+      - name: 🔍 Publish Diagnostics
         working-directory: sdk
         run: |
           echo "📦 Package: $(jq -r '.name' package.json)"
           echo "📦 Version: $(jq -r '.version' package.json)"
           echo "📦 Registry: $(npm config get registry)"
           echo "📦 Scope registry: $(npm config get @pithecene-io:registry || echo 'not set')"
-      - name: "📦 Publish"
+
+      - name: 📦 Publish
         working-directory: sdk
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm publish --access restricted --no-git-checks
 
   publish_jsr:
-    name: "📦 Publish SDK (JSR)"
+    name: 📦 Publish SDK (JSR)
     runs-on: ubuntu-latest
     needs: [hold]
     permissions:
       contents: read
       id-token: write
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Publish"
+
+      - name: 📦 Publish
         working-directory: sdk
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

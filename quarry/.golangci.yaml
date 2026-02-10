@@ -7,4 +7,4 @@ linters-settings:
       - name: var-naming
         disabled: false
         exclude:
-          - "types"
+          - types
