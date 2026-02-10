@@ -211,6 +211,32 @@ func TestProxyPools_WithSticky(t *testing.T) {
 	}
 }
 
+func TestProxyPools_WithRecencyWindow(t *testing.T) {
+	w := 3
+	cfg := &Config{
+		Proxies: map[string]ProxyPoolConfig{
+			"recency_pool": {
+				Strategy: types.ProxyStrategyRandom,
+				Endpoints: []types.ProxyEndpoint{
+					{Protocol: types.ProxyProtocolHTTP, Host: "proxy.example.com", Port: 8080},
+				},
+				RecencyWindow: &w,
+			},
+		},
+	}
+
+	pools := cfg.ProxyPools()
+	if len(pools) != 1 {
+		t.Fatalf("expected 1 pool, got %d", len(pools))
+	}
+	if pools[0].RecencyWindow == nil {
+		t.Fatal("expected recency_window to be set")
+	}
+	if *pools[0].RecencyWindow != 3 {
+		t.Errorf("expected recency_window=3, got %d", *pools[0].RecencyWindow)
+	}
+}
+
 func TestLoad_UnknownKeyRejected(t *testing.T) {
 	yaml := `source: my-source
 bogus_key: should_fail

@@ -115,6 +115,10 @@ type ProxyPool struct {
 	Endpoints []ProxyEndpoint `json:"endpoints" msgpack:"endpoints" yaml:"endpoints"`
 	// Sticky is the optional sticky configuration.
 	Sticky *ProxySticky `json:"sticky,omitempty" msgpack:"sticky,omitempty" yaml:"sticky,omitempty"`
+	// RecencyWindow is the optional recency window size for random selection.
+	// When set, maintains a ring buffer of recently-used endpoint indices
+	// and excludes them from random selection. LRU fallback when window >= endpoint count.
+	RecencyWindow *int `json:"recency_window,omitempty" msgpack:"recency_window,omitempty" yaml:"recency_window,omitempty"`
 }
 
 // Validate validates a proxy pool per CONTRACT_PROXY.md hard validation rules.
@@ -151,6 +155,10 @@ func (p *ProxyPool) Validate() error {
 		if p.Sticky.TTLMs != nil && *p.Sticky.TTLMs <= 0 {
 			return errors.New("sticky TTL must be positive")
 		}
+	}
+
+	if p.RecencyWindow != nil && *p.RecencyWindow <= 0 {
+		return errors.New("recency_window must be positive")
 	}
 
 	return nil
@@ -191,6 +199,11 @@ func (p *ProxyPool) Warnings() []string {
 	// Very large endpoint lists with round_robin
 	if p.Strategy == ProxyStrategyRoundRobin && len(p.Endpoints) > LargePoolThreshold {
 		warnings = append(warnings, fmt.Sprintf("pool %q has %d endpoints with round_robin strategy; consider random for large pools", p.Name, len(p.Endpoints)))
+	}
+
+	// Recency window on non-random strategy
+	if p.RecencyWindow != nil && p.Strategy != ProxyStrategyRandom {
+		warnings = append(warnings, fmt.Sprintf("pool %q has recency_window set but strategy is %q; recency window only applies to random selection", p.Name, p.Strategy))
 	}
 
 	// Check endpoint warnings
