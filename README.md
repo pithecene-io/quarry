@@ -15,7 +15,7 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:pithecene-io/quarry@0.6.2
+mise install github:pithecene-io/quarry@0.7.0
 ```
 
 ### SDK
@@ -53,7 +53,7 @@ emit.*  (stable event contract)
         ↓
 Quarry Runtime
         ↓
-Ingestion Policy (strict, buffered, etc.)
+Ingestion Policy (strict, buffered, streaming)
         ↓
 Persistence Substrate (e.g. Lode)
 ```
@@ -136,12 +136,13 @@ Scripts are imperative, explicit, and boring by design.
 ## Key Concepts
 
 - **Emit API** — all script output flows through `emit.*` → [docs/guides/emit.md](docs/guides/emit.md)
-- **Policies** — strict or buffered ingestion control → [docs/guides/policy.md](docs/guides/policy.md)
+- **Policies** — strict, buffered, or streaming ingestion control → [docs/guides/policy.md](docs/guides/policy.md)
 - **Storage** — FS and S3 backends via Lode → [docs/guides/lode.md](docs/guides/lode.md)
 - **Proxies** — pool-based rotation with multiple strategies → [docs/guides/proxy.md](docs/guides/proxy.md)
 - **Streaming** — chunked artifacts with backpressure → [docs/guides/streaming.md](docs/guides/streaming.md)
 - **Configuration** — YAML project defaults via `--config` → [docs/guides/cli.md](docs/guides/cli.md)
-- **Integration** — webhook adapter for downstream triggers → [docs/guides/integration.md](docs/guides/integration.md)
+- **Browser Reuse** — transparent Chromium persistence across sequential runs → [docs/guides/configuration.md](docs/guides/configuration.md)
+- **Integration** — webhook and Redis adapters for downstream triggers → [docs/guides/integration.md](docs/guides/integration.md)
 - **Fan-Out** — derived work execution via `emit.enqueue()` → [docs/guides/emit.md](docs/guides/emit.md)
 - **Run Lifecycle** — terminal states and exit codes → [docs/guides/run.md](docs/guides/run.md)
 

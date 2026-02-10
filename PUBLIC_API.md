@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.6.2.
+User-facing guide for Quarry v0.7.0.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -26,14 +26,14 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.6.2
+mise install github:pithecene-io/quarry@0.7.0
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.6.2"
+"github:pithecene-io/quarry" = "0.7.0"
 ```
 
 ### SDK
@@ -288,6 +288,11 @@ CLI flags always override config file values.
 | Flag | Description |
 |------|-------------|
 | `--browser-ws-endpoint <url>` | Connect to an externally managed browser via WebSocket URL (skips per-run Chromium launch; see `docs/guides/cli.md`) |
+| `--no-browser-reuse` | Disable transparent browser reuse across runs (forces per-run Chromium launch) |
+
+By default, Quarry transparently reuses a persistent Chromium process across sequential runs.
+The browser auto-terminates after idle timeout (default 60s, configurable via `QUARRY_BROWSER_IDLE_TIMEOUT`).
+`--browser-ws-endpoint` takes priority over transparent reuse when set.
 
 **Advanced flags (development only):**
 
@@ -418,7 +423,7 @@ task build
 
 ---
 
-## Known Limitations (v0.6.2)
+## Known Limitations (v0.7.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -491,7 +496,7 @@ export AWS_SECRET_ACCESS_KEY=<secret-key>
 Quarry is an extraction runtime, not a full pipeline. For triggering downstream
 processing after runs complete, see [docs/guides/integration.md](docs/guides/integration.md).
 
-**Built-in adapters** (v0.6.2+): `--adapter webhook` sends an HTTP POST, and
+**Built-in adapters** (v0.5.0+): `--adapter webhook` sends an HTTP POST, and
 `--adapter redis` publishes to a Redis pub/sub channel after each run completes.
 See adapter flags above.
 
@@ -503,7 +508,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.6.2 (commit: ...)
+# 0.7.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -512,6 +517,6 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.6.2` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.7.0` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |
