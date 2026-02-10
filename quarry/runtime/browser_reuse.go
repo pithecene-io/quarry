@@ -113,10 +113,7 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 		StartedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := writeDiscovery(discoveryPath, disc); err != nil {
-		// Kill the just-launched process to avoid an unmanaged orphan
-		if proc, findErr := os.FindProcess(pid); findErr == nil {
-			_ = proc.Kill()
-		}
+		killProcessGroup(pid)
 		return "", fmt.Errorf("browser reuse: write discovery: %w", err)
 	}
 
@@ -247,18 +244,25 @@ func launchBrowserServerProcess(
 		// Detached process — do NOT call cmd.Wait() (we don't own the lifecycle)
 		return ws, cmd.Process.Pid, nil
 	case readErr := <-errCh:
-		_ = cmd.Process.Kill()
+		killProcessGroup(cmd.Process.Pid)
 		_ = cmd.Wait()
 		return "", 0, readErr
 	case <-time.After(30 * time.Second):
-		_ = cmd.Process.Kill()
+		killProcessGroup(cmd.Process.Pid)
 		_ = cmd.Wait()
 		return "", 0, errors.New("timed out waiting for browser server WS endpoint")
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		killProcessGroup(cmd.Process.Pid)
 		_ = cmd.Wait()
 		return "", 0, ctx.Err()
 	}
+}
+
+// killProcessGroup kills an entire process group by negated PID.
+// The browser server is launched with Setsid: true, so its PGID == PID.
+// This ensures Chromium (a child of the Node wrapper) is also killed.
+func killProcessGroup(pid int) {
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 // readDiscovery reads and parses a browser discovery file.

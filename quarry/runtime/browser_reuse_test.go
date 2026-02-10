@@ -3,7 +3,9 @@ package runtime
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -237,6 +239,30 @@ func TestMustParseTime(t *testing.T) {
 			t.Error("expected zero time")
 		}
 	})
+}
+
+func TestKillProcessGroup(t *testing.T) {
+	// Launch a child in its own session (matching browser server launch config)
+	cmd := exec.Command("sleep", "60")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	pid := cmd.Process.Pid
+
+	// Verify it's alive
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Fatalf("process not alive after start: %v", err)
+	}
+
+	killProcessGroup(pid)
+	_ = cmd.Wait()
+
+	// Verify it's dead (signal 0 is a liveness probe)
+	if err := syscall.Kill(pid, 0); err == nil {
+		t.Error("process still alive after killProcessGroup")
+	}
 }
 
 func TestIdleTimeoutFromEnv(t *testing.T) {

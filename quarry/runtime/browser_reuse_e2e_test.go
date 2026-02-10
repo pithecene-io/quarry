@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -85,7 +84,9 @@ func setupE2E(t *testing.T) e2eHarness {
 	}
 }
 
-// killBrowserFromDiscovery reads a discovery file and kills the browser (best effort).
+// killBrowserFromDiscovery reads a discovery file and kills the browser
+// process group (best effort). Uses process group kill to ensure Chromium
+// children are also terminated.
 func killBrowserFromDiscovery(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -96,9 +97,7 @@ func killBrowserFromDiscovery(path string) {
 		return
 	}
 	if disc.PID > 0 {
-		if proc, err := os.FindProcess(disc.PID); err == nil {
-			_ = proc.Kill()
-		}
+		killProcessGroup(disc.PID)
 	}
 	_ = os.Remove(path)
 }
@@ -182,11 +181,8 @@ func TestE2E_BrowserReuse_StaleRecovery(t *testing.T) {
 		t.Fatalf("first acquire: %v", err)
 	}
 
-	// Kill the browser to simulate crash
-	pid := readDiscoveryPID(t, h.discoveryPath)
-	if proc, err := os.FindProcess(pid); err == nil {
-		_ = proc.Signal(syscall.SIGKILL)
-	}
+	// Kill the browser process group to simulate crash
+	killProcessGroup(readDiscoveryPID(t, h.discoveryPath))
 	time.Sleep(1 * time.Second)
 
 	ws2, err := AcquireReusableBrowser(h.ctx, h.cfg)
