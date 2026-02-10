@@ -78,6 +78,6 @@ For every run, the runtime must surface:
 - `job_id` (if known)
 - `parent_run_id` (if applicable)
 - `attempt` (if applicable)
-- outcome status (success, script error, executor crash, policy failure)
+- outcome status (success, script error, executor crash, policy failure, version mismatch)
 
 This metadata must be available to storage and logs.

@@ -33,6 +33,8 @@ const (
 	IngestionErrorPolicy
 	// IngestionErrorCanceled indicates context cancellation (executor crash outcome).
 	IngestionErrorCanceled
+	// IngestionErrorVersionMismatch indicates a contract version mismatch (SDK/CLI version skew).
+	IngestionErrorVersionMismatch
 )
 
 func (e *IngestionError) Error() string {
@@ -61,6 +63,15 @@ func IsCanceledError(err error) bool {
 	return false
 }
 
+// IsVersionMismatchError returns true if the error is a contract version mismatch.
+func IsVersionMismatchError(err error) bool {
+	var ingErr *IngestionError
+	if errors.As(err, &ingErr) {
+		return ingErr.Kind == IngestionErrorVersionMismatch
+	}
+	return false
+}
+
 // IsStreamError returns true if the error is a stream/frame error.
 func IsStreamError(err error) bool {
 	var ingErr *IngestionError
@@ -69,6 +80,11 @@ func IsStreamError(err error) bool {
 	}
 	return false
 }
+
+// errContractVersionMismatch is a sentinel error for contract version mismatches.
+// Used to distinguish version skew from other envelope validation failures
+// (run_id mismatch, attempt mismatch) which remain stream errors.
+var errContractVersionMismatch = errors.New("contract version mismatch")
 
 // EnqueueObserver is a callback invoked when an enqueue event is received.
 // Called synchronously between artifact handling and policy dispatch.
@@ -174,9 +190,10 @@ func (e *IngestionEngine) Run(ctx context.Context) error {
 
 		// Decode and process frame
 		if err := e.processFrame(ctx, payload); err != nil {
-			// Count all stream errors as executor crashes — decode failures,
+			// Count stream errors as executor crashes — decode failures,
 			// envelope validation, sequence violations all indicate executor
 			// misbehavior and produce crash outcomes.
+			// Version mismatch is NOT an executor crash — it's a configuration error.
 			if IsStreamError(err) {
 				e.collector.IncExecutorCrash()
 			}
@@ -231,7 +248,14 @@ func (e *IngestionEngine) processEvent(ctx context.Context, envelope *types.Even
 			"type":  envelope.Type,
 			"seq":   envelope.Seq,
 		})
-		// Envelope validation errors are stream errors (executor misbehavior)
+		// Contract version mismatch is a distinct error kind (SDK/CLI version skew)
+		if errors.Is(err, errContractVersionMismatch) {
+			return &IngestionError{
+				Kind: IngestionErrorVersionMismatch,
+				Err:  fmt.Errorf("envelope validation failed: %w", err),
+			}
+		}
+		// Other envelope validation errors are stream errors (executor misbehavior)
 		return &IngestionError{
 			Kind: IngestionErrorStream,
 			Err:  fmt.Errorf("envelope validation failed: %w", err),
@@ -312,8 +336,8 @@ func (e *IngestionEngine) processEvent(ctx context.Context, envelope *types.Even
 func (e *IngestionEngine) validateEnvelope(envelope *types.EventEnvelope) error {
 	// Validate contract version
 	if envelope.ContractVersion != types.ContractVersion {
-		return fmt.Errorf("contract version mismatch: expected %s, got %s",
-			types.ContractVersion, envelope.ContractVersion)
+		return fmt.Errorf("%w: expected %s, got %s",
+			errContractVersionMismatch, types.ContractVersion, envelope.ContractVersion)
 	}
 
 	// Validate run_id matches

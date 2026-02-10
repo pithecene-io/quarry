@@ -244,6 +244,11 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 				Status:  types.OutcomePolicyFailure,
 				Message: fmt.Sprintf("policy failure: %v", ingErr),
 			}
+		case IsVersionMismatchError(ingErr):
+			outcome = &types.RunOutcome{
+				Status:  types.OutcomeVersionMismatch,
+				Message: fmt.Sprintf("SDK/CLI version mismatch: %v. Update the quarry CLI to match your SDK version, or pin the SDK to match your CLI.", ingErr),
+			}
 		case IsCanceledError(ingErr):
 			outcome = &types.RunOutcome{
 				Status:  types.OutcomeExecutorCrash,
@@ -405,7 +410,7 @@ func (r *RunOrchestrator) buildResult(
 	switch outcome.Status {
 	case types.OutcomeSuccess:
 		r.config.Collector.IncRunCompleted()
-	case types.OutcomeScriptError, types.OutcomePolicyFailure:
+	case types.OutcomeScriptError, types.OutcomePolicyFailure, types.OutcomeVersionMismatch:
 		r.config.Collector.IncRunFailed()
 	case types.OutcomeExecutorCrash:
 		r.config.Collector.IncRunCrashed()
