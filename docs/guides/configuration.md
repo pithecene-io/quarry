@@ -142,10 +142,20 @@ at runtime. `--max-runs` is mandatory as a safety rail.
 | Flag | Type | Purpose |
 |------|------|---------|
 | `--browser-ws-endpoint` | string | Connect to an externally managed browser via WebSocket URL instead of launching Chromium per run |
+| `--no-browser-reuse` | bool | Disable transparent browser reuse across runs (per-run Chromium launch) |
 
-When set, the executor uses `puppeteer.connect()` (vanilla, no plugins) and
-creates an isolated `BrowserContext` per run. On cleanup, the context is closed
-but the browser stays alive. Fan-out child runs inherit the endpoint automatically.
+**Explicit browser (`--browser-ws-endpoint`):** The executor uses
+`puppeteer.connect()` (vanilla, no plugins) and creates an isolated
+`BrowserContext` per run. On cleanup, the context is closed but the browser
+stays alive. Fan-out child runs inherit the endpoint automatically.
+
+**Transparent reuse (default):** When no explicit endpoint is provided, Quarry
+automatically starts a reusable browser server on the first run. Subsequent
+runs reuse it. The browser self-terminates after `QUARRY_BROWSER_IDLE_TIMEOUT`
+seconds (default: 60) with no active pages.
+
+Use `--no-browser-reuse` (or `no_browser_reuse: true` in config) to revert
+to per-run browser launch.
 
 See `docs/guides/cli.md` for usage examples.
 
@@ -167,6 +177,7 @@ by the Node executor process, not the Go runtime.
 | `QUARRY_STEALTH` | enabled | Puppeteer stealth plugin (evades bot detection). Set to `0` to disable. |
 | `QUARRY_ADBLOCKER` | disabled | Puppeteer adblocker plugin. Set to `1` to enable. |
 | `QUARRY_NO_SANDBOX` | disabled | Disable Chromium sandbox (required in containers/CI). Set to `1` to enable. |
+| `QUARRY_BROWSER_IDLE_TIMEOUT` | `60` | Seconds before the reusable browser server self-terminates after all pages close. Read by both the Go runtime (to pass to the browser server) and the executor (as its idle timer). |
 
 ### Usage
 
@@ -223,6 +234,9 @@ category: default
 
 # Connect to an externally managed browser instead of launching one per run.
 # browser_ws_endpoint: ws://localhost:9222/devtools/browser/...
+
+# Disable transparent browser reuse across runs.
+# no_browser_reuse: true
 
 # Executor path override (development only).
 # The bundled binary auto-resolves the executor; only needed for local dev builds.

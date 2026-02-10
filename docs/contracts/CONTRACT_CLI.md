@@ -244,6 +244,45 @@ config file providing project-level defaults for run flags.
 **No auto-discovery:** Config files are loaded only via explicit `--config`.
 There is no implicit `quarry.yaml` search in the working directory.
 
+### Transparent Browser Reuse (v0.7.1+)
+
+By default, `quarry run` transparently reuses a Chromium browser process
+across sequential invocations. The browser is launched as a detached process
+on the first run and self-terminates after an idle timeout (default: 60s).
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--no-browser-reuse` | bool | `false` | Disable browser reuse (per-run browser) |
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `QUARRY_BROWSER_IDLE_TIMEOUT` | `60` | Idle timeout in seconds before browser self-terminates |
+
+**Semantics:**
+- The browser server is a **transparent optimization**, analogous to
+  `git credential-cache`. It self-terminates and requires no user management.
+- `--browser-ws-endpoint` (explicit) takes absolute priority. Browser reuse
+  is bypassed entirely when set.
+- Fan-out (`--depth > 0`) uses the reusable browser if available; falls back
+  to `LaunchManagedBrowser` when reuse is disabled.
+- Proxy mismatch between runs causes a graceful fallback to per-run browser
+  launch (the reusable browser is not killed).
+- Discovery state is stored in `$XDG_RUNTIME_DIR/quarry/browser.json`
+  (or `$TMPDIR/quarry-$UID/` on macOS). Concurrent access is serialized
+  via `flock`.
+- Config file: `no_browser_reuse: true` in YAML.
+
+**Reconciliation with "no background process" invariant:**
+The invariant "No command starts a long-running background process" (§Invariants)
+refers to user-visible daemons that require management (start/stop/monitor).
+The reusable browser server is:
+- Self-terminating (idle timeout)
+- Not user-managed (no start/stop commands)
+- Discoverable only via an ephemeral runtime file
+- Semantically equivalent to a kernel page cache or credential helper
+
+This is a permitted side-effect, not a background service.
+
 ---
 
 ## `inspect` (single-entity introspection)

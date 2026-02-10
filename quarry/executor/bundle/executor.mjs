@@ -2686,6 +2686,7 @@ var init_executor = __esm({
 
 // src/bin/executor.ts
 init_executor();
+import { unlinkSync } from "node:fs";
 function fatalError(message) {
   process.stderr.write(`Error: ${message}
 `);
@@ -2729,6 +2730,83 @@ async function readStdin() {
   }
   return Buffer.concat(chunks).toString("utf-8");
 }
+async function browserServer(scriptPath) {
+  const { getPuppeteer: getBrowserPuppeteer } = await Promise.resolve().then(() => (init_executor(), executor_exports));
+  const puppeteer = await getBrowserPuppeteer(scriptPath, {
+    stealth: process.env.QUARRY_STEALTH !== "0",
+    adblocker: process.env.QUARRY_ADBLOCKER === "1"
+  });
+  const launchArgs = [];
+  if (process.env.QUARRY_NO_SANDBOX === "1") {
+    launchArgs.push("--no-sandbox", "--disable-setuid-sandbox");
+  }
+  const proxyUrl = process.env.QUARRY_BROWSER_PROXY;
+  if (proxyUrl) {
+    launchArgs.push(`--proxy-server=${proxyUrl}`);
+  }
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: launchArgs
+  });
+  const wsEndpoint = browser.wsEndpoint();
+  process.stdout.write(`${wsEndpoint}
+`);
+  process.on("SIGPIPE", () => {
+  });
+  const idleTimeoutMs = Number.parseInt(process.env.QUARRY_BROWSER_IDLE_TIMEOUT ?? "60", 10) * 1e3;
+  const discoveryFile = process.env.QUARRY_BROWSER_DISCOVERY_FILE ?? "";
+  const wsUrl = new URL(wsEndpoint);
+  const baseUrl = `http://127.0.0.1:${wsUrl.port}`;
+  let idleStartedAt = null;
+  const pollIntervalMs = 5e3;
+  async function countActivePages() {
+    const res = await fetch(`${baseUrl}/json/list`);
+    if (!res.ok) return 0;
+    const targets = await res.json();
+    return targets.filter((t) => t.type === "page" && t.url !== "about:blank").length;
+  }
+  function removeDiscoveryFile() {
+    if (!discoveryFile) return;
+    try {
+      unlinkSync(discoveryFile);
+    } catch {
+    }
+  }
+  async function shutdown() {
+    const idleSec = idleStartedAt ? Math.round((Date.now() - idleStartedAt) / 1e3) : 0;
+    process.stderr.write(`Browser server idle for ${idleSec}s, shutting down
+`);
+    removeDiscoveryFile();
+    await browser.close();
+    process.exit(0);
+  }
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGINT", () => void shutdown());
+  const timer = setInterval(async () => {
+    try {
+      const activePages = await countActivePages();
+      if (activePages > 0) {
+        idleStartedAt = null;
+        return;
+      }
+      if (idleStartedAt === null) {
+        idleStartedAt = Date.now();
+        return;
+      }
+      if (Date.now() - idleStartedAt >= idleTimeoutMs) {
+        clearInterval(timer);
+        await shutdown();
+      }
+    } catch {
+      clearInterval(timer);
+      removeDiscoveryFile();
+      process.exit(1);
+    }
+  }, pollIntervalMs);
+  while (true) {
+    await new Promise((resolve3) => setTimeout(resolve3, 2147483647));
+  }
+}
 async function launchBrowserServer(scriptPath) {
   const { getPuppeteer: getBrowserPuppeteer } = await Promise.resolve().then(() => (init_executor(), executor_exports));
   const puppeteer = await getBrowserPuppeteer(scriptPath, {
@@ -2754,6 +2832,14 @@ async function launchBrowserServer(scriptPath) {
 }
 async function main() {
   const args = process.argv.slice(2);
+  if (args[0] === "--browser-server") {
+    const scriptPath2 = args[1];
+    if (!scriptPath2) {
+      process.stderr.write("Usage: quarry-executor --browser-server <script-path>\n");
+      process.exit(3);
+    }
+    return browserServer(scriptPath2);
+  }
   if (args[0] === "--launch-browser") {
     const scriptPath2 = args[1];
     if (!scriptPath2) {

@@ -224,6 +224,11 @@ ADVANCED:
 				Name:  "storage-s3-path-style",
 				Usage: "Force path-style addressing for S3 (required by R2, MinIO)",
 			},
+			// Browser reuse flags
+			&cli.BoolFlag{
+				Name:  "no-browser-reuse",
+				Usage: "Disable transparent browser reuse across runs",
+			},
 			// Fan-out flags
 			&cli.IntFlag{
 				Name:  "depth",
@@ -661,6 +666,24 @@ func runAction(c *cli.Context) error {
 		cancel()
 	}()
 
+	// Resolve browser reuse:
+	// Priority: explicit --browser-ws-endpoint > browser reuse > per-run launch
+	noBrowserReuse := resolveBool(c, "no-browser-reuse", configBoolVal(cfg, func(c *quarryconfig.Config) bool { return c.NoBrowserReuse }))
+	if browserWSEndpoint == "" && !noBrowserReuse {
+		idleTimeout := runtime.IdleTimeoutFromEnv()
+		reuseCfg := runtime.ReusableBrowserConfig{
+			ExecutorPath: executorPath,
+			ScriptPath:   c.String("script"),
+			Proxy:        resolvedProxy,
+			IdleTimeout:  idleTimeout,
+		}
+		if ws, err := runtime.AcquireReusableBrowser(ctx, reuseCfg); err == nil {
+			browserWSEndpoint = ws
+		} else {
+			fmt.Fprintf(os.Stderr, "Browser reuse unavailable: %v\n", err)
+		}
+	}
+
 	// Build finalizer (shared post-run concerns for both execution paths)
 	finalizer := &runFinalizer{
 		lodeClient:     lodeClient,
@@ -692,8 +715,8 @@ func runAction(c *cli.Context) error {
 
 	// Branch: fan-out or single run
 	if fanOut.depth > 0 {
-		// Auto-launch a shared browser for fan-out when no explicit endpoint is provided.
-		// This avoids N cold browser startups (one per child run).
+		// Use reusable browser if already acquired; otherwise launch a managed
+		// browser for fan-out to avoid N cold startups (one per child run).
 		if browserWSEndpoint == "" {
 			managedBrowser, err := runtime.LaunchManagedBrowser(ctx, executorPath, c.String("script"))
 			if err != nil {

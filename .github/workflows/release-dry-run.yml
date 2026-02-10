@@ -1,27 +1,28 @@
-name: "🔬 Release Dry Run"
+name: 🔬 Release Dry Run
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to simulate (e.g., v0.1.0)"
+        description: Version to simulate (e.g., v0.1.0)
         required: true
         type: string
 
 jobs:
   validate_version:
-    name: "🔎 Validate Version"
+    name: 🔎 Validate Version
     runs-on: ubuntu-latest
     outputs:
       semver_match: ${{ steps.regex-match.outputs.match }}
     steps:
-      - name: "🔎 Match SemVer Format"
+      - name: 🔎 Match SemVer Format
         uses: actions-ecosystem/action-regex-match@v2
         id: regex-match
         with:
           text: ${{ inputs.version }}
-          regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'
-      - name: "❌ Fail on Invalid Version"
+          regex: ^v[0-9]+\.[0-9]+\.[0-9]+$
+
+      - name: ❌ Fail on Invalid Version
         if: ${{ steps.regex-match.outputs.match == '' }}
         run: |
           echo "::error::Invalid version format: ${{ inputs.version }}"
@@ -29,13 +30,14 @@ jobs:
           exit 1
 
   version_lockstep:
-    name: "🔒 Version Lockstep"
+    name: 🔒 Version Lockstep
     runs-on: ubuntu-latest
     needs: [validate_version]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🔒 Check Version Matches Input"
+
+      - name: 🔒 Check Version Matches Input
         run: |
           INPUT_VERSION="${{ inputs.version }}"
           TAG_VERSION="${INPUT_VERSION#v}"
@@ -55,73 +57,87 @@ jobs:
           echo "✅ All versions match: $TAG_VERSION"
 
   lint:
-    name: "🧹 Lint"
+    name: 🧹 Lint
     runs-on: ubuntu-latest
     needs: [validate_version]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧹 Lint"
+
+      - name: 🧹 Lint
         run: task lint
 
   test:
-    name: "🧪 Test"
+    name: 🧪 Test
     runs-on: ubuntu-latest
     needs: [validate_version]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🧪 Test"
+
+      - name: 🧪 Test
         run: task test
 
   build:
-    name: "🏗️ Build"
+    name: 🏗️ Build
     runs-on: ubuntu-latest
     needs: [validate_version]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "🏗️ Build"
+
+      - name: 🏗️ Build
         run: task build
 
   examples:
-    name: "📦 Examples"
+    name: 📦 Examples
     runs-on: ubuntu-latest
     needs: [build]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Install dependencies"
+
+      - name: 📦 Install dependencies
         run: pnpm install
-      - name: "📦 Run Examples"
+
+      - name: 📦 Run Examples
         run: task examples
         env:
           QUARRY_NO_SANDBOX: "1"
 
   package:
-    name: "📦 Package (Dry Run)"
+    name: 📦 Package (Dry Run)
     runs-on: ubuntu-latest
     needs: [version_lockstep, lint, test, build, examples]
     steps:
-      - name: "📥 Checkout"
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-      - name: "🧰 Setup"
+
+      - name: 🧰 Setup
         uses: jdx/mise-action@v2
-      - name: "📦 Package"
+
+      - name: 📦 Package
         run: |
           mkdir -p dist
           VERSION="${{ inputs.version }}"
@@ -133,7 +149,8 @@ jobs:
           cd ..
           mv "sdk/${SDK_TARBALL}" "dist/quarry-sdk-${VERSION}.tgz"
           sha256sum "dist/quarry-sdk-${VERSION}.tgz" > "dist/quarry-sdk-${VERSION}.tgz.sha256"
-      - name: "📋 Package Summary"
+
+      - name: 📋 Package Summary
         run: |
           echo "## 📦 Dry Run Package Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -146,7 +163,8 @@ jobs:
           done
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **Dry run complete.** Ready to tag and release." >> $GITHUB_STEP_SUMMARY
-      - name: "⬆️ Upload Artifacts"
+
+      - name: ⬆️ Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dry-run-dist
