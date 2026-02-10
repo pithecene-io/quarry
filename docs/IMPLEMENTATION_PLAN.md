@@ -13,14 +13,13 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.5.1)
-- Latest release: v0.5.1 (see CHANGELOG.md).
+## Current Status (as of v0.6.3)
+- Latest release: v0.6.3 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.5.1 fixed published npm packages missing `dist/` directory (#110).
-- v0.5.0 adds webhook and Redis pub/sub event-bus adapters for downstream notifications.
-- v0.4.1 added `--config` for YAML project-level defaults and config package hardening.
-- v0.4.0 added `ctx.storage.put()` for sidecar file uploads via Lode Store.
-- Next priority: v0.6.0 derived work execution (fan-out flags on `quarry run`) — see roadmap below.
+- v0.6.x adds derived work execution (fan-out flags on `quarry run`).
+- v0.5.x adds webhook and Redis pub/sub event-bus adapters.
+- v0.4.x added `--config` for YAML project-level defaults and `ctx.storage.put()`.
+- Next priority: v0.7.0 streaming policy and advanced proxy rotation — see roadmap below.
 
 ---
 
@@ -630,9 +629,47 @@ and use case taxonomy that motivated this approach.
 
 ---
 
-## v0.7.0 Roadmap — Advanced Proxy Rotation
+## v0.7.0 Roadmap — Streaming Policy & Advanced Proxy Rotation
 
 ### Goal
+Add a `streaming` ingestion policy for crawl workloads and harden proxy
+selection for production use.
+
+### Streaming Policy
+
+Add a third ingestion policy (`streaming`) that combines strict's no-drop
+guarantee with buffered's batched write efficiency. Designed for long-running
+crawl workloads where downstream consumers need near-real-time visibility
+into emitted items without per-event R2 write overhead.
+
+#### Motivation
+
+With `policy=strict`, each event creates its own Lode snapshot (data file +
+manifest = 2+ R2 PUTs). For a crawl emitting hundreds of items, this means
+hundreds of small R2 round trips that the executor blocks on. The streaming
+policy batches events and flushes on configurable triggers (count threshold,
+time interval), reducing R2 PUTs by an order of magnitude while preserving
+near-real-time downstream visibility.
+
+#### Deliverables
+- `StreamingPolicy` implementation in `quarry/policy/`
+- CLI flags: `--flush-count`, `--flush-interval` (valid only with `--policy=streaming`)
+- Config YAML: `policy.flush_count`, `policy.flush_interval`
+- Flush trigger loop in runtime run orchestration
+- CONTRACT_POLICY.md streaming section (already committed)
+
+#### Mini-milestones
+- [x] Contract sketch (CONTRACT_POLICY.md streaming section)
+- [ ] `StreamingPolicy` struct with count + interval flush triggers
+- [ ] Runtime integration: flush trigger goroutine in `Execute()`
+- [ ] CLI flag wiring and validation (`--policy=streaming` requires triggers)
+- [ ] Config YAML support (`policy.flush_count`, `policy.flush_interval`)
+- [ ] Tests: count trigger, interval trigger, combined, ordering, artifact integrity
+- [ ] Guide and configuration doc updates
+
+### Advanced Proxy Rotation
+
+#### Goal
 Harden proxy selection for production workloads that require recency-aware
 rotation to reduce endpoint reuse and improve scraping reliability.
 
