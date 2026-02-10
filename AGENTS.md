@@ -166,9 +166,13 @@ When releasing:
 1. Update `quarry/types/version.go`
 2. Update `sdk/package.json` version field to match
 3. Update `sdk/src/types/events.ts` `CONTRACT_VERSION` to match
-4. Rebuild SDK (`pnpm exec tsdown` in sdk/)
-5. Rebuild executor bundle (`task executor:bundle`)
-6. Commit as a single version bump
+4. Update golden test fixtures (`sdk/test/emit/06-golden/*.json`) — they contain hardcoded `contract_version`
+5. Rebuild SDK (`pnpm exec tsdown` in sdk/)
+6. Rebuild executor bundle (`task executor:bundle`)
+7. Promote `CHANGELOG.md`: move `[Unreleased]` entries to a dated `[X.Y.Z] - YYYY-MM-DD` section, add the `[X.Y.Z]` link reference at the bottom, and restore an empty `[Unreleased]` placeholder
+8. Commit as a single version bump
+
+**This checklist is exhaustive. Do not skip steps. Do not split across commits.**
 
 ---
 
