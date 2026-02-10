@@ -225,6 +225,8 @@ func (c *Collector) AbsorbPolicyStats(totalEvents, persisted, dropped int64, dro
 		for k, v := range flushTriggers {
 			c.flushTriggers[k] = v
 		}
+	} else {
+		c.flushTriggers = nil
 	}
 	c.mu.Unlock()
 }

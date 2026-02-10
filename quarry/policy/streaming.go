@@ -45,6 +45,10 @@ const (
 	FlushTriggerInterval FlushTrigger = "interval"
 	// FlushTriggerTermination indicates a run termination flush.
 	FlushTriggerTermination FlushTrigger = "termination"
+	// FlushTriggerCapacity indicates a buffer-capacity emergency flush.
+	// Fired when buffer is at internal capacity after an append, regardless
+	// of whether the event count threshold was reached.
+	FlushTriggerCapacity FlushTrigger = "capacity"
 )
 
 // ErrStreamingInvalidConfig is returned when StreamingConfig is invalid.
@@ -89,6 +93,7 @@ type StreamingPolicy struct {
 	flushByCount       int64
 	flushByInterval    int64
 	flushByTermination int64
+	flushByCapacity    int64
 
 	// stopCh signals the interval goroutine to stop.
 	stopCh chan struct{}
@@ -139,12 +144,18 @@ func (p *StreamingPolicy) IngestEvent(ctx context.Context, envelope *types.Event
 	p.bufferBytes += eventSize
 	p.stats.setBufferSizeLocked(p.bufferBytes)
 
-	// Check count trigger
-	shouldFlush := p.config.FlushCount > 0 && len(p.eventBuffer) >= p.config.FlushCount
+	// Check count trigger first, then capacity trigger as safety valve.
+	// Capacity flush prevents deadlock when flush_count > streamingMaxBufferEvents
+	// or when no interval is configured and the buffer fills from events alone.
+	countTriggered := p.config.FlushCount > 0 && len(p.eventBuffer) >= p.config.FlushCount
+	capacityTriggered := !countTriggered && p.isBufferFullLocked()
 	p.mu.Unlock()
 
-	if shouldFlush {
+	if countTriggered {
 		return p.triggerFlush(ctx, FlushTriggerCount)
+	}
+	if capacityTriggered {
+		return p.triggerFlush(ctx, FlushTriggerCapacity)
 	}
 
 	return nil
@@ -168,7 +179,7 @@ func (p *StreamingPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.
 	p.bufferBytes += chunkSize
 	p.stats.setBufferSizeLocked(p.bufferBytes)
 
-	// Trigger flush if buffer is at capacity after this append.
+	// Trigger capacity flush if buffer is at capacity after this append.
 	// This prevents deadlock in count-only mode: without an interval trigger,
 	// chunks alone would fill the buffer and block forever since only events
 	// contribute to the count threshold.
@@ -176,7 +187,7 @@ func (p *StreamingPolicy) IngestArtifactChunk(ctx context.Context, chunk *types.
 	p.mu.Unlock()
 
 	if shouldFlush {
-		return p.triggerFlush(ctx, FlushTriggerCount)
+		return p.triggerFlush(ctx, FlushTriggerCapacity)
 	}
 
 	return nil
@@ -209,6 +220,8 @@ func (p *StreamingPolicy) triggerFlush(ctx context.Context, trigger FlushTrigger
 		p.flushByInterval++
 	case FlushTriggerTermination:
 		p.flushByTermination++
+	case FlushTriggerCapacity:
+		p.flushByCapacity++
 	}
 
 	p.stats.incFlushLocked()
@@ -299,6 +312,7 @@ func (p *StreamingPolicy) Stats() Stats {
 		string(FlushTriggerCount):       p.flushByCount,
 		string(FlushTriggerInterval):    p.flushByInterval,
 		string(FlushTriggerTermination): p.flushByTermination,
+		string(FlushTriggerCapacity):    p.flushByCapacity,
 	}
 	return s
 }

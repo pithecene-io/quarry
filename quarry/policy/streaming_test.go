@@ -846,6 +846,72 @@ func TestStreamingPolicy_ChunkOnlyCountMode_NoDeadlock(t *testing.T) {
 	if stats.ChunksPersisted != totalChunks {
 		t.Errorf("expected ChunksPersisted=%d, got %d", totalChunks, stats.ChunksPersisted)
 	}
+	// Capacity flushes should be reported as "capacity", not "count"
+	if stats.FlushTriggers["capacity"] == 0 {
+		t.Error("expected FlushTriggers[capacity] > 0 for chunk-capacity flush")
+	}
+	if stats.FlushTriggers["count"] != 0 {
+		t.Errorf("expected FlushTriggers[count]=0 (no event count threshold), got %d", stats.FlushTriggers["count"])
+	}
+}
+
+func TestStreamingPolicy_EventOnlyCapacity_NoDeadlock(t *testing.T) {
+	// Regression test: when flush_count is set above streamingMaxBufferEvents
+	// and no interval is configured, events fill the buffer and block forever.
+	// After the fix, IngestEvent triggers a capacity flush when the buffer is full.
+	baseSink := policy.NewStubSink()
+	slowSink := &streamingSlowSink{
+		StubSink:   baseSink,
+		writeDelay: 10 * time.Millisecond,
+	}
+
+	pol, err := policy.NewStreamingPolicy(slowSink, policy.StreamingConfig{
+		FlushCount: 100_000, // above internal cap of 50,000
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = pol.Close() })
+
+	ctx := t.Context()
+	done := make(chan struct{})
+	const totalEvents = 60_000 // exceeds 50k internal cap
+
+	go func() {
+		defer close(done)
+		for i := range totalEvents {
+			if err := pol.IngestEvent(ctx, &types.EventEnvelope{
+				EventID: "e",
+				Type:    types.EventTypeItem,
+				Seq:     int64(i + 1),
+			}); err != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+		// All events eventually ingested (capacity flush drained the buffer)
+	case <-time.After(10 * time.Second):
+		t.Fatal("event ingestion timed out — likely deadlocked (flush_count > internal cap)")
+	}
+
+	if err := pol.Flush(ctx); err != nil {
+		t.Fatalf("final flush failed: %v", err)
+	}
+
+	stats := pol.Stats()
+	if stats.TotalEvents != totalEvents {
+		t.Errorf("expected TotalEvents=%d, got %d", totalEvents, stats.TotalEvents)
+	}
+	if stats.EventsDropped != 0 {
+		t.Errorf("expected EventsDropped=0, got %d", stats.EventsDropped)
+	}
+	// Should have triggered capacity flushes, not count flushes
+	if stats.FlushTriggers["capacity"] == 0 {
+		t.Error("expected FlushTriggers[capacity] > 0 for event-capacity flush")
+	}
 }
 
 func TestStreamingPolicy_OversizedEntry_AcceptedWhenBufferEmpty(t *testing.T) {

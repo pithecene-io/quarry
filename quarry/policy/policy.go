@@ -62,7 +62,7 @@ type Stats struct {
 	Errors int64
 	// FlushTriggers is a per-trigger-type flush counter.
 	// Only populated by streaming policy; nil for strict/buffered.
-	// Keys are trigger names: "count", "interval", "termination".
+	// Keys are trigger names: "count", "interval", "termination", "capacity".
 	FlushTriggers map[string]int64
 }
 
