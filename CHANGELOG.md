@@ -13,6 +13,20 @@ _No unreleased changes._
 
 ---
 
+## [0.6.3] - 2026-02-09
+
+### Fixed
+
+- **Runtime**: SDK/CLI version mismatches are now classified as `version_mismatch` instead of `executor_crash`, with an actionable error message directing users to align their SDK and CLI versions (#132)
+
+### Changed
+
+- **Runtime**: Version mismatch errors increment `run_failed` (not `run_crashed`) and do not fire `executor_crash` metric (#132)
+- **CLI**: `version_mismatch` outcome maps to exit code 3 (non-retryable, same as `policy_failure`) (#132)
+- **Contracts**: `CONTRACT_RUN.md` and `CONTRACT_INTEGRATION.md` now enumerate `version_mismatch` as a fifth outcome status (#132)
+
+---
+
 ## [0.6.2] - 2026-02-08
 
 ### Added
