@@ -1354,6 +1354,8 @@ func outcomeToExitCode(status types.OutcomeStatus) int {
 		return exitExecutorCrash
 	case types.OutcomePolicyFailure:
 		return exitPolicyFailure
+	case types.OutcomeVersionMismatch:
+		return exitPolicyFailure // non-retryable configuration error, same as policy_failure
 	default:
 		return exitScriptError
 	}

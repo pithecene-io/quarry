@@ -55,8 +55,14 @@ func TestIngestionEngine_EnvelopeValidation_ContractVersionMismatch(t *testing.T
 	if err == nil {
 		t.Fatal("expected error for contract version mismatch")
 	}
+	if !IsVersionMismatchError(err) {
+		t.Error("contract version mismatch should be version mismatch error")
+	}
+	if IsStreamError(err) {
+		t.Error("contract version mismatch should not be stream error")
+	}
 	if IsPolicyError(err) {
-		t.Error("contract version mismatch should be stream error, not policy error")
+		t.Error("contract version mismatch should not be policy error")
 	}
 }
 

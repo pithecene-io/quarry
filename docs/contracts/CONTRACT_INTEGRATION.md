@@ -178,9 +178,10 @@ to orchestrator-native error semantics:
 | `script_error` | Retryable error |
 | `executor_crash` | Retryable error |
 | `policy_failure` | Non-retryable error |
+| `version_mismatch` | Non-retryable error |
 
-`policy_failure` is non-retryable because it indicates a systemic
-configuration problem that retries cannot resolve.
+`policy_failure` and `version_mismatch` are non-retryable because they
+indicate systemic configuration problems that retries cannot resolve.
 
 ### Lineage Preservation
 

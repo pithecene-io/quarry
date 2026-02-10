@@ -57,6 +57,8 @@ const (
 	OutcomeExecutorCrash OutcomeStatus = "executor_crash"
 	// OutcomePolicyFailure indicates the ingestion policy failed.
 	OutcomePolicyFailure OutcomeStatus = "policy_failure"
+	// OutcomeVersionMismatch indicates an SDK/CLI contract version mismatch.
+	OutcomeVersionMismatch OutcomeStatus = "version_mismatch"
 )
 
 // RunOutcome represents the final outcome of a run.

@@ -483,6 +483,11 @@ func TestIsStreamError(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "version mismatch error",
+			err:      &IngestionError{Kind: IngestionErrorVersionMismatch, Err: io.EOF},
+			expected: false,
+		},
+		{
 			name:     "non-ingestion error",
 			err:      io.EOF,
 			expected: false,
@@ -501,6 +506,113 @@ func TestIsStreamError(t *testing.T) {
 				t.Errorf("IsStreamError(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestIsVersionMismatchError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "version mismatch error",
+			err:      &IngestionError{Kind: IngestionErrorVersionMismatch, Err: io.EOF},
+			expected: true,
+		},
+		{
+			name:     "stream error",
+			err:      &IngestionError{Kind: IngestionErrorStream, Err: io.EOF},
+			expected: false,
+		},
+		{
+			name:     "policy error",
+			err:      &IngestionError{Kind: IngestionErrorPolicy, Err: io.EOF},
+			expected: false,
+		},
+		{
+			name:     "canceled error",
+			err:      &IngestionError{Kind: IngestionErrorCanceled, Err: context.Canceled},
+			expected: false,
+		},
+		{
+			name:     "non-ingestion error",
+			err:      io.EOF,
+			expected: false,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsVersionMismatchError(tt.err)
+			if got != tt.expected {
+				t.Errorf("IsVersionMismatchError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+// makeVersionMismatchStream creates a stream with a contract version mismatch.
+func makeVersionMismatchStream(runMeta *types.RunMeta) []byte {
+	envelope := &types.EventEnvelope{
+		ContractVersion: "0.99.0", // Wrong version
+		EventID:         "evt-1",
+		RunID:           runMeta.RunID,
+		Seq:             1,
+		Type:            types.EventTypeLog,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"level": "info", "message": "test"},
+		Attempt:         runMeta.Attempt,
+	}
+	return encodeTestEventFrame(envelope)
+}
+
+func TestRunOrchestrator_VersionMismatch_OutcomeMapping(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-version-mismatch",
+		Attempt: 1,
+	}
+
+	// Create executor that produces a version-mismatched event
+	eventData := makeVersionMismatchStream(runMeta)
+	mockExec := newMockExecutor(eventData, 1)
+
+	trackingPol := newFlushTrackingPolicy()
+
+	config := &RunConfig{
+		ExecutorPath: "/fake/executor",
+		ScriptPath:   "/fake/script.js",
+		Job:          map[string]any{},
+		RunMeta:      runMeta,
+		Policy:       trackingPol,
+		ExecutorFactory: func(_ *ExecutorConfig) Executor {
+			return mockExec
+		},
+	}
+
+	orchestrator, err := NewRunOrchestrator(config)
+	if err != nil {
+		t.Fatalf("failed to create orchestrator: %v", err)
+	}
+
+	result, err := orchestrator.Execute(t.Context())
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify outcome is version_mismatch, NOT executor_crash
+	if result.Outcome.Status != types.OutcomeVersionMismatch {
+		t.Errorf("expected OutcomeVersionMismatch, got %s: %s", result.Outcome.Status, result.Outcome.Message)
+	}
+
+	// Verify actionable message
+	if result.Outcome.Message == "" {
+		t.Error("expected actionable message for version mismatch")
 	}
 }
 
