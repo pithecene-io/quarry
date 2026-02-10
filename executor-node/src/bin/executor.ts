@@ -119,9 +119,21 @@ async function browserServer(scriptPath: string): Promise<never> {
     adblocker: process.env.QUARRY_ADBLOCKER === '1'
   })
 
+  // Build Chromium launch args
+  const launchArgs: string[] = []
+  if (process.env.QUARRY_NO_SANDBOX === '1') {
+    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox')
+  }
+
+  // Apply proxy at the browser level so all connections route through it
+  const proxyUrl = process.env.QUARRY_BROWSER_PROXY
+  if (proxyUrl) {
+    launchArgs.push(`--proxy-server=${proxyUrl}`)
+  }
+
   const browser = await puppeteer.launch({
     headless: true,
-    args: process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+    args: launchArgs
   })
 
   const wsEndpoint = browser.wsEndpoint()

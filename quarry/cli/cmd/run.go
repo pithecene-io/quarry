@@ -679,8 +679,9 @@ func runAction(c *cli.Context) error {
 		}
 		if ws, err := runtime.AcquireReusableBrowser(ctx, reuseCfg); err == nil {
 			browserWSEndpoint = ws
+		} else {
+			fmt.Fprintf(os.Stderr, "Browser reuse unavailable: %v\n", err)
 		}
-		// On error (proxy mismatch, etc.), fall through to per-run launch
 	}
 
 	// Build finalizer (shared post-run concerns for both execution paths)

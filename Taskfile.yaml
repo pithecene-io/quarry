@@ -15,7 +15,9 @@ tasks:
 
   lint:
     desc: Lint all packages (Go + TS + YAML)
-    deps: [go:lint, ts:lint, yaml:lint]
+    deps: [go:lint, ts:lint]
+    cmds:
+      - yamllint .
 
   test:
     desc: Run all tests (Go + TS)
@@ -30,7 +32,7 @@ tasks:
     deps: [ts:build]
     dir: quarry
     cmds:
-      - go test -v -timeout 120s -run TestE2E ./runtime/
+      - go test -v -run TestE2E -timeout 120s ./runtime/
     env:
       QUARRY_E2E: "1"
 
@@ -117,11 +119,11 @@ tasks:
       - golangci-lint run ./...
 
   go:test:
-    desc: Test Go module
+    desc: Test Go module (excludes E2E)
     aliases: [go:t]
     dir: quarry
     cmds:
-      - go test ./...
+      - go test -skip TestE2E ./...
 
   cli:parity:
     desc: Validate CLI/config parity artifact
@@ -130,11 +132,11 @@ tasks:
       - go test ./cli/cmd -run Parity -v
 
   go:test:race:
-    desc: Test Go module with race detector
+    desc: Test Go module with race detector (excludes E2E)
     aliases: [go:tr]
     dir: quarry
     cmds:
-      - go test -race ./...
+      - go test -race -skip TestE2E ./...
 
   go:format:
     desc: Format Go module
@@ -188,13 +190,3 @@ tasks:
     cmds:
       - for: { var: TS_PACKAGES }
         cmd: pnpm -C {{.ITEM}} run format
-
-  # ==================
-  # YAML tasks
-  # ==================
-
-  yaml:lint:
-    desc: Lint YAML files
-    aliases: [yaml:l]
-    cmds:
-      - yamllint .

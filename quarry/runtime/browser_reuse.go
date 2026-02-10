@@ -100,7 +100,7 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 		idleTimeout = defaultIdleTimeout
 	}
 
-	wsEndpoint, pid, err := launchBrowserServerProcess(ctx, cfg.ExecutorPath, cfg.ScriptPath, discoveryPath, idleTimeout)
+	wsEndpoint, pid, err := launchBrowserServerProcess(ctx, cfg.ExecutorPath, cfg.ScriptPath, discoveryPath, idleTimeout, cfg.Proxy)
 	if err != nil {
 		return "", fmt.Errorf("browser reuse: launch: %w", err)
 	}
@@ -176,23 +176,34 @@ func proxyHash(proxy *types.ProxyEndpoint) string {
 
 // launchBrowserServerProcess starts the executor in --browser-server mode as a
 // detached process. Returns the WS endpoint and PID.
+//
+// Uses exec.Command (not CommandContext) because the browser server must outlive
+// the parent quarry run invocation — that is the entire point of reuse.
 func launchBrowserServerProcess(
 	ctx context.Context,
 	executorPath, scriptPath, discoveryPath string,
 	idleTimeout time.Duration,
+	proxy *types.ProxyEndpoint,
 ) (wsEndpoint string, pid int, err error) {
-	cmd := exec.CommandContext(ctx, executorPath, "--browser-server", scriptPath)
+	cmd := exec.Command(executorPath, "--browser-server", scriptPath)
 
 	// Detach: new session so the browser server outlives the parent
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid: true,
 	}
 
-	// Pass discovery file path so the server can clean up on exit
-	cmd.Env = append(os.Environ(),
+	// Pass discovery file path and config so the server can self-manage
+	env := append(os.Environ(),
 		fmt.Sprintf("QUARRY_BROWSER_DISCOVERY_FILE=%s", discoveryPath),
 		fmt.Sprintf("QUARRY_BROWSER_IDLE_TIMEOUT=%d", int(idleTimeout.Seconds())),
 	)
+
+	// Pass proxy URL so the browser server launches Chromium with --proxy-server
+	if proxy != nil {
+		env = append(env, fmt.Sprintf("QUARRY_BROWSER_PROXY=%s://%s:%d", proxy.Protocol, proxy.Host, proxy.Port))
+	}
+
+	cmd.Env = env
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
