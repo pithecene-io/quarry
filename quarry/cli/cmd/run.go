@@ -145,7 +145,7 @@ ADVANCED:
 			// Policy flags
 			&cli.StringFlag{
 				Name:  "policy",
-				Usage: "Ingestion policy: strict or buffered",
+				Usage: "Ingestion policy: strict, buffered, or streaming",
 				Value: "strict",
 			},
 			&cli.StringFlag{
@@ -161,6 +161,16 @@ ADVANCED:
 			&cli.Int64Flag{
 				Name:  "buffer-bytes",
 				Usage: "Max buffer size in bytes (buffered policy)",
+				Value: 0,
+			},
+			&cli.IntFlag{
+				Name:  "flush-count",
+				Usage: "Flush after N events accumulate (streaming policy)",
+				Value: 0,
+			},
+			&cli.DurationFlag{
+				Name:  "flush-interval",
+				Usage: "Flush every duration, e.g. 5s, 30s (streaming policy)",
 				Value: 0,
 			},
 			// Proxy flags
@@ -263,10 +273,12 @@ ADVANCED:
 
 // policyChoice holds parsed policy configuration.
 type policyChoice struct {
-	name      string
-	flushMode string
-	maxEvents int
-	maxBytes  int64
+	name          string
+	flushMode     string
+	maxEvents     int
+	maxBytes      int64
+	flushCount    int
+	flushInterval time.Duration
 }
 
 // proxyChoice holds parsed proxy configuration.
@@ -494,10 +506,12 @@ func runAction(c *cli.Context) error {
 
 	// Parse policy config with precedence
 	choice := policyChoice{
-		name:      resolveString(c, "policy", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.Name })),
-		flushMode: resolveString(c, "flush-mode", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.FlushMode })),
-		maxEvents: resolveInt(c, "buffer-events", configIntVal(cfg, func(c *quarryconfig.Config) int { return c.Policy.BufferEvents })),
-		maxBytes:  resolveInt64(c, "buffer-bytes", configInt64Val(cfg, func(c *quarryconfig.Config) int64 { return c.Policy.BufferBytes })),
+		name:          resolveString(c, "policy", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.Name })),
+		flushMode:     resolveString(c, "flush-mode", configVal(cfg, func(c *quarryconfig.Config) string { return c.Policy.FlushMode })),
+		maxEvents:     resolveInt(c, "buffer-events", configIntVal(cfg, func(c *quarryconfig.Config) int { return c.Policy.BufferEvents })),
+		maxBytes:      resolveInt64(c, "buffer-bytes", configInt64Val(cfg, func(c *quarryconfig.Config) int64 { return c.Policy.BufferBytes })),
+		flushCount:    resolveInt(c, "flush-count", configIntVal(cfg, func(c *quarryconfig.Config) int { return c.Policy.FlushCount })),
+		flushInterval: resolveDuration(c, "flush-interval", configPolicyDurationVal(cfg)),
 	}
 
 	// Validate policy config
@@ -933,6 +947,14 @@ func configDurationVal(cfg *quarryconfig.Config) time.Duration {
 	return cfg.Adapter.Timeout.Duration
 }
 
+// configPolicyDurationVal extracts the policy flush interval from config.
+func configPolicyDurationVal(cfg *quarryconfig.Config) time.Duration {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.Policy.FlushInterval.Duration
+}
+
 func validatePolicyConfig(choice policyChoice) error {
 	switch choice.name {
 	case "strict":
@@ -961,12 +983,27 @@ Valid options:
   two_phase       Two-phase commit for transactional semantics`, choice.flushMode)
 		}
 
+	case "streaming":
+		if choice.flushCount <= 0 && choice.flushInterval <= 0 {
+			return fmt.Errorf(`streaming policy requires at least one flush trigger
+
+Add one or both of:
+  --flush-count <n>       Flush after N events (e.g., --flush-count 100)
+  --flush-interval <d>    Flush every duration (e.g., --flush-interval 5s)`)
+		}
+		// Warn about irrelevant buffered flags
+		if choice.maxEvents > 0 || choice.maxBytes > 0 || choice.flushMode != "at_least_once" {
+			fmt.Fprintf(os.Stderr, "Warning: buffer/flush-mode flags ignored for streaming policy\n")
+		}
+		return nil
+
 	default:
 		return fmt.Errorf(`invalid --policy: %q
 
 Valid options:
-  strict     Write events immediately, fail on any error (default)
-  buffered   Buffer events in memory, flush periodically`, choice.name)
+  strict      Write events immediately, fail on any error (default)
+  buffered    Buffer events in memory, flush periodically
+  streaming   Continuous batched writes with flush triggers`, choice.name)
 	}
 }
 
@@ -1213,6 +1250,14 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushMode:       policy.FlushMode(choice.flushMode),
 		}
 		p, err := policy.NewBufferedPolicy(sink, config)
+		return p, client, fw, err
+
+	case "streaming":
+		config := policy.StreamingConfig{
+			FlushCount:    choice.flushCount,
+			FlushInterval: choice.flushInterval,
+		}
+		p, err := policy.NewStreamingPolicy(sink, config)
 		return p, client, fw, err
 
 	default:
@@ -1479,14 +1524,22 @@ func printRunResult(result *runtime.RunResult, choice policyChoice, duration tim
 		duration.Round(time.Millisecond),
 	)
 
-	if choice.name == "buffered" {
+	switch choice.name {
+	case "buffered":
 		fmt.Printf("policy=%s, flush_mode=%s, drops=%d, buffer_bytes=%d\n",
 			choice.name,
 			choice.flushMode,
 			result.PolicyStats.EventsDropped,
 			result.PolicyStats.BufferSize,
 		)
-	} else {
+	case "streaming":
+		fmt.Printf("policy=%s, flush_count=%d, flush_interval=%s, flushes=%d\n",
+			choice.name,
+			choice.flushCount,
+			choice.flushInterval,
+			result.PolicyStats.FlushCount,
+		)
+	default:
 		fmt.Printf("policy=%s\n", choice.name)
 	}
 

@@ -82,8 +82,8 @@
           "type": "string",
           "required": false,
           "default": "strict",
-          "description": "Ingestion policy: strict or buffered",
-          "validation": "Must be one of: strict, buffered"
+          "description": "Ingestion policy: strict, buffered, or streaming",
+          "validation": "Must be one of: strict, buffered, streaming"
         },
         "flush-mode": {
           "type": "string",
@@ -104,6 +104,18 @@
           "required": false,
           "description": "Max buffer size in bytes (buffered policy)",
           "dependsOn": ["policy=buffered"]
+        },
+        "flush-count": {
+          "type": "int",
+          "required": false,
+          "description": "Flush after N events accumulate (streaming policy)",
+          "dependsOn": ["policy=streaming"]
+        },
+        "flush-interval": {
+          "type": "duration",
+          "required": false,
+          "description": "Flush every duration, e.g. 5s, 30s (streaming policy)",
+          "dependsOn": ["policy=streaming"]
         },
         "proxy-config": {
           "type": "string",
