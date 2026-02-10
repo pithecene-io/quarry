@@ -69,8 +69,11 @@ func (s *Selector) RegisterPool(pool *types.ProxyPool) error {
 		stickyMap: make(map[string]*stickyEntry),
 	}
 
-	// Initialize recency ring buffer if configured
-	if pool.RecencyWindow != nil && *pool.RecencyWindow > 0 {
+	// Initialize recency ring buffer only for random strategy.
+	// Per CONTRACT_PROXY.md, recency_window is only meaningful for random.
+	// Sticky internally delegates to random for new assignments, but should
+	// not apply recency exclusion — the sticky scope controls reuse, not recency.
+	if pool.Strategy == types.ProxyStrategyRandom && pool.RecencyWindow != nil && *pool.RecencyWindow > 0 {
 		state.recencyRing = make([]int, *pool.RecencyWindow)
 	}
 
