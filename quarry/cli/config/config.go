@@ -46,9 +46,10 @@ type PolicyConfig struct {
 // ProxyPoolConfig is a proxy pool definition within the config file.
 // Name is derived from the map key, not stored in the struct.
 type ProxyPoolConfig struct {
-	Strategy  types.ProxyStrategy `yaml:"strategy"`
-	Endpoints []types.ProxyEndpoint `yaml:"endpoints"`
-	Sticky    *types.ProxySticky    `yaml:"sticky,omitempty"`
+	Strategy      types.ProxyStrategy   `yaml:"strategy"`
+	Endpoints     []types.ProxyEndpoint `yaml:"endpoints"`
+	Sticky        *types.ProxySticky    `yaml:"sticky,omitempty"`
+	RecencyWindow *int                  `yaml:"recency_window,omitempty"`
 }
 
 // ProxySelection holds proxy selection defaults from the config file.
@@ -107,10 +108,11 @@ func (c *Config) ProxyPools() []types.ProxyPool {
 	for _, name := range names {
 		pc := c.Proxies[name]
 		pools = append(pools, types.ProxyPool{
-			Name:      name,
-			Strategy:  pc.Strategy,
-			Endpoints: pc.Endpoints,
-			Sticky:    pc.Sticky,
+			Name:          name,
+			Strategy:      pc.Strategy,
+			Endpoints:     pc.Endpoints,
+			Sticky:        pc.Sticky,
+			RecencyWindow: pc.RecencyWindow,
 		})
 	}
 	return pools

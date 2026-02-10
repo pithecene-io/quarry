@@ -604,3 +604,57 @@ func TestSelector_RecencyWindow_SingleEndpoint(t *testing.T) {
 		}
 	}
 }
+
+func TestSelector_RecencyWindow_StickyIgnoresRecency(t *testing.T) {
+	// Per CONTRACT_PROXY.md, recency_window is only meaningful for random.
+	// A sticky pool with recency_window set should NOT have recency applied.
+	w := 2
+	s := NewSelector()
+	pool := &types.ProxyPool{
+		Name:     "sticky-recency",
+		Strategy: types.ProxyStrategySticky,
+		Sticky: &types.ProxySticky{
+			Scope: types.ProxyStickyJob,
+		},
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// Sticky selection should return the same endpoint for the same key
+	ep1, err := s.Select(SelectRequest{
+		Pool: "sticky-recency", StickyKey: "job-1", Commit: true,
+	})
+	if err != nil {
+		t.Fatalf("Select failed: %v", err)
+	}
+
+	// Repeated selection with same key must return same endpoint (sticky)
+	for range 5 {
+		ep, err := s.Select(SelectRequest{
+			Pool: "sticky-recency", StickyKey: "job-1", Commit: true,
+		})
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		if ep.Host != ep1.Host {
+			t.Errorf("sticky should return same host, got %s then %s", ep1.Host, ep.Host)
+		}
+	}
+
+	// Verify recency ring was NOT initialized
+	stats, err := s.Stats("sticky-recency")
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+	if stats.RecencyFill != 0 {
+		t.Errorf("expected RecencyFill=0 for sticky pool, got %d", stats.RecencyFill)
+	}
+}
