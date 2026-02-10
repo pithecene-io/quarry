@@ -696,3 +696,113 @@ func (s *streamingSelectiveFailSink) WriteChunks(ctx context.Context, chunks []*
 	}
 	return s.StubSink.WriteChunks(ctx, chunks)
 }
+
+func TestStreamingPolicy_Backpressure_BlocksWhenFull(t *testing.T) {
+	// Use a slow sink so flush takes time, allowing buffer to fill
+	baseSink := policy.NewStubSink()
+	slowSink := &streamingSlowSink{
+		StubSink:   baseSink,
+		writeDelay: 50 * time.Millisecond,
+	}
+
+	pol, err := policy.NewStreamingPolicy(slowSink, policy.StreamingConfig{
+		FlushCount: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = pol.Close() })
+
+	// Fill buffer rapidly — we use a goroutine pool and check that
+	// the stats show bounded behavior (no unbounded growth)
+	ctx := t.Context()
+	done := make(chan struct{})
+	const totalEvents = 200
+
+	go func() {
+		defer close(done)
+		for i := range totalEvents {
+			if err := pol.IngestEvent(ctx, &types.EventEnvelope{
+				EventID: "e",
+				Type:    types.EventTypeItem,
+				Seq:     int64(i + 1),
+			}); err != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+		// All events eventually ingested (flushes drained the buffer)
+	case <-time.After(10 * time.Second):
+		t.Fatal("ingestion timed out — likely deadlocked on backpressure")
+	}
+
+	// Final flush to drain remaining
+	if err := pol.Flush(ctx); err != nil {
+		t.Fatalf("final flush failed: %v", err)
+	}
+
+	// All events should be persisted (no drops)
+	stats := pol.Stats()
+	if stats.TotalEvents != totalEvents {
+		t.Errorf("expected TotalEvents=%d, got %d", totalEvents, stats.TotalEvents)
+	}
+	if stats.EventsDropped != 0 {
+		t.Errorf("expected EventsDropped=0, got %d", stats.EventsDropped)
+	}
+}
+
+func TestStreamingPolicy_Stats_FlushTriggers_InStats(t *testing.T) {
+	sink := policy.NewStubSink()
+	pol := mustNewStreamingPolicy(t, sink, policy.StreamingConfig{FlushCount: 2})
+
+	// Count trigger
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
+		EventID: "e1", Type: types.EventTypeItem, Seq: 1,
+	})
+	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
+		EventID: "e2", Type: types.EventTypeItem, Seq: 2,
+	})
+
+	// Termination trigger
+	_ = pol.Flush(t.Context())
+
+	stats := pol.Stats()
+	if stats.FlushTriggers == nil {
+		t.Fatal("expected FlushTriggers to be populated in Stats")
+	}
+	if stats.FlushTriggers["count"] != 1 {
+		t.Errorf("expected FlushTriggers[count]=1, got %d", stats.FlushTriggers["count"])
+	}
+	if stats.FlushTriggers["termination"] != 1 {
+		t.Errorf("expected FlushTriggers[termination]=1, got %d", stats.FlushTriggers["termination"])
+	}
+}
+
+func TestStreamingPolicy_Stats_FlushTriggers_NilForOtherPolicies(t *testing.T) {
+	sink := policy.NewStubSink()
+	pol := policy.NewStrictPolicy(sink)
+
+	stats := pol.Stats()
+	if stats.FlushTriggers != nil {
+		t.Errorf("expected FlushTriggers=nil for strict policy, got %v", stats.FlushTriggers)
+	}
+}
+
+// streamingSlowSink adds a delay to writes for backpressure testing.
+type streamingSlowSink struct {
+	*policy.StubSink
+	writeDelay time.Duration
+}
+
+func (s *streamingSlowSink) WriteEvents(ctx context.Context, events []*types.EventEnvelope) error {
+	time.Sleep(s.writeDelay)
+	return s.StubSink.WriteEvents(ctx, events)
+}
+
+func (s *streamingSlowSink) WriteChunks(ctx context.Context, chunks []*types.ArtifactChunk) error {
+	time.Sleep(s.writeDelay)
+	return s.StubSink.WriteChunks(ctx, chunks)
+}

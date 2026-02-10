@@ -10,6 +10,17 @@ import (
 	"github.com/pithecene-io/quarry/types"
 )
 
+// Internal buffer capacity defaults.
+// These are safety bounds, not user-facing config. The buffer rarely fills
+// under normal operation because flush triggers drain it periodically.
+// If ingestion outpaces the sink, backpressure (blocking) prevents OOM.
+const (
+	// streamingMaxBufferEvents is the maximum events buffered before backpressure.
+	streamingMaxBufferEvents = 50_000
+	// streamingMaxBufferBytes is the maximum buffer size in bytes before backpressure.
+	streamingMaxBufferBytes = 128 * 1024 * 1024 // 128 MiB
+)
+
 // StreamingConfig configures a StreamingPolicy.
 type StreamingConfig struct {
 	// FlushCount triggers a flush after N events accumulate.
@@ -63,6 +74,7 @@ type StreamingPolicy struct {
 	logger *log.Logger
 
 	mu          sync.Mutex // guards buffer state and stats
+	bufferCond  *sync.Cond // signaled after flush drains buffer; uses mu as locker
 	eventBuffer []*types.EventEnvelope
 	chunkBuffer []*types.ArtifactChunk
 	bufferBytes int64
@@ -100,6 +112,7 @@ func NewStreamingPolicy(sink Sink, config StreamingConfig) (*StreamingPolicy, er
 		stats:       newStatsRecorder(),
 		stopCh:      make(chan struct{}),
 	}
+	p.bufferCond = sync.NewCond(&p.mu)
 
 	// Start interval flush goroutine if configured
 	if config.FlushInterval > 0 {
@@ -110,9 +123,15 @@ func NewStreamingPolicy(sink Sink, config StreamingConfig) (*StreamingPolicy, er
 }
 
 // IngestEvent adds the event to the buffer.
-// Never drops events. If count threshold is reached, triggers a flush.
+// Never drops events. Blocks if buffer is at capacity until a flush drains it.
+// If count threshold is reached after append, triggers a flush.
 func (p *StreamingPolicy) IngestEvent(ctx context.Context, envelope *types.EventEnvelope) error {
 	p.mu.Lock()
+
+	// Block until buffer has room (backpressure per CONTRACT_POLICY.md)
+	for p.isBufferFullLocked() {
+		p.bufferCond.Wait()
+	}
 
 	p.stats.incTotalEventsLocked()
 	eventSize := p.estimateEventSize(envelope)
@@ -132,9 +151,14 @@ func (p *StreamingPolicy) IngestEvent(ctx context.Context, envelope *types.Event
 }
 
 // IngestArtifactChunk adds the chunk to the buffer.
-// Artifact chunks are never dropped.
+// Artifact chunks are never dropped. Blocks if buffer is at capacity.
 func (p *StreamingPolicy) IngestArtifactChunk(_ context.Context, chunk *types.ArtifactChunk) error {
 	p.mu.Lock()
+
+	// Block until buffer has room (backpressure per CONTRACT_POLICY.md)
+	for p.isBufferFullLocked() {
+		p.bufferCond.Wait()
+	}
 
 	p.stats.incTotalChunksLocked()
 	chunkSize := int64(len(chunk.Data))
@@ -191,6 +215,9 @@ func (p *StreamingPolicy) triggerFlush(ctx context.Context, trigger FlushTrigger
 	p.eventBuffer = make([]*types.EventEnvelope, 0, 128)
 	p.chunkBuffer = make([]*types.ArtifactChunk, 0)
 	p.recalculateBufferBytes()
+
+	// Wake blocked ingestors — buffer has room now
+	p.bufferCond.Broadcast()
 
 	p.mu.Unlock()
 
@@ -251,11 +278,18 @@ func (p *StreamingPolicy) Close() error {
 // Stats returns policy statistics.
 // Returns an atomic snapshot: the buffer mutex is held while taking the
 // snapshot, ensuring all counters and buffer size are consistent.
+// Includes FlushTriggers per CONTRACT_POLICY.md streaming observability.
 func (p *StreamingPolicy) Stats() Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	return p.stats.snapshotLocked(p.bufferBytes)
+	s := p.stats.snapshotLocked(p.bufferBytes)
+	s.FlushTriggers = map[string]int64{
+		string(FlushTriggerCount):       p.flushByCount,
+		string(FlushTriggerInterval):    p.flushByInterval,
+		string(FlushTriggerTermination): p.flushByTermination,
+	}
+	return s
 }
 
 // FlushTriggerStats returns per-trigger flush counts for observability.
@@ -313,6 +347,15 @@ func (p *StreamingPolicy) recalculateBufferBytes() {
 	}
 	p.bufferBytes = total
 	p.stats.setBufferSizeLocked(p.bufferBytes)
+}
+
+// isBufferFullLocked returns true if the buffer has reached internal capacity.
+// Caller must hold mu.
+func (p *StreamingPolicy) isBufferFullLocked() bool {
+	if len(p.eventBuffer)+len(p.chunkBuffer) >= streamingMaxBufferEvents {
+		return true
+	}
+	return p.bufferBytes >= streamingMaxBufferBytes
 }
 
 // --- Logging helpers ---

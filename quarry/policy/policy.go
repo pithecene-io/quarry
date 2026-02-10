@@ -60,6 +60,10 @@ type Stats struct {
 	FlushCount int64
 	// Errors is the count of non-fatal errors encountered.
 	Errors int64
+	// FlushTriggers is a per-trigger-type flush counter.
+	// Only populated by streaming policy; nil for strict/buffered.
+	// Keys are trigger names: "count", "interval", "termination".
+	FlushTriggers map[string]int64
 }
 
 // droppableTypes defines which event types may be dropped per CONTRACT_POLICY.md.
