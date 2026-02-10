@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+---
+
+## [0.7.0] - 2026-02-10
+
 ### Added
 
 - **Policy**: `streaming` ingestion policy — combines strict's no-drop guarantee with buffered's batched write efficiency for long-running crawl workloads (#140)
@@ -350,6 +356,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.7.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.0
 [0.6.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.3
 [0.6.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.2
 [0.6.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.0
