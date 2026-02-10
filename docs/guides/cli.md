@@ -107,10 +107,12 @@ Optional flags:
 - `--job <json>` (inline JSON object; mutually exclusive with `--job-json`)
 - `--job-json <path>` (load JSON object from file; mutually exclusive with `--job`)
 - `--quiet`
-- `--policy strict|buffered`
+- `--policy strict|buffered|streaming`
 - `--flush-mode at_least_once|chunks_first|two_phase`
 - `--buffer-events <n>`
 - `--buffer-bytes <n>`
+- `--flush-count <n>` (streaming policy: flush after N events)
+- `--flush-interval <duration>` (streaming policy: flush every T, e.g. `5s`)
 - `--proxy-config <path>` (JSON pool config)
 - `--proxy-pool <name>`
 - `--proxy-strategy round_robin|random|sticky`

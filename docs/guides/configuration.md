@@ -78,12 +78,17 @@ See [YAML Config File](#yaml-config-file) below for schema and examples.
 
 | Flag | Type | Default | Purpose |
 |------|------|---------|---------|
-| `--policy` | `strict` or `buffered` | `strict` | Ingestion policy |
+| `--policy` | `strict`, `buffered`, or `streaming` | `strict` | Ingestion policy |
 | `--flush-mode` | `at_least_once`, `chunks_first`, `two_phase` | `at_least_once` | Buffered flush semantics |
 | `--buffer-events` | int | `0` | Max events to buffer (buffered policy) |
 | `--buffer-bytes` | int | `0` | Max buffer bytes (buffered policy) |
+| `--flush-count` | int | `0` | Flush after N events (streaming policy) |
+| `--flush-interval` | duration | | Flush every T duration, e.g. `5s` (streaming policy) |
 
 Buffered policy requires at least one of `--buffer-events` or `--buffer-bytes` to be set (> 0).
+
+Streaming policy requires at least one of `--flush-count` or `--flush-interval` to be set.
+Both may be specified; the first trigger to fire wins.
 
 ### Proxy
 
@@ -236,6 +241,10 @@ policy:
   flush_mode: at_least_once
   buffer_events: 1000
   buffer_bytes: 10485760
+  # Streaming policy example (v0.7.0):
+  # name: streaming
+  # flush_count: 10
+  # flush_interval: 5s
 
 proxies:
   iproyal_nyc:
