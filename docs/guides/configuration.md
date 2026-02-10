@@ -256,6 +256,26 @@ proxies:
         username: ${IPROYAL_USER}
         password: ${IPROYAL_PASS}
 
+  rotating_pool:
+    strategy: random
+    recency_window: 3   # avoid reusing the last 3 endpoints
+    endpoints:
+      - protocol: http
+        host: proxy1.example.com
+        port: 8080
+      - protocol: http
+        host: proxy2.example.com
+        port: 8080
+      - protocol: http
+        host: proxy3.example.com
+        port: 8080
+      - protocol: http
+        host: proxy4.example.com
+        port: 8080
+      - protocol: http
+        host: proxy5.example.com
+        port: 8080
+
   residential_sticky:
     strategy: sticky
     sticky:
@@ -419,6 +439,21 @@ quarry run \
   --policy buffered \
   --buffer-events 500 \
   --buffer-bytes 10485760
+```
+
+### Streaming policy (long-running crawl)
+
+```bash
+quarry run \
+  --script ./crawl.ts \
+  --run-id crawl-001 \
+  --source my-source \
+  --storage-backend s3 \
+  --storage-path my-bucket/quarry \
+  --storage-region us-east-1 \
+  --policy streaming \
+  --flush-count 100 \
+  --flush-interval 30s
 ```
 
 ### S3-compatible provider (Cloudflare R2)

@@ -253,10 +253,16 @@ CLI flags always override config file values.
 | `--job <json>` | `{}` | Job payload as inline JSON object |
 | `--job-json <path>` | | Path to JSON file containing job payload (must be object) |
 | `--category <name>` | `default` | Category for partitioning |
-| `--policy <strict\|buffered>` | `strict` | Ingestion policy |
+| `--policy <strict\|buffered\|streaming>` | `strict` | Ingestion policy |
+| `--flush-count <n>` | | Flush after N events (streaming policy) |
+| `--flush-interval <duration>` | | Flush every interval, e.g. `5s` (streaming policy) |
 
 > **Note:** `--job` and `--job-json` are mutually exclusive. Using both is an error.
 > The payload **must** be a top-level JSON object. Arrays, primitives, and null are rejected.
+
+> **Streaming policy:** At least one of `--flush-count` or `--flush-interval` must be specified
+> when `--policy=streaming`. Both may be specified; the first trigger to fire wins.
+> See `docs/guides/policy.md` for details.
 
 **Adapter flags (event-bus notification):**
 
@@ -416,7 +422,7 @@ task build
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
-3. **No streaming reads**: Artifacts must fit in memory
+3. **No streaming reads**: Artifacts must fit in memory (note: the `streaming` *ingestion policy* is unrelated — it controls write batching, not read access)
 4. **No transactional storage writes**: S3 and S3-compatible providers (R2, MinIO) do not provide transactional guarantees across writes
 5. **No job scheduling**: Quarry supports in-process derived work via `--depth` but is not a scheduler; external orchestration is the caller's responsibility
 6. **Puppeteer required**: All scripts run in a browser context

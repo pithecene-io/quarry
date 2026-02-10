@@ -9,7 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- **Policy**: `streaming` ingestion policy — combines strict's no-drop guarantee with buffered's batched write efficiency for long-running crawl workloads (#140)
+- **Policy**: Configurable flush triggers: `--flush-count` (event count threshold) and `--flush-interval` (time-based periodic flush) (#140)
+- **Policy**: Capacity-triggered emergency flush prevents deadlock when internal buffer bounds are reached before configured triggers fire (#140)
+- **Policy**: Backpressure-based flow control — ingestion blocks when buffer is full rather than dropping events (#140)
+- **Proxy**: `recency_window` pool option — maintains a ring buffer of recently-used endpoint indices and excludes them from random selection, reducing endpoint reuse (#143)
+- **Proxy**: LRU fallback when recency window >= endpoint count (selection never blocks) (#143)
+- **Testing**: Performance benchmarks for all ingestion policies (strict, buffered, streaming) with contention analysis (#144)
+- **Docs**: Streaming policy contract section in CONTRACT_POLICY.md (#139)
+
+### Changed
+
+- **Metrics**: `flush_triggers` counter added to metrics snapshot — per-trigger-type flush counts (`count`, `interval`, `termination`, `capacity`) for streaming policy observability (#140)
+- **Internal**: `statsRecorder` converted from mutex-based to `sync/atomic` counters — 3.7x improvement in 8-goroutine contention benchmarks (#144)
 
 ---
 

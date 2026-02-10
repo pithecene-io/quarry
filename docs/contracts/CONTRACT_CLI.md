@@ -150,6 +150,24 @@ The `run` command exit code is determined by execution outcome:
 `policy_failure` and `version_mismatch` share exit code 3 because both
 are non-retryable configuration errors that cannot be resolved by re-running.
 
+### Streaming Policy Flags (v0.7.0+)
+
+`quarry run` supports a `streaming` ingestion policy with configurable flush
+triggers. At least one of `--flush-count` or `--flush-interval` must be
+specified when `--policy=streaming`.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--flush-count` | int | | Flush after N events accumulate |
+| `--flush-interval` | duration | | Flush every T duration (e.g. `5s`, `30s`) |
+
+Semantics:
+- Both may be specified; the first trigger to fire wins.
+- Buffer is bounded internally; if full before a trigger fires, ingestion
+  blocks until the next flush (events are never dropped).
+- On run termination, a final flush is always attempted (best effort).
+- Flush trigger counts are surfaced in `stats metrics` (see CONTRACT_METRICS.md).
+
 ### Adapter Flags (v0.5.0+)
 
 `quarry run` supports optional event-bus adapter notification.
@@ -386,6 +404,7 @@ MetricsSnapshot:
   lode_write_success_total: number
   lode_write_failure_total: number
   lode_write_retry_total: number
+  flush_triggers: map[string]number (optional, streaming policy only)
 ```
 
 Metric names match CONTRACT_METRICS.md. See CONTRACT_METRICS.md for the
