@@ -127,3 +127,98 @@ func TestProxyPool_Warnings_NoWarnings(t *testing.T) {
 		t.Errorf("expected 0 warnings for normal pool, got %d", len(warnings))
 	}
 }
+
+func TestProxyPool_Validate_RecencyWindow_Positive(t *testing.T) {
+	w := 3
+	pool := &ProxyPool{
+		Name:     "recency-pool",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p4.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	if err := pool.Validate(); err != nil {
+		t.Errorf("expected valid pool, got %v", err)
+	}
+}
+
+func TestProxyPool_Validate_RecencyWindow_Zero(t *testing.T) {
+	w := 0
+	pool := &ProxyPool{
+		Name:     "recency-pool",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	if err := pool.Validate(); err == nil {
+		t.Error("expected validation error for zero recency window")
+	}
+}
+
+func TestProxyPool_Validate_RecencyWindow_Negative(t *testing.T) {
+	w := -1
+	pool := &ProxyPool{
+		Name:     "recency-pool",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	if err := pool.Validate(); err == nil {
+		t.Error("expected validation error for negative recency window")
+	}
+}
+
+func TestProxyPool_Warnings_RecencyWindow_NonRandom(t *testing.T) {
+	w := 3
+	pool := &ProxyPool{
+		Name:     "recency-rr",
+		Strategy: ProxyStrategyRoundRobin,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	warnings := pool.Warnings()
+	found := false
+	for _, warning := range warnings {
+		if warning != "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected warning for recency_window on non-random strategy")
+	}
+}
+
+func TestProxyPool_Warnings_RecencyWindow_Random_NoWarning(t *testing.T) {
+	w := 3
+	pool := &ProxyPool{
+		Name:     "recency-random",
+		Strategy: ProxyStrategyRandom,
+		Endpoints: []ProxyEndpoint{
+			{Protocol: ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+			{Protocol: ProxyProtocolHTTP, Host: "p4.example.com", Port: 8080},
+		},
+		RecencyWindow: &w,
+	}
+
+	warnings := pool.Warnings()
+	if len(warnings) != 0 {
+		t.Errorf("expected 0 warnings for random with recency window, got %d: %v", len(warnings), warnings)
+	}
+}

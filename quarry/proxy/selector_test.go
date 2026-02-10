@@ -377,3 +377,230 @@ func TestSelector_Stats(t *testing.T) {
 		t.Errorf("StickyEntries = %d, want 2", stats.StickyEntries)
 	}
 }
+
+func TestSelector_RecencyWindow_AvoidRecentEndpoints(t *testing.T) {
+	s := NewSelector()
+
+	window := 2
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+		},
+		RecencyWindow: &window,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// With 3 endpoints and window=2, each selection should avoid
+	// the last 2 used endpoints, forcing rotation.
+	seen := make([]string, 0, 9)
+	for i := 0; i < 9; i++ {
+		ep, err := s.Select(SelectRequest{Pool: "test", Commit: true})
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		seen = append(seen, ep.Host)
+	}
+
+	// No two consecutive selections should be the same
+	for i := 1; i < len(seen); i++ {
+		if seen[i] == seen[i-1] {
+			t.Errorf("consecutive selections should differ: index %d and %d both got %q", i-1, i, seen[i])
+		}
+	}
+}
+
+func TestSelector_RecencyWindow_LRUFallback(t *testing.T) {
+	s := NewSelector()
+
+	// Window >= endpoints: all endpoints excluded, LRU fallback
+	window := 3
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+		},
+		RecencyWindow: &window,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// Once ring is full (3 entries), LRU always returns the oldest
+	seen := make([]string, 0, 6)
+	for i := 0; i < 6; i++ {
+		ep, err := s.Select(SelectRequest{Pool: "test", Commit: true})
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		seen = append(seen, ep.Host)
+	}
+
+	// After ring is full (3 selections), subsequent selections should rotate
+	// through all endpoints since LRU returns the oldest each time.
+	// No two consecutive should be the same once the ring is full.
+	for i := 4; i < len(seen); i++ {
+		if seen[i] == seen[i-1] {
+			t.Errorf("LRU fallback: consecutive selections at %d and %d both got %q", i-1, i, seen[i])
+		}
+	}
+}
+
+func TestSelector_RecencyWindow_PeekDoesNotAdvanceRing(t *testing.T) {
+	s := NewSelector()
+
+	window := 2
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+		},
+		RecencyWindow: &window,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// Peek should not advance ring
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: false})
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: false})
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: false})
+
+	// Ring should be empty (nothing committed)
+	stats, _ := s.Stats("test")
+	if stats.RecencyFill != 0 {
+		t.Errorf("RecencyFill after peeks = %d, want 0", stats.RecencyFill)
+	}
+
+	// Now commit
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: true})
+	stats, _ = s.Stats("test")
+	if stats.RecencyFill != 1 {
+		t.Errorf("RecencyFill after 1 commit = %d, want 1", stats.RecencyFill)
+	}
+}
+
+func TestSelector_RecencyWindow_Stats(t *testing.T) {
+	s := NewSelector()
+
+	window := 3
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p3.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p4.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p5.example.com", Port: 8080},
+		},
+		RecencyWindow: &window,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	stats, _ := s.Stats("test")
+	if stats.RecencyWindow == nil || *stats.RecencyWindow != 3 {
+		t.Errorf("RecencyWindow = %v, want 3", stats.RecencyWindow)
+	}
+	if stats.RecencyFill != 0 {
+		t.Errorf("RecencyFill = %d, want 0", stats.RecencyFill)
+	}
+
+	// Make 2 committed selections
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: true})
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: true})
+
+	stats, _ = s.Stats("test")
+	if stats.RecencyFill != 2 {
+		t.Errorf("RecencyFill after 2 commits = %d, want 2", stats.RecencyFill)
+	}
+
+	// Fill the ring
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: true})
+	_, _ = s.Select(SelectRequest{Pool: "test", Commit: true})
+
+	stats, _ = s.Stats("test")
+	if stats.RecencyFill != 3 {
+		t.Errorf("RecencyFill should cap at window size, got %d, want 3", stats.RecencyFill)
+	}
+}
+
+func TestSelector_RecencyWindow_NoRecencyWithoutConfig(t *testing.T) {
+	s := NewSelector()
+
+	// Pool without recency window
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+			{Protocol: types.ProxyProtocolHTTP, Host: "p2.example.com", Port: 8080},
+		},
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// Should work fine without recency window
+	for i := 0; i < 10; i++ {
+		_, err := s.Select(SelectRequest{Pool: "test", Commit: true})
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+	}
+
+	stats, _ := s.Stats("test")
+	if stats.RecencyWindow != nil {
+		t.Errorf("RecencyWindow should be nil, got %d", *stats.RecencyWindow)
+	}
+	if stats.RecencyFill != 0 {
+		t.Errorf("RecencyFill should be 0 without window, got %d", stats.RecencyFill)
+	}
+}
+
+func TestSelector_RecencyWindow_SingleEndpoint(t *testing.T) {
+	s := NewSelector()
+
+	window := 1
+	pool := &types.ProxyPool{
+		Name:     "test",
+		Strategy: types.ProxyStrategyRandom,
+		Endpoints: []types.ProxyEndpoint{
+			{Protocol: types.ProxyProtocolHTTP, Host: "p1.example.com", Port: 8080},
+		},
+		RecencyWindow: &window,
+	}
+
+	if err := s.RegisterPool(pool); err != nil {
+		t.Fatalf("RegisterPool failed: %v", err)
+	}
+
+	// Should always return the single endpoint (LRU fallback)
+	for i := 0; i < 5; i++ {
+		ep, err := s.Select(SelectRequest{Pool: "test", Commit: true})
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		if ep.Host != "p1.example.com" {
+			t.Errorf("expected p1.example.com, got %s", ep.Host)
+		}
+	}
+}
