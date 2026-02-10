@@ -18,6 +18,7 @@ _No unreleased changes._
 ### Fixed
 
 - **Runtime**: SDK/CLI version mismatches are now classified as `version_mismatch` instead of `executor_crash`, with an actionable error message directing users to align their SDK and CLI versions (#132)
+- **Lode**: Upgraded to Lode v0.7.1 — fixes O(n²) flush performance caused by linear snapshot ID lookups in `dataset.Write()` (pithecene-io/lode#108)
 
 ### Changed
 
