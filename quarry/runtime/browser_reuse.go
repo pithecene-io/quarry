@@ -167,9 +167,9 @@ func proxyHash(proxy *types.ProxyEndpoint) string {
 
 	// Hash host, port, protocol, username (not password — avoid leaking secrets to disk)
 	h := sha256.New()
-	fmt.Fprintf(h, "%s:%s:%d", proxy.Protocol, proxy.Host, proxy.Port)
+	_, _ = fmt.Fprintf(h, "%s:%s:%d", proxy.Protocol, proxy.Host, proxy.Port)
 	if proxy.Username != nil {
-		fmt.Fprintf(h, ":%s", *proxy.Username)
+		_, _ = fmt.Fprintf(h, ":%s", *proxy.Username)
 	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }

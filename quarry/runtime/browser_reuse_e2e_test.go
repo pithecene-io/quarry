@@ -351,7 +351,7 @@ func TestE2E_BrowserReuse_HealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /json/version failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var version map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
