@@ -111,8 +111,18 @@ export function drainStdout(): Promise<void> {
       resolve()
       return
     }
-    process.stdout.end(() => resolve())
-    process.stdout.on('error', reject)
+    const onError = (err: Error): void => {
+      cleanup()
+      reject(err)
+    }
+    const cleanup = (): void => {
+      process.stdout.off('error', onError)
+    }
+    process.stdout.on('error', onError)
+    process.stdout.end(() => {
+      cleanup()
+      resolve()
+    })
   })
 }
 

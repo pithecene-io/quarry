@@ -2199,8 +2199,18 @@ function drainStdout() {
       resolve3();
       return;
     }
-    process.stdout.end(() => resolve3());
-    process.stdout.on("error", reject);
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const cleanup = () => {
+      process.stdout.off("error", onError);
+    };
+    process.stdout.on("error", onError);
+    process.stdout.end(() => {
+      cleanup();
+      resolve3();
+    });
   });
 }
 var StdioSink = class {
