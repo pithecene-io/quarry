@@ -36,4 +36,4 @@ export {
   type TerminalState,
   type TerminalType
 } from './observing-sink.js'
-export { StdioSink, StreamClosedError } from './sink.js'
+export { drainStdout, StdioSink, StreamClosedError } from './sink.js'

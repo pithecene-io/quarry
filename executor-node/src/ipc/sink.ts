@@ -98,6 +98,25 @@ function writeWithBackpressure(stream: Writable, data: Buffer): Promise<void> {
 }
 
 /**
+ * Drain process.stdout, ensuring all buffered data reaches the OS pipe.
+ *
+ * `stream.end()` flushes buffered data and invokes the callback once the OS
+ * has accepted everything. Without this, `process.exit()` can discard data
+ * still sitting in Node's internal buffer — causing the runtime to see EOF
+ * without a terminal event and classify the run as `executor_crash`.
+ */
+export function drainStdout(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (process.stdout.writableFinished) {
+      resolve()
+      return
+    }
+    process.stdout.end(() => resolve())
+    process.stdout.on('error', reject)
+  })
+}
+
+/**
  * EmitSink implementation that writes frames to a writable stream.
  *
  * Conforms to CONTRACT_IPC.md:
