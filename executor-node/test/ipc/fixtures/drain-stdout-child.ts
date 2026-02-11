@@ -12,7 +12,7 @@ const sink = new StdioSink(process.stdout)
 
 // Item event
 await sink.writeEvent({
-  contract_version: '0.7.0',
+  contract_version: '0.7.1',
   event_id: 'evt-1' as EventId,
   run_id: 'run-drain-test' as RunId,
   seq: 1,
@@ -24,7 +24,7 @@ await sink.writeEvent({
 
 // Terminal event (run_complete)
 await sink.writeEvent({
-  contract_version: '0.7.0',
+  contract_version: '0.7.1',
   event_id: 'evt-2' as EventId,
   run_id: 'run-drain-test' as RunId,
   seq: 2,

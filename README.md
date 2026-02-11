@@ -15,7 +15,17 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:pithecene-io/quarry@0.7.0
+mise install github:pithecene-io/quarry@0.7.1
+```
+
+### Docker
+
+```bash
+# Full image (includes Chromium + fonts)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1
+
+# Slim image (no browser — BYO Chromium via --browser-ws-endpoint)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1-slim
 ```
 
 ### SDK
@@ -168,7 +178,7 @@ Quarry is under active development.
 
 - Contracts frozen, SDK stable
 - FS and S3 storage supported
-- Platforms: linux/darwin, x64/arm64
+- Platforms: linux/darwin, x64/arm64, container (GHCR)
 
 Breaking changes are gated by contract versioning.
 

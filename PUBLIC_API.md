@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.7.0.
+User-facing guide for Quarry v0.7.1.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -26,15 +26,27 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.7.0
+mise install github:pithecene-io/quarry@0.7.1
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.7.0"
+"github:pithecene-io/quarry" = "0.7.1"
 ```
+
+### Via Docker
+
+```bash
+# Full image — includes system Chromium + fonts (recommended)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1
+
+# Slim image — no browser (BYO Chromium via --browser-ws-endpoint)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1-slim
+```
+
+See [Container Usage](#container-usage) below for `docker run` and Docker Compose examples.
 
 ### SDK
 
@@ -423,7 +435,106 @@ task build
 
 ---
 
-## Known Limitations (v0.7.0)
+## Container Usage
+
+Quarry ships two container images via GHCR:
+
+| Image | Tag | Includes |
+|-------|-----|----------|
+| Full | `ghcr.io/pithecene-io/quarry:0.7.1` | Quarry CLI, Node.js, Puppeteer, system Chromium, fonts |
+| Slim | `ghcr.io/pithecene-io/quarry:0.7.1-slim` | Quarry CLI, Node.js, Puppeteer (no browser) |
+
+The **full** image is recommended for standalone usage. The **slim** image is
+for environments where Chromium is provided externally (e.g., via
+`--browser-ws-endpoint` pointing at a sidecar or shared browser service).
+
+Both images set `QUARRY_NO_SANDBOX=1` (required for containerized Chromium)
+and run as a non-root `quarry` user.
+
+### Standalone `docker run`
+
+```bash
+docker run --rm \
+  -v ./scripts:/work/scripts:ro \
+  -v ./data:/work/data \
+  ghcr.io/pithecene-io/quarry:0.7.1 \
+  run \
+    --script ./scripts/my-script.ts \
+    --run-id "run-$(date +%s)" \
+    --source my-source \
+    --storage-backend fs \
+    --storage-path ./data
+```
+
+### Docker Compose
+
+```yaml
+services:
+  quarry:
+    image: ghcr.io/pithecene-io/quarry:0.7.1
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./data:/work/data
+    command:
+      - run
+      - --script=./scripts/my-script.ts
+      - --run-id=scheduled-run
+      - --source=my-source
+      - --storage-backend=fs
+      - --storage-path=./data
+      - --policy=strict
+```
+
+### Docker Compose with S3 storage
+
+```yaml
+services:
+  quarry:
+    image: ghcr.io/pithecene-io/quarry:0.7.1
+    volumes:
+      - ./scripts:/work/scripts:ro
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+    command:
+      - run
+      - --script=./scripts/my-script.ts
+      - --run-id=scheduled-run
+      - --source=my-source
+      - --storage-backend=s3
+      - --storage-path=my-bucket/quarry-data
+      - --storage-region=us-east-1
+```
+
+### Slim image with external browser
+
+```yaml
+services:
+  chrome:
+    image: chromedp/headless-shell:latest
+    ports:
+      - "9222:9222"
+
+  quarry:
+    image: ghcr.io/pithecene-io/quarry:0.7.1-slim
+    depends_on:
+      - chrome
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./data:/work/data
+    command:
+      - run
+      - --script=./scripts/my-script.ts
+      - --run-id=scheduled-run
+      - --source=my-source
+      - --storage-backend=fs
+      - --storage-path=./data
+      - --browser-ws-endpoint=ws://chrome:9222
+```
+
+---
+
+## Known Limitations (v0.7.1)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -508,7 +619,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.7.0 (commit: ...)
+# 0.7.1 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -517,6 +628,8 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.7.0` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.7.1` |
+| Container (full) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.7.1` |
+| Container (slim) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.7.1-slim` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |
