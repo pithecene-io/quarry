@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Changed
+
+- **Container**: Full image uses Chrome for Testing tarball instead of distro Chromium — pins browser version to puppeteer compatibility matrix (#159)
+- **Container**: Full image is now **amd64-only** — Chrome for Testing does not publish linux-arm64 builds; arm64 users should use the slim image with an external browser sidecar (#159)
+
+### Fixed
+
+- **Container**: Retain `ca-certificates` in full runtime image — previous purge of build-time download tools accidentally removed the TLS trust store, breaking HTTPS at runtime (#159)
+- **Container**: Add `libasound2` to Chrome shared-library set — missing ALSA dependency could cause Chrome to fail at dynamic link time (#159)
+- **Container**: Fail fast when building full image on non-amd64 — prevents silent production of images with a wrong-architecture Chrome binary (#159)
 
 ---
 
