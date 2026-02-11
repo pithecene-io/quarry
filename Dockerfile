@@ -3,10 +3,11 @@
 # =============================================================================
 # Stage 1: build — compile Go binary with embedded executor bundle
 # =============================================================================
-FROM node:24-bookworm-slim AS build
+FROM node:24.13.0-bookworm-slim AS build
 
 # Pin Go version to match go.mod
 ARG GO_VERSION=1.25.6
+# TARGETARCH is injected by BuildKit for multi-platform builds (e.g. amd64, arm64).
 ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -28,6 +29,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY sdk/package.json sdk/
 COPY executor-node/package.json executor-node/
 
+# Build stage only compiles TS/Go — skip Puppeteer's browser download.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 RUN pnpm install --frozen-lockfile
 
 # Layer 2: source code
@@ -46,7 +50,7 @@ RUN CGO_ENABLED=0 go build -o /usr/local/bin/quarry ./cmd/quarry
 # =============================================================================
 # Stage 2: deps — install runtime Node.js dependencies
 # =============================================================================
-FROM node:24-bookworm-slim AS deps
+FROM node:24.13.0-bookworm-slim AS deps
 
 WORKDIR /opt/quarry
 
@@ -54,16 +58,17 @@ WORKDIR /opt/quarry
 # The full image uses system Chromium; the slim image has no browser.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
+# Pin exact versions matching pnpm-lock.yaml for reproducible builds.
 RUN npm install --omit=dev \
-  puppeteer@^24 \
-  puppeteer-extra@^3 \
-  puppeteer-extra-plugin-stealth@^2 \
-  puppeteer-extra-plugin-adblocker@^2
+  puppeteer@24.37.2 \
+  puppeteer-extra@3.3.6 \
+  puppeteer-extra-plugin-stealth@2.11.2 \
+  puppeteer-extra-plugin-adblocker@2.13.6
 
 # =============================================================================
 # Stage 3: slim — runtime image without Chromium
 # =============================================================================
-FROM node:24-bookworm-slim AS slim
+FROM node:24.13.0-bookworm-slim AS slim
 
 RUN groupadd -r quarry && useradd -r -g quarry -m quarry
 
