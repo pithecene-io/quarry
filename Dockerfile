@@ -88,7 +88,10 @@ WORKDIR /work
 ENTRYPOINT ["quarry"]
 
 # =============================================================================
-# Stage 4: full — runtime image with system Chromium + fonts
+# Stage 4: full — runtime image with Chrome for Testing + fonts (amd64 only)
+#
+# Chrome for Testing does not publish linux-arm64 builds.
+# arm64 users needing a browser should install Chromium into the slim image.
 # =============================================================================
 FROM slim AS full
 
@@ -97,41 +100,30 @@ USER root
 # Pin Chrome for Testing version matching puppeteer@24.37.2 (see deps stage).
 # Look up the mapping at: https://pptr.dev/supported-browsers
 ARG CHROME_VERSION=145.0.7632.46
-ARG TARGETARCH
 
-# Install fonts (both architectures) and Chrome via the fastest available method:
-#   amd64 — direct tarball download from Chrome for Testing (~168 MB zip)
-#   arm64 — apt-get install chromium (no official CfT arm64 builds yet)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    ca-certificates curl unzip \
     fonts-liberation \
     fonts-noto-color-emoji \
     fonts-noto-cjk \
-  && if [ "$TARGETARCH" = "amd64" ]; then \
-    apt-get install -y --no-install-recommends \
-      ca-certificates curl unzip \
-      libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
-      libdbus-1-3 libdrm2 libexpat1 libfontconfig1 libgbm1 \
-      libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
-      libpangocairo-1.0-0 libx11-6 libxcb1 libxcomposite1 \
-      libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
-      libxrender1 \
-    && curl -fsSL \
-      "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip" \
-      -o /tmp/chrome.zip \
-    && unzip -q /tmp/chrome.zip -d /opt \
-    && rm /tmp/chrome.zip \
-    && ln -s /opt/chrome-linux64/chrome /usr/bin/chromium \
-    && apt-get purge -y curl unzip \
-    && apt-get autoremove -y ; \
-  else \
-    apt-get install -y --no-install-recommends chromium ; \
-  fi \
+    libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
+    libdbus-1-3 libdrm2 libexpat1 libfontconfig1 libgbm1 \
+    libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
+    libpangocairo-1.0-0 libx11-6 libxcb1 libxcomposite1 \
+    libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+    libxrender1 \
+  && curl -fsSL \
+    "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip" \
+    -o /tmp/chrome.zip \
+  && unzip -q /tmp/chrome.zip -d /opt \
+  && rm /tmp/chrome.zip \
+  && ln -s /opt/chrome-linux64/chrome /usr/bin/chromium \
+  && apt-get purge -y ca-certificates curl unzip \
+  && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 
-# Point Puppeteer at system Chromium instead of expecting a downloaded copy.
-# On amd64, /usr/bin/chromium is a symlink to /opt/chrome-linux64/chrome.
-# On arm64, /usr/bin/chromium is the Debian-packaged binary.
+# Point Puppeteer at the Chrome for Testing binary via symlink.
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 USER quarry

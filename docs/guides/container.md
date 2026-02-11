@@ -9,14 +9,19 @@ For CLI flags and configuration, see `docs/guides/cli.md` and `docs/guides/confi
 
 Quarry ships two container images via GHCR:
 
-| Image | Tag | Includes |
-|-------|-----|----------|
-| Full | `ghcr.io/pithecene-io/quarry:0.7.1` | Quarry CLI, Node.js, Puppeteer, system Chromium, fonts |
-| Slim | `ghcr.io/pithecene-io/quarry:0.7.1-slim` | Quarry CLI, Node.js, Puppeteer (no browser) |
+| Image | Tag | Arch | Includes |
+|-------|-----|------|----------|
+| Full | `ghcr.io/pithecene-io/quarry:0.7.1` | amd64 | Quarry CLI, Node.js, Puppeteer, Chrome for Testing, fonts |
+| Slim | `ghcr.io/pithecene-io/quarry:0.7.1-slim` | amd64, arm64 | Quarry CLI, Node.js, Puppeteer (no browser) |
 
 The **full** image is recommended for standalone usage. The **slim** image is
 for environments where Chromium is provided externally (e.g., via
 `--browser-ws-endpoint` pointing at a sidecar or shared browser service).
+
+> **arm64 note:** The full image is amd64-only because [Chrome for Testing does
+> not publish linux-arm64 builds](https://github.com/nickinchrismath/chrome-for-testing/issues/1).
+> arm64 users should use the slim image with an external browser sidecar
+> (see [Slim image with external browser](#slim-image-with-external-browser) below).
 
 Both images set `QUARRY_NO_SANDBOX=1` (required for containerized Chromium)
 and run as a non-root `quarry` user.
