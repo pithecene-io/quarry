@@ -1,19 +1,19 @@
-# Support Posture — Quarry v0.7.0
+# Support Posture — Quarry v0.7.1
 
-This document defines support expectations for Quarry v0.7.0.
+This document defines support expectations for Quarry v0.7.1.
 
 ---
 
 ## Maturity Level
 
-**v0.7.0 is an early release.** APIs and behaviors may change in subsequent
+**v0.7.1 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
 
 ---
 
 ## Known Issues
 
-_No known issues in v0.7.0._
+_No known issues in v0.7.1._
 
 ---
 
@@ -38,6 +38,7 @@ _No known issues in v0.7.0._
 |----------|--------|
 | Linux (x64, arm64) | Supported |
 | macOS (x64, arm64) | Supported |
+| Container (GHCR) | Supported |
 | Windows | Not tested |
 
 ### Supported Runtimes
@@ -135,5 +136,5 @@ quarry version
 
 ## No Warranty
 
-Quarry v0.7.0 is provided "as is" without warranty of any kind.
+Quarry v0.7.1 is provided "as is" without warranty of any kind.
 See LICENSE for details.

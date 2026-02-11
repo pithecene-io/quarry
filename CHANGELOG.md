@@ -13,6 +13,20 @@ _No unreleased changes._
 
 ---
 
+## [0.7.1] - 2026-02-11
+
+### Added
+
+- **Distribution**: Containerized distribution via GHCR — `ghcr.io/pithecene-io/quarry:0.7.1` (full, with system Chromium + fonts) and `ghcr.io/pithecene-io/quarry:0.7.1-slim` (no browser, BYO Chromium via `--browser-ws-endpoint`) (#152)
+- **CI**: Dockerfile lint check (`docker build --check`) in PR and main CI workflows (#152)
+- **Testing**: Integration test for terminal frame visibility at pipe boundary — pins the stdout flush race that caused false `executor_crash` classification (#153)
+
+### Fixed
+
+- **Executor**: Drain stdout before `process.exit()` to prevent false `executor_crash` — `process.exit()` was discarding buffered stdout data before it reached the OS pipe, causing the Go runtime to see EOF without a terminal event and classify successful runs as `executor_crash` (#153)
+
+---
+
 ## [0.7.0] - 2026-02-10
 
 ### Added
@@ -363,6 +377,7 @@ _No unreleased changes._
 
 ---
 
+[0.7.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.1
 [0.7.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.0
 [0.6.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.3
 [0.6.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.2
