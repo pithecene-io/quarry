@@ -97,6 +97,14 @@ FROM slim AS full
 
 USER root
 
+# Chrome for Testing only publishes linux-amd64 binaries.
+# Fail fast so builders don't get a silent wrong-arch image.
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" != "amd64" ]; then \
+      echo "ERROR: full image requires amd64 (got ${TARGETARCH:-unknown}). Use the slim image on other architectures." >&2; \
+      exit 1; \
+    fi
+
 # Pin Chrome for Testing version matching puppeteer@24.37.2 (see deps stage).
 # Look up the mapping at: https://pptr.dev/supported-browsers
 ARG CHROME_VERSION=145.0.7632.46
@@ -107,7 +115,7 @@ RUN apt-get update \
     fonts-liberation \
     fonts-noto-color-emoji \
     fonts-noto-cjk \
-    libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
+    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
     libdbus-1-3 libdrm2 libexpat1 libfontconfig1 libgbm1 \
     libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
     libpangocairo-1.0-0 libx11-6 libxcb1 libxcomposite1 \
@@ -119,7 +127,7 @@ RUN apt-get update \
   && unzip -q /tmp/chrome.zip -d /opt \
   && rm /tmp/chrome.zip \
   && ln -s /opt/chrome-linux64/chrome /usr/bin/chromium \
-  && apt-get purge -y ca-certificates curl unzip \
+  && apt-get purge -y curl unzip \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 
