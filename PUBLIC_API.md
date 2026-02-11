@@ -506,6 +506,41 @@ services:
       - --storage-region=us-east-1
 ```
 
+### Docker Compose with Redis adapter
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  quarry:
+    image: ghcr.io/pithecene-io/quarry:0.7.1
+    depends_on:
+      - redis
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./data:/work/data
+    command:
+      - run
+      - --script=./scripts/my-script.ts
+      - --run-id=scheduled-run
+      - --source=my-source
+      - --storage-backend=fs
+      - --storage-path=./data
+      - --adapter=redis
+      - --adapter-url=redis://redis:6379
+      - --adapter-channel=quarry:run_completed
+```
+
+A `RunCompletedEvent` JSON message is published to the `quarry:run_completed`
+channel after each successful run. Subscribe with any Redis client:
+
+```bash
+redis-cli SUBSCRIBE quarry:run_completed
+```
+
 ### Slim image with external browser
 
 ```yaml
