@@ -354,19 +354,6 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: 🐳 Build & push (full)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: full
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}
-            ghcr.io/pithecene-io/quarry:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: 🐳 Build & push (slim)
         uses: docker/build-push-action@v6
         with:
@@ -377,5 +364,18 @@ jobs:
           tags: |
             ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}-slim
             ghcr.io/pithecene-io/quarry:slim
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🐳 Build & push (full)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: full
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}
+            ghcr.io/pithecene-io/quarry:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
