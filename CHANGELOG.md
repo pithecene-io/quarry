@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+---
+
+## [0.7.2] - 2026-02-11
+
 ### Changed
 
 - **Container**: Full image uses Chrome for Testing tarball instead of distro Chromium — pins browser version to puppeteer compatibility matrix (#159)
@@ -16,9 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Container**: Retain `ca-certificates` in full runtime image — previous purge of build-time download tools accidentally removed the TLS trust store, breaking HTTPS at runtime (#159)
-- **Container**: Add `libasound2` to Chrome shared-library set — missing ALSA dependency could cause Chrome to fail at dynamic link time (#159)
-- **Container**: Fail fast when building full image on non-amd64 — prevents silent production of images with a wrong-architecture Chrome binary (#159)
+- **IPC**: Protect IPC channel from stray stdout writes — third-party code (puppeteer-extra, stealth plugin) writing to `process.stdout` caused the Go `FrameDecoder` to interpret text as a length prefix, deriving huge payload sizes and blocking indefinitely; stdout guard now captures the real `write` for IPC and redirects stray writes to stderr with a diagnostic warning (#161)
+- **Container**: Retain `ca-certificates` in full runtime image — previous purge of build-time download tools accidentally removed the TLS trust store, breaking HTTPS at runtime (#160)
+- **Container**: Add `libasound2` to Chrome shared-library set — missing ALSA dependency could cause Chrome to fail at dynamic link time (#160)
+- **Container**: Fail fast when building full image on non-amd64 — prevents silent production of images with a wrong-architecture Chrome binary (#160)
 
 ---
 
@@ -386,6 +393,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.7.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.2
 [0.7.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.1
 [0.7.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.0
 [0.6.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.6.3

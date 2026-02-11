@@ -16,7 +16,7 @@ const sink = new StdioSink(ipcOutput)
 
 // First IPC frame
 await sink.writeEvent({
-  contract_version: '0.7.1',
+  contract_version: '0.7.2',
   event_id: 'evt-1' as EventId,
   run_id: 'run-guard-test' as RunId,
   seq: 1,
@@ -31,7 +31,7 @@ process.stdout.write('Browser started successfully\n')
 
 // Second IPC frame
 await sink.writeEvent({
-  contract_version: '0.7.1',
+  contract_version: '0.7.2',
   event_id: 'evt-2' as EventId,
   run_id: 'run-guard-test' as RunId,
   seq: 2,
