@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.5.1
+// Quarry Executor Bundle v0.7.0
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: task executor:bundle
 
@@ -9,8 +9,15 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -28,6 +35,324 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// ../sdk/dist/index.mjs
+import { randomUUID } from "node:crypto";
+function createAPIs(run, sink) {
+  let seq = 0;
+  let terminalEmitted = false;
+  let sinkFailed = null;
+  let chain = Promise.resolve();
+  function serialize(fn) {
+    const result = chain.then(async () => {
+      if (sinkFailed !== null) throw new SinkFailedError(sinkFailed);
+      try {
+        return await fn();
+      } catch (err) {
+        sinkFailed = err;
+        throw err;
+      }
+    });
+    chain = result.then(() => {
+    }, () => {
+    });
+    return result;
+  }
+  function createEnvelope(type, payload) {
+    return {
+      contract_version: CONTRACT_VERSION,
+      event_id: randomUUID(),
+      run_id: run.run_id,
+      type,
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      payload,
+      attempt: run.attempt,
+      ...run.job_id !== void 0 && { job_id: run.job_id },
+      ...run.parent_run_id !== void 0 && { parent_run_id: run.parent_run_id }
+    };
+  }
+  async function writeEnvelope(envelope) {
+    seq += 1;
+    const complete = {
+      ...envelope,
+      seq
+    };
+    await sink.writeEvent(complete);
+  }
+  function assertNotTerminal() {
+    if (terminalEmitted) throw new TerminalEventError();
+  }
+  function emitEvent(type, payload) {
+    return serialize(async () => {
+      assertNotTerminal();
+      await writeEnvelope(createEnvelope(type, payload));
+    });
+  }
+  const emit = {
+    item(options) {
+      return emitEvent("item", {
+        item_type: options.item_type,
+        data: options.data
+      });
+    },
+    artifact(options) {
+      return serialize(async () => {
+        assertNotTerminal();
+        const artifact_id = randomUUID();
+        const size_bytes = options.data.byteLength;
+        await sink.writeArtifactData(artifact_id, options.data);
+        await writeEnvelope(createEnvelope("artifact", {
+          artifact_id,
+          name: options.name,
+          content_type: options.content_type,
+          size_bytes
+        }));
+        return artifact_id;
+      });
+    },
+    checkpoint(options) {
+      return emitEvent("checkpoint", {
+        checkpoint_id: options.checkpoint_id,
+        ...options.note !== void 0 && { note: options.note }
+      });
+    },
+    enqueue(options) {
+      return emitEvent("enqueue", {
+        target: options.target,
+        params: options.params,
+        ...options.source !== void 0 && { source: options.source },
+        ...options.category !== void 0 && { category: options.category }
+      });
+    },
+    rotateProxy(options) {
+      return emitEvent("rotate_proxy", { ...options?.reason !== void 0 && { reason: options.reason } });
+    },
+    log(options) {
+      return emitEvent("log", {
+        level: options.level,
+        message: options.message,
+        ...options.fields !== void 0 && { fields: options.fields }
+      });
+    },
+    async debug(message, fields) {
+      await emit.log({
+        level: "debug",
+        message,
+        fields
+      });
+    },
+    async info(message, fields) {
+      await emit.log({
+        level: "info",
+        message,
+        fields
+      });
+    },
+    async warn(message, fields) {
+      await emit.log({
+        level: "warn",
+        message,
+        fields
+      });
+    },
+    async error(message, fields) {
+      await emit.log({
+        level: "error",
+        message,
+        fields
+      });
+    },
+    runError(options) {
+      return serialize(async () => {
+        assertNotTerminal();
+        await writeEnvelope(createEnvelope("run_error", {
+          error_type: options.error_type,
+          message: options.message,
+          ...options.stack !== void 0 && { stack: options.stack }
+        }));
+        terminalEmitted = true;
+      });
+    },
+    runComplete(options) {
+      return serialize(async () => {
+        assertNotTerminal();
+        await writeEnvelope(createEnvelope("run_complete", { ...options?.summary !== void 0 && { summary: options.summary } }));
+        terminalEmitted = true;
+      });
+    }
+  };
+  function validateFilename(filename) {
+    if (!filename) throw new StorageFilenameError(filename, "filename must not be empty");
+    if (filename.includes("/") || filename.includes("\\")) throw new StorageFilenameError(filename, "filename must not contain path separators");
+    if (filename.includes("..")) throw new StorageFilenameError(filename, 'filename must not contain ".."');
+  }
+  return {
+    emit,
+    storage: { put(options) {
+      return serialize(async () => {
+        assertNotTerminal();
+        validateFilename(options.filename);
+        await sink.writeFile(options.filename, options.content_type, options.data);
+      });
+    } }
+  };
+}
+function createContext(options) {
+  const { emit, storage } = createAPIs(options.run, options.sink);
+  const ctx = {
+    job: options.job,
+    run: Object.freeze(options.run),
+    page: options.page,
+    browser: options.browser,
+    browserContext: options.browserContext,
+    emit,
+    storage
+  };
+  return Object.freeze(ctx);
+}
+var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError;
+var init_dist = __esm({
+  "../sdk/dist/index.mjs"() {
+    "use strict";
+    CONTRACT_VERSION = "0.7.0";
+    TerminalEventError = class extends Error {
+      constructor() {
+        super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
+        this.name = "TerminalEventError";
+      }
+    };
+    SinkFailedError = class extends Error {
+      constructor(cause) {
+        super("Cannot emit: sink has previously failed");
+        this.name = "SinkFailedError";
+        this.cause = cause;
+      }
+    };
+    StorageFilenameError = class extends Error {
+      constructor(filename, reason) {
+        super(`Invalid storage filename "${filename}": ${reason}`);
+        this.name = "StorageFilenameError";
+      }
+    };
+  }
+});
+
+// src/ipc/observing-sink.ts
+function isTerminalType(type) {
+  return type === "run_complete" || type === "run_error";
+}
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var SinkAlreadyFailedError, ObservingSink;
+var init_observing_sink = __esm({
+  "src/ipc/observing-sink.ts"() {
+    "use strict";
+    SinkAlreadyFailedError = class extends Error {
+      constructor(originalCause) {
+        const causeMsg = originalCause instanceof Error ? originalCause.message : String(originalCause);
+        super(`Sink has already failed: ${causeMsg}`);
+        this.name = "SinkAlreadyFailedError";
+        this.cause = originalCause;
+      }
+    };
+    ObservingSink = class {
+      constructor(inner) {
+        this.inner = inner;
+      }
+      terminalState = null;
+      sinkFailure = null;
+      /**
+       * Write an event envelope, tracking the first terminal event on success.
+       * @throws SinkAlreadyFailedError if the sink has previously failed
+       */
+      async writeEvent(envelope) {
+        if (this.sinkFailure !== null) {
+          throw new SinkAlreadyFailedError(this.sinkFailure);
+        }
+        try {
+          await this.inner.writeEvent(envelope);
+          if (this.terminalState === null && isTerminalType(envelope.type)) {
+            this.terminalState = this.extractTerminalState(envelope.type, envelope.payload);
+          }
+        } catch (err) {
+          if (this.sinkFailure === null) {
+            this.sinkFailure = err;
+          }
+          throw err;
+        }
+      }
+      /**
+       * Write artifact data, tracking failures.
+       * @throws SinkAlreadyFailedError if the sink has previously failed
+       */
+      async writeArtifactData(artifactId, data) {
+        if (this.sinkFailure !== null) {
+          throw new SinkAlreadyFailedError(this.sinkFailure);
+        }
+        try {
+          await this.inner.writeArtifactData(artifactId, data);
+        } catch (err) {
+          if (this.sinkFailure === null) {
+            this.sinkFailure = err;
+          }
+          throw err;
+        }
+      }
+      /**
+       * Write a sidecar file, tracking failures.
+       * @throws SinkAlreadyFailedError if the sink has previously failed
+       */
+      async writeFile(filename, contentType, data) {
+        if (this.sinkFailure !== null) {
+          throw new SinkAlreadyFailedError(this.sinkFailure);
+        }
+        try {
+          await this.inner.writeFile(filename, contentType, data);
+        } catch (err) {
+          if (this.sinkFailure === null) {
+            this.sinkFailure = err;
+          }
+          throw err;
+        }
+      }
+      /**
+       * Extract terminal state from type and payload.
+       * Type alone is authoritative; payload fields are best-effort.
+       */
+      extractTerminalState(type, payload) {
+        if (type === "run_error") {
+          let errorType;
+          let message;
+          if (isPlainObject(payload)) {
+            if ("error_type" in payload && typeof payload.error_type === "string") {
+              errorType = payload.error_type;
+            }
+            if ("message" in payload && typeof payload.message === "string") {
+              message = payload.message;
+            }
+          }
+          return { type: "run_error", errorType, message };
+        }
+        let summary;
+        if (isPlainObject(payload) && "summary" in payload && isPlainObject(payload.summary)) {
+          summary = payload.summary;
+        }
+        return { type: "run_complete", summary };
+      }
+      // SinkState implementation
+      getTerminalState() {
+        return this.terminalState;
+      }
+      isSinkFailed() {
+        return this.sinkFailure !== null;
+      }
+      getSinkFailure() {
+        return this.sinkFailure;
+      }
+    };
+  }
+});
 
 // ../node_modules/.pnpm/@msgpack+msgpack@3.1.3/node_modules/@msgpack/msgpack/dist.cjs/utils/utf8.cjs
 var require_utf8 = __commonJS({
@@ -1738,328 +2063,7 @@ var require_dist = __commonJS({
   }
 });
 
-// src/executor.ts
-import { createRequire } from "node:module";
-import { dirname, resolve as resolve2 } from "node:path";
-
-// ../sdk/dist/index.mjs
-import { randomUUID } from "node:crypto";
-var CONTRACT_VERSION = "0.5.1";
-var TerminalEventError = class extends Error {
-  constructor() {
-    super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
-    this.name = "TerminalEventError";
-  }
-};
-var SinkFailedError = class extends Error {
-  constructor(cause) {
-    super("Cannot emit: sink has previously failed");
-    this.name = "SinkFailedError";
-    this.cause = cause;
-  }
-};
-var StorageFilenameError = class extends Error {
-  constructor(filename, reason) {
-    super(`Invalid storage filename "${filename}": ${reason}`);
-    this.name = "StorageFilenameError";
-  }
-};
-function createAPIs(run, sink) {
-  let seq = 0;
-  let terminalEmitted = false;
-  let sinkFailed = null;
-  let chain = Promise.resolve();
-  function serialize(fn) {
-    const result = chain.then(async () => {
-      if (sinkFailed !== null) throw new SinkFailedError(sinkFailed);
-      try {
-        return await fn();
-      } catch (err) {
-        sinkFailed = err;
-        throw err;
-      }
-    });
-    chain = result.then(() => {
-    }, () => {
-    });
-    return result;
-  }
-  function createEnvelope(type, payload) {
-    return {
-      contract_version: CONTRACT_VERSION,
-      event_id: randomUUID(),
-      run_id: run.run_id,
-      type,
-      ts: (/* @__PURE__ */ new Date()).toISOString(),
-      payload,
-      attempt: run.attempt,
-      ...run.job_id !== void 0 && { job_id: run.job_id },
-      ...run.parent_run_id !== void 0 && { parent_run_id: run.parent_run_id }
-    };
-  }
-  async function writeEnvelope(envelope) {
-    seq += 1;
-    const complete = {
-      ...envelope,
-      seq
-    };
-    await sink.writeEvent(complete);
-  }
-  function assertNotTerminal() {
-    if (terminalEmitted) throw new TerminalEventError();
-  }
-  function emitEvent(type, payload) {
-    return serialize(async () => {
-      assertNotTerminal();
-      await writeEnvelope(createEnvelope(type, payload));
-    });
-  }
-  const emit = {
-    item(options) {
-      return emitEvent("item", {
-        item_type: options.item_type,
-        data: options.data
-      });
-    },
-    artifact(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        const artifact_id = randomUUID();
-        const size_bytes = options.data.byteLength;
-        await sink.writeArtifactData(artifact_id, options.data);
-        await writeEnvelope(createEnvelope("artifact", {
-          artifact_id,
-          name: options.name,
-          content_type: options.content_type,
-          size_bytes
-        }));
-        return artifact_id;
-      });
-    },
-    checkpoint(options) {
-      return emitEvent("checkpoint", {
-        checkpoint_id: options.checkpoint_id,
-        ...options.note !== void 0 && { note: options.note }
-      });
-    },
-    enqueue(options) {
-      return emitEvent("enqueue", {
-        target: options.target,
-        params: options.params
-      });
-    },
-    rotateProxy(options) {
-      return emitEvent("rotate_proxy", { ...options?.reason !== void 0 && { reason: options.reason } });
-    },
-    log(options) {
-      return emitEvent("log", {
-        level: options.level,
-        message: options.message,
-        ...options.fields !== void 0 && { fields: options.fields }
-      });
-    },
-    async debug(message, fields) {
-      await emit.log({
-        level: "debug",
-        message,
-        fields
-      });
-    },
-    async info(message, fields) {
-      await emit.log({
-        level: "info",
-        message,
-        fields
-      });
-    },
-    async warn(message, fields) {
-      await emit.log({
-        level: "warn",
-        message,
-        fields
-      });
-    },
-    async error(message, fields) {
-      await emit.log({
-        level: "error",
-        message,
-        fields
-      });
-    },
-    runError(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("run_error", {
-          error_type: options.error_type,
-          message: options.message,
-          ...options.stack !== void 0 && { stack: options.stack }
-        }));
-        terminalEmitted = true;
-      });
-    },
-    runComplete(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        await writeEnvelope(createEnvelope("run_complete", { ...options?.summary !== void 0 && { summary: options.summary } }));
-        terminalEmitted = true;
-      });
-    }
-  };
-  function validateFilename(filename) {
-    if (!filename) throw new StorageFilenameError(filename, "filename must not be empty");
-    if (filename.includes("/") || filename.includes("\\")) throw new StorageFilenameError(filename, "filename must not contain path separators");
-    if (filename.includes("..")) throw new StorageFilenameError(filename, 'filename must not contain ".."');
-  }
-  return {
-    emit,
-    storage: { put(options) {
-      return serialize(async () => {
-        assertNotTerminal();
-        validateFilename(options.filename);
-        await sink.writeFile(options.filename, options.content_type, options.data);
-      });
-    } }
-  };
-}
-function createContext(options) {
-  const { emit, storage } = createAPIs(options.run, options.sink);
-  const ctx = {
-    job: options.job,
-    run: Object.freeze(options.run),
-    page: options.page,
-    browser: options.browser,
-    browserContext: options.browserContext,
-    emit,
-    storage
-  };
-  return Object.freeze(ctx);
-}
-
-// src/ipc/observing-sink.ts
-var SinkAlreadyFailedError = class extends Error {
-  constructor(originalCause) {
-    const causeMsg = originalCause instanceof Error ? originalCause.message : String(originalCause);
-    super(`Sink has already failed: ${causeMsg}`);
-    this.name = "SinkAlreadyFailedError";
-    this.cause = originalCause;
-  }
-};
-function isTerminalType(type) {
-  return type === "run_complete" || type === "run_error";
-}
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-var ObservingSink = class {
-  constructor(inner) {
-    this.inner = inner;
-  }
-  terminalState = null;
-  sinkFailure = null;
-  /**
-   * Write an event envelope, tracking the first terminal event on success.
-   * @throws SinkAlreadyFailedError if the sink has previously failed
-   */
-  async writeEvent(envelope) {
-    if (this.sinkFailure !== null) {
-      throw new SinkAlreadyFailedError(this.sinkFailure);
-    }
-    try {
-      await this.inner.writeEvent(envelope);
-      if (this.terminalState === null && isTerminalType(envelope.type)) {
-        this.terminalState = this.extractTerminalState(envelope.type, envelope.payload);
-      }
-    } catch (err) {
-      if (this.sinkFailure === null) {
-        this.sinkFailure = err;
-      }
-      throw err;
-    }
-  }
-  /**
-   * Write artifact data, tracking failures.
-   * @throws SinkAlreadyFailedError if the sink has previously failed
-   */
-  async writeArtifactData(artifactId, data) {
-    if (this.sinkFailure !== null) {
-      throw new SinkAlreadyFailedError(this.sinkFailure);
-    }
-    try {
-      await this.inner.writeArtifactData(artifactId, data);
-    } catch (err) {
-      if (this.sinkFailure === null) {
-        this.sinkFailure = err;
-      }
-      throw err;
-    }
-  }
-  /**
-   * Write a sidecar file, tracking failures.
-   * @throws SinkAlreadyFailedError if the sink has previously failed
-   */
-  async writeFile(filename, contentType, data) {
-    if (this.sinkFailure !== null) {
-      throw new SinkAlreadyFailedError(this.sinkFailure);
-    }
-    try {
-      await this.inner.writeFile(filename, contentType, data);
-    } catch (err) {
-      if (this.sinkFailure === null) {
-        this.sinkFailure = err;
-      }
-      throw err;
-    }
-  }
-  /**
-   * Extract terminal state from type and payload.
-   * Type alone is authoritative; payload fields are best-effort.
-   */
-  extractTerminalState(type, payload) {
-    if (type === "run_error") {
-      let errorType;
-      let message;
-      if (isPlainObject(payload)) {
-        if ("error_type" in payload && typeof payload.error_type === "string") {
-          errorType = payload.error_type;
-        }
-        if ("message" in payload && typeof payload.message === "string") {
-          message = payload.message;
-        }
-      }
-      return { type: "run_error", errorType, message };
-    }
-    let summary;
-    if (isPlainObject(payload) && "summary" in payload && isPlainObject(payload.summary)) {
-      summary = payload.summary;
-    }
-    return { type: "run_complete", summary };
-  }
-  // SinkState implementation
-  getTerminalState() {
-    return this.terminalState;
-  }
-  isSinkFailed() {
-    return this.sinkFailure !== null;
-  }
-  getSinkFailure() {
-    return this.sinkFailure;
-  }
-};
-
 // src/ipc/frame.ts
-var import_msgpack = __toESM(require_dist(), 1);
-var MAX_FRAME_SIZE = 16 * 1024 * 1024;
-var MAX_PAYLOAD_SIZE = MAX_FRAME_SIZE - 4;
-var MAX_CHUNK_SIZE = 8 * 1024 * 1024;
-var LENGTH_PREFIX_SIZE = 4;
-var FrameSizeError = class extends Error {
-  constructor(payloadSize, maxPayloadSize) {
-    super(`Payload size ${payloadSize} exceeds maximum ${maxPayloadSize}`);
-    this.payloadSize = payloadSize;
-    this.maxPayloadSize = maxPayloadSize;
-    this.name = "FrameSizeError";
-  }
-};
 function encodeFrame(payload) {
   if (payload.length > MAX_PAYLOAD_SIZE) {
     throw new FrameSizeError(payload.length, MAX_PAYLOAD_SIZE);
@@ -2073,12 +2077,6 @@ function encodeEventFrame(envelope) {
   const payload = (0, import_msgpack.encode)(envelope);
   return encodeFrame(payload);
 }
-var ChunkValidationError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ChunkValidationError";
-  }
-};
 function encodeArtifactChunkFrame(artifactId, seq, isLast, data) {
   if (seq < 1) {
     throw new ChunkValidationError(`seq must be >= 1, got ${seq}`);
@@ -2147,14 +2145,33 @@ function encodeFileWriteFrame(filename, contentType, data) {
   const payload = (0, import_msgpack.encode)(frame);
   return encodeFrame(payload);
 }
+var import_msgpack, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, MAX_CHUNK_SIZE, LENGTH_PREFIX_SIZE, FrameSizeError, ChunkValidationError;
+var init_frame = __esm({
+  "src/ipc/frame.ts"() {
+    "use strict";
+    import_msgpack = __toESM(require_dist(), 1);
+    MAX_FRAME_SIZE = 16 * 1024 * 1024;
+    MAX_PAYLOAD_SIZE = MAX_FRAME_SIZE - 4;
+    MAX_CHUNK_SIZE = 8 * 1024 * 1024;
+    LENGTH_PREFIX_SIZE = 4;
+    FrameSizeError = class extends Error {
+      constructor(payloadSize, maxPayloadSize) {
+        super(`Payload size ${payloadSize} exceeds maximum ${maxPayloadSize}`);
+        this.payloadSize = payloadSize;
+        this.maxPayloadSize = maxPayloadSize;
+        this.name = "FrameSizeError";
+      }
+    };
+    ChunkValidationError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "ChunkValidationError";
+      }
+    };
+  }
+});
 
 // src/ipc/sink.ts
-var StreamClosedError = class extends Error {
-  constructor(reason) {
-    super(`Output stream unavailable: ${reason}`);
-    this.name = "StreamClosedError";
-  }
-};
 function writeWithBackpressure(stream, data) {
   return new Promise((resolve3, reject) => {
     if (stream.destroyed) {
@@ -2213,66 +2230,71 @@ function drainStdout() {
     });
   });
 }
-var StdioSink = class {
-  constructor(output) {
-    this.output = output;
+var StreamClosedError, StdioSink;
+var init_sink = __esm({
+  "src/ipc/sink.ts"() {
+    "use strict";
+    init_frame();
+    StreamClosedError = class extends Error {
+      constructor(reason) {
+        super(`Output stream unavailable: ${reason}`);
+        this.name = "StreamClosedError";
+      }
+    };
+    StdioSink = class {
+      constructor(output) {
+        this.output = output;
+      }
+      /**
+       * Write an event envelope as a framed message.
+       * Blocks on backpressure per CONTRACT_IPC.md.
+       */
+      async writeEvent(envelope) {
+        const frame = encodeEventFrame(envelope);
+        await writeWithBackpressure(this.output, frame);
+      }
+      /**
+       * Write artifact binary data as chunked frames.
+       * Per CONTRACT_IPC.md, bytes are written BEFORE the artifact event.
+       * Blocks on backpressure per CONTRACT_IPC.md.
+       */
+      async writeArtifactData(artifactId, data) {
+        for (const frame of encodeArtifactChunks(artifactId, data)) {
+          await writeWithBackpressure(this.output, frame);
+        }
+      }
+      /**
+       * Write a run result control frame.
+       * Per CONTRACT_IPC.md, this is a control frame emitted once after terminal event.
+       * It does NOT affect seq ordering.
+       *
+       * @param outcome - The run outcome
+       * @param proxyUsed - Optional redacted proxy endpoint (no password)
+       */
+      async writeRunResult(outcome, proxyUsed) {
+        const frame = encodeRunResultFrame(outcome, proxyUsed);
+        await writeWithBackpressure(this.output, frame);
+      }
+      /**
+       * Write a sidecar file via file_write frame.
+       * Bypasses seq numbering and the policy pipeline.
+       * Blocks on backpressure per CONTRACT_IPC.md.
+       *
+       * @param filename - Target filename (no path separators, no "..")
+       * @param contentType - MIME content type
+       * @param data - Raw binary data (max 8 MiB)
+       */
+      async writeFile(filename, contentType, data) {
+        const frame = encodeFileWriteFrame(filename, contentType, data);
+        await writeWithBackpressure(this.output, frame);
+      }
+    };
   }
-  /**
-   * Write an event envelope as a framed message.
-   * Blocks on backpressure per CONTRACT_IPC.md.
-   */
-  async writeEvent(envelope) {
-    const frame = encodeEventFrame(envelope);
-    await writeWithBackpressure(this.output, frame);
-  }
-  /**
-   * Write artifact binary data as chunked frames.
-   * Per CONTRACT_IPC.md, bytes are written BEFORE the artifact event.
-   * Blocks on backpressure per CONTRACT_IPC.md.
-   */
-  async writeArtifactData(artifactId, data) {
-    for (const frame of encodeArtifactChunks(artifactId, data)) {
-      await writeWithBackpressure(this.output, frame);
-    }
-  }
-  /**
-   * Write a run result control frame.
-   * Per CONTRACT_IPC.md, this is a control frame emitted once after terminal event.
-   * It does NOT affect seq ordering.
-   *
-   * @param outcome - The run outcome
-   * @param proxyUsed - Optional redacted proxy endpoint (no password)
-   */
-  async writeRunResult(outcome, proxyUsed) {
-    const frame = encodeRunResultFrame(outcome, proxyUsed);
-    await writeWithBackpressure(this.output, frame);
-  }
-  /**
-   * Write a sidecar file via file_write frame.
-   * Bypasses seq numbering and the policy pipeline.
-   * Blocks on backpressure per CONTRACT_IPC.md.
-   *
-   * @param filename - Target filename (no path separators, no "..")
-   * @param contentType - MIME content type
-   * @param data - Raw binary data (max 8 MiB)
-   */
-  async writeFile(filename, contentType, data) {
-    const frame = encodeFileWriteFrame(filename, contentType, data);
-    await writeWithBackpressure(this.output, frame);
-  }
-};
+});
 
 // src/loader.ts
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-var ScriptLoadError = class extends Error {
-  constructor(scriptPath, reason) {
-    super(`Failed to load script "${scriptPath}": ${reason}`);
-    this.scriptPath = scriptPath;
-    this.reason = reason;
-    this.name = "ScriptLoadError";
-  }
-};
 function isFunction(value) {
   return typeof value === "function";
 }
@@ -2317,8 +2339,32 @@ async function loadScript(scriptPath) {
     module: validatedModule
   };
 }
+var ScriptLoadError;
+var init_loader = __esm({
+  "src/loader.ts"() {
+    "use strict";
+    ScriptLoadError = class extends Error {
+      constructor(scriptPath, reason) {
+        super(`Failed to load script "${scriptPath}": ${reason}`);
+        this.scriptPath = scriptPath;
+        this.reason = reason;
+        this.name = "ScriptLoadError";
+      }
+    };
+  }
+});
 
 // src/executor.ts
+var executor_exports = {};
+__export(executor_exports, {
+  _resetPuppeteerForTesting: () => _resetPuppeteerForTesting,
+  errorMessage: () => errorMessage,
+  execute: () => execute,
+  getPuppeteer: () => getPuppeteer,
+  parseRunMeta: () => parseRunMeta
+});
+import { createRequire } from "node:module";
+import { dirname, resolve as resolve2 } from "node:path";
 async function resolveModule(name, scriptPath) {
   const absoluteScriptPath = resolve2(scriptPath);
   try {
@@ -2344,8 +2390,6 @@ Install it in your project (${scriptDir}): npm install ${name}`
     );
   }
 }
-var puppeteerModule = null;
-var cachedPluginConfig = null;
 async function getPuppeteer(scriptPath, plugins) {
   if (puppeteerModule && cachedPluginConfig) {
     const configChanged = cachedPluginConfig.stealth !== plugins.stealth || cachedPluginConfig.adblocker !== plugins.adblocker;
@@ -2387,6 +2431,18 @@ async function getPuppeteer(scriptPath, plugins) {
   cachedPluginConfig = plugins;
   puppeteerModule = pptr;
   return pptr;
+}
+function _resetPuppeteerForTesting() {
+  puppeteerModule = null;
+  cachedPluginConfig = null;
+}
+async function getVanillaPuppeteer(scriptPath) {
+  const puppeteerMod = await resolveModuleOrThrow(
+    "puppeteer",
+    scriptPath,
+    "Puppeteer is a peer dependency of quarry-executor."
+  );
+  return puppeteerMod.default;
 }
 function parseRunMeta(input) {
   if (input === null || typeof input !== "object") {
@@ -2484,6 +2540,7 @@ async function execute(config) {
   let ctx = null;
   let scriptThrew = false;
   let scriptError = null;
+  let isConnected = false;
   function determineOutcome(sinkState) {
     if (sinkState.isSinkFailed()) {
       const failure = sinkState.getSinkFailure();
@@ -2538,13 +2595,19 @@ async function execute(config) {
       }
       throw err;
     }
-    const plugins = {
-      stealth: config.stealth !== false,
-      adblocker: config.adblocker === true
-    };
-    const puppeteer = await getPuppeteer(config.scriptPath, plugins);
-    const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy);
-    browser = await puppeteer.launch(launchOptions);
+    if (config.browserWSEndpoint) {
+      const puppeteer = await getVanillaPuppeteer(config.scriptPath);
+      browser = await puppeteer.connect({ browserWSEndpoint: config.browserWSEndpoint });
+      isConnected = true;
+    } else {
+      const plugins = {
+        stealth: config.stealth !== false,
+        adblocker: config.adblocker === true
+      };
+      const puppeteer = await getPuppeteer(config.scriptPath, plugins);
+      const launchOptions = buildPuppeteerLaunchOptions(config.puppeteerOptions, config.proxy);
+      browser = await puppeteer.launch(launchOptions);
+    }
     browserContext = await browser.createBrowserContext();
     page = await browserContext.newPage();
     if (config.proxy?.username && config.proxy?.password) {
@@ -2618,11 +2681,33 @@ async function execute(config) {
   } finally {
     await safeClose(page);
     await safeClose(browserContext);
-    await safeClose(browser);
+    if (isConnected && browser) {
+      try {
+        browser.disconnect();
+      } catch {
+      }
+    } else {
+      await safeClose(browser);
+    }
   }
 }
+var puppeteerModule, cachedPluginConfig;
+var init_executor = __esm({
+  "src/executor.ts"() {
+    "use strict";
+    init_dist();
+    init_observing_sink();
+    init_sink();
+    init_loader();
+    puppeteerModule = null;
+    cachedPluginConfig = null;
+  }
+});
 
 // src/bin/executor.ts
+init_executor();
+init_sink();
+import { unlinkSync } from "node:fs";
 function fatalError(message) {
   process.stderr.write(`Error: ${message}
 `);
@@ -2666,8 +2751,124 @@ async function readStdin() {
   }
   return Buffer.concat(chunks).toString("utf-8");
 }
+async function browserServer(scriptPath) {
+  const { getPuppeteer: getBrowserPuppeteer } = await Promise.resolve().then(() => (init_executor(), executor_exports));
+  const puppeteer = await getBrowserPuppeteer(scriptPath, {
+    stealth: process.env.QUARRY_STEALTH !== "0",
+    adblocker: process.env.QUARRY_ADBLOCKER === "1"
+  });
+  const launchArgs = [];
+  if (process.env.QUARRY_NO_SANDBOX === "1") {
+    launchArgs.push("--no-sandbox", "--disable-setuid-sandbox");
+  }
+  const proxyUrl = process.env.QUARRY_BROWSER_PROXY;
+  if (proxyUrl) {
+    launchArgs.push(`--proxy-server=${proxyUrl}`);
+  }
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: launchArgs
+  });
+  const wsEndpoint = browser.wsEndpoint();
+  process.stdout.write(`${wsEndpoint}
+`);
+  process.on("SIGPIPE", () => {
+  });
+  const idleTimeoutMs = Number.parseInt(process.env.QUARRY_BROWSER_IDLE_TIMEOUT ?? "60", 10) * 1e3;
+  const discoveryFile = process.env.QUARRY_BROWSER_DISCOVERY_FILE ?? "";
+  const wsUrl = new URL(wsEndpoint);
+  const baseUrl = `http://127.0.0.1:${wsUrl.port}`;
+  let idleStartedAt = null;
+  const pollIntervalMs = 5e3;
+  async function countActivePages() {
+    const res = await fetch(`${baseUrl}/json/list`);
+    if (!res.ok) return 0;
+    const targets = await res.json();
+    return targets.filter((t) => t.type === "page" && t.url !== "about:blank").length;
+  }
+  function removeDiscoveryFile() {
+    if (!discoveryFile) return;
+    try {
+      unlinkSync(discoveryFile);
+    } catch {
+    }
+  }
+  async function shutdown() {
+    const idleSec = idleStartedAt ? Math.round((Date.now() - idleStartedAt) / 1e3) : 0;
+    process.stderr.write(`Browser server idle for ${idleSec}s, shutting down
+`);
+    removeDiscoveryFile();
+    await browser.close();
+    process.exit(0);
+  }
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGINT", () => void shutdown());
+  const timer = setInterval(async () => {
+    try {
+      const activePages = await countActivePages();
+      if (activePages > 0) {
+        idleStartedAt = null;
+        return;
+      }
+      if (idleStartedAt === null) {
+        idleStartedAt = Date.now();
+        return;
+      }
+      if (Date.now() - idleStartedAt >= idleTimeoutMs) {
+        clearInterval(timer);
+        await shutdown();
+      }
+    } catch {
+      clearInterval(timer);
+      removeDiscoveryFile();
+      process.exit(1);
+    }
+  }, pollIntervalMs);
+  while (true) {
+    await new Promise((resolve3) => setTimeout(resolve3, 2147483647));
+  }
+}
+async function launchBrowserServer(scriptPath) {
+  const { getPuppeteer: getBrowserPuppeteer } = await Promise.resolve().then(() => (init_executor(), executor_exports));
+  const puppeteer = await getBrowserPuppeteer(scriptPath, {
+    stealth: process.env.QUARRY_STEALTH !== "0",
+    adblocker: process.env.QUARRY_ADBLOCKER === "1"
+  });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: process.env.QUARRY_NO_SANDBOX === "1" ? ["--no-sandbox", "--disable-setuid-sandbox"] : []
+  });
+  const wsEndpoint = browser.wsEndpoint();
+  process.stdout.write(`${wsEndpoint}
+`);
+  await new Promise((resolve3) => {
+    process.stdin.resume();
+    process.stdin.on("end", resolve3);
+    process.stdin.on("close", resolve3);
+    process.on("SIGTERM", resolve3);
+    process.on("SIGINT", resolve3);
+  });
+  await browser.close();
+  process.exit(0);
+}
 async function main() {
   const args = process.argv.slice(2);
+  if (args[0] === "--browser-server") {
+    const scriptPath2 = args[1];
+    if (!scriptPath2) {
+      process.stderr.write("Usage: quarry-executor --browser-server <script-path>\n");
+      process.exit(3);
+    }
+    return browserServer(scriptPath2);
+  }
+  if (args[0] === "--launch-browser") {
+    const scriptPath2 = args[1];
+    if (!scriptPath2) {
+      process.stderr.write("Usage: quarry-executor --launch-browser <script-path>\n");
+      process.exit(3);
+    }
+    return launchBrowserServer(scriptPath2);
+  }
   if (args.length < 1) {
     process.stderr.write("Usage: quarry-executor <script-path>\n");
     process.stderr.write("Run metadata is read from stdin as JSON.\n");
@@ -2704,11 +2905,13 @@ async function main() {
   } catch (err) {
     fatalError(`parsing proxy: ${errorMessage(err)}`);
   }
+  const browserWSEndpoint = typeof inputObj.browser_ws_endpoint === "string" && inputObj.browser_ws_endpoint !== "" ? inputObj.browser_ws_endpoint : void 0;
   const result = await execute({
     scriptPath,
     job,
     run,
     proxy,
+    browserWSEndpoint,
     output: process.stdout,
     puppeteerOptions: {
       // Headless by default for executor mode
