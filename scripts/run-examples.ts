@@ -132,6 +132,7 @@ async function runExample(example: Example): Promise<RunResult> {
     "--run-id", runId,
     "--source", "example-runner",
     "--category", "examples",
+    "--no-browser-reuse",
     "--executor", EXECUTOR_BIN,
     "--storage-backend", "fs",
     "--storage-path", storagePath,
