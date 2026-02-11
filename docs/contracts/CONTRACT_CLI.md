@@ -244,7 +244,7 @@ config file providing project-level defaults for run flags.
 **No auto-discovery:** Config files are loaded only via explicit `--config`.
 There is no implicit `quarry.yaml` search in the working directory.
 
-### Transparent Browser Reuse (v0.7.1+)
+### Transparent Browser Reuse (v0.7.2+)
 
 By default, `quarry run` transparently reuses a Chromium browser process
 across sequential invocations. The browser is launched as a detached process
