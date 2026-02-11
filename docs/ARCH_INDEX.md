@@ -35,6 +35,7 @@ User-facing guides (informational).
 - `guides/lode.md` — user-facing storage expectations
 - `guides/cli.md` — user-facing CLI overview
 - `guides/configuration.md` — consolidated configuration reference (flags, env vars, config files)
+- `guides/container.md` — running Quarry via container images (docker run, Compose, sidecars)
 - `guides/proxy.md` — user-facing proxy guide
 - `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
 - `guides/temporal.md` — Temporal orchestration integration guide
