@@ -2210,6 +2210,26 @@ function writeWithBackpressure(stream, data) {
     }
   });
 }
+function drainStdout() {
+  return new Promise((resolve3, reject) => {
+    if (process.stdout.writableFinished) {
+      resolve3();
+      return;
+    }
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const cleanup = () => {
+      process.stdout.off("error", onError);
+    };
+    process.stdout.on("error", onError);
+    process.stdout.end(() => {
+      cleanup();
+      resolve3();
+    });
+  });
+}
 var StreamClosedError, StdioSink;
 var init_sink = __esm({
   "src/ipc/sink.ts"() {
@@ -2686,6 +2706,7 @@ var init_executor = __esm({
 
 // src/bin/executor.ts
 init_executor();
+init_sink();
 import { unlinkSync } from "node:fs";
 function fatalError(message) {
   process.stderr.write(`Error: ${message}
@@ -2903,6 +2924,7 @@ async function main() {
     // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
     adblocker: process.env.QUARRY_ADBLOCKER === "1"
   });
+  await drainStdout();
   switch (result.outcome.status) {
     case "completed":
       process.exit(0);

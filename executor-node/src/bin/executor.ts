@@ -26,6 +26,7 @@
 import { unlinkSync } from 'node:fs'
 import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
+import { drainStdout } from '../ipc/sink.js'
 
 /**
  * Write an error message to stderr and exit with code 3 (invalid input).
@@ -361,6 +362,9 @@ async function main(): Promise<never> {
     // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
     adblocker: process.env.QUARRY_ADBLOCKER === '1'
   })
+
+  // Flush stdout so the runtime sees the terminal event before EOF
+  await drainStdout()
 
   // Map outcome to exit code
   switch (result.outcome.status) {
