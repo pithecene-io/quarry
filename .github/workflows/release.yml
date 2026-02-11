@@ -367,13 +367,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 🐳 Build & push (full)
+      - name: 🐳 Build & push (full, amd64 only)
         uses: docker/build-push-action@v6
         with:
           context: .
           target: full
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
             ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}
             ghcr.io/pithecene-io/quarry:latest
