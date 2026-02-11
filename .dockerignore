@@ -1,0 +1,25 @@
+# Dependencies (rebuilt inside image)
+node_modules/
+
+# Build artifacts
+dist/
+.output/
+__coverage__/
+.example-runs/
+
+# Version control
+.git/
+.github/
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md
+
+# Editor / OS
+.vscode/
+.DS_Store
+
+# Environment
+.env
+.env.production
