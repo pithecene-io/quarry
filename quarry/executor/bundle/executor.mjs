@@ -2708,6 +2708,33 @@ var init_executor = __esm({
 init_executor();
 init_sink();
 import { unlinkSync } from "node:fs";
+
+// src/ipc/stdout-guard.ts
+var installed = false;
+function installStdoutGuard() {
+  if (installed) {
+    throw new Error("installStdoutGuard() must only be called once per process");
+  }
+  installed = true;
+  const origWrite = process.stdout.write.bind(process.stdout);
+  const ipcOutput = Object.create(process.stdout);
+  ipcOutput.write = origWrite;
+  process.stdout.write = ((chunk, encodingOrCallback, callback) => {
+    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
+    const preview = text.replace(/\n/g, "\\n").slice(0, 200);
+    process.stderr.write(`[quarry] stdout guard: intercepted stray write: ${preview}
+`);
+    if (typeof encodingOrCallback === "function") {
+      process.stderr.write(chunk, encodingOrCallback);
+    } else {
+      process.stderr.write(chunk, encodingOrCallback, callback);
+    }
+    return true;
+  });
+  return { ipcOutput };
+}
+
+// src/bin/executor.ts
 function fatalError(message) {
   process.stderr.write(`Error: ${message}
 `);
@@ -2874,6 +2901,7 @@ async function main() {
     process.stderr.write("Run metadata is read from stdin as JSON.\n");
     process.exit(3);
   }
+  const { ipcOutput } = installStdoutGuard();
   const scriptPath = args[0];
   let input;
   try {
@@ -2912,7 +2940,7 @@ async function main() {
     run,
     proxy,
     browserWSEndpoint,
-    output: process.stdout,
+    output: ipcOutput,
     puppeteerOptions: {
       // Headless by default for executor mode
       headless: true,

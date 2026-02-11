@@ -37,3 +37,4 @@ export {
   type TerminalType
 } from './observing-sink.js'
 export { drainStdout, StdioSink, StreamClosedError } from './sink.js'
+export { installStdoutGuard, type StdoutGuardResult } from './stdout-guard.js'
