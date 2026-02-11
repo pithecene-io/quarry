@@ -28,6 +28,18 @@ docker pull ghcr.io/pithecene-io/quarry:0.7.1
 docker pull ghcr.io/pithecene-io/quarry:0.7.1-slim
 ```
 
+### Docker
+
+```bash
+# Full image (includes Chromium + fonts)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1
+
+# Slim image (no browser — BYO Chromium via --browser-ws-endpoint)
+docker pull ghcr.io/pithecene-io/quarry:0.7.1-slim
+```
+
+See [docs/guides/container.md](docs/guides/container.md) for Docker Compose examples.
+
 ### SDK
 
 ```bash
