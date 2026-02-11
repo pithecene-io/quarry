@@ -27,6 +27,7 @@ import { unlinkSync } from 'node:fs'
 import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 import { drainStdout } from '../ipc/sink.js'
+import { installStdoutGuard } from '../ipc/stdout-guard.js'
 
 /**
  * Write an error message to stderr and exit with code 3 (invalid input).
@@ -294,6 +295,11 @@ async function main(): Promise<never> {
     process.exit(3)
   }
 
+  // Protect IPC channel from stray stdout writes by third-party code.
+  // Must be installed after browser-mode early returns (which legitimately
+  // write text to stdout) but before any IPC framing begins.
+  const { ipcOutput } = installStdoutGuard()
+
   const scriptPath = args[0]
 
   // Read and parse stdin
@@ -349,7 +355,7 @@ async function main(): Promise<never> {
     run,
     proxy,
     browserWSEndpoint,
-    output: process.stdout,
+    output: ipcOutput,
     puppeteerOptions: {
       // Headless by default for executor mode
       headless: true,
