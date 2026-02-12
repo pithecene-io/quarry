@@ -266,5 +266,56 @@ describe('StdioSink', () => {
       // Write should eventually complete
       await expect(writePromise).resolves.toBeUndefined()
     })
+
+    it('waits for drain on stream while writing via separate writeFn', async () => {
+      // Verifies the split contract: events (drain) are listened on `stream`,
+      // while actual bytes go through `writeFn`. This is the pattern the
+      // stdout guard relies on to avoid the drain deadlock.
+      const stream = new PassThrough({ highWaterMark: 16 })
+
+      const writeCalls: Buffer[] = []
+      const writeFn = (data: Buffer): boolean => {
+        writeCalls.push(data)
+        // Delegate to the real stream so drain fires on `stream`
+        return stream.write(data)
+      }
+
+      const sink = new StdioSink(stream, writeFn)
+
+      const largeEnvelope = makeEnvelope({
+        payload: { item_type: 'test', data: { padding: 'x'.repeat(100) } }
+      })
+
+      const writePromise = sink.writeEvent(largeEnvelope)
+
+      // Read data to trigger drain on stream
+      setImmediate(() => {
+        stream.read()
+        stream.resume()
+      })
+
+      await expect(writePromise).resolves.toBeUndefined()
+
+      // writeFn was called (not stream.write directly by StdioSink)
+      expect(writeCalls).toHaveLength(1)
+    })
+
+    it('cleans up listeners if writeFn throws synchronously', async () => {
+      const stream = new PassThrough({ highWaterMark: 16 })
+
+      const writeFn = (_data: Buffer): boolean => {
+        throw new Error('writeFn exploded')
+      }
+
+      const sink = new StdioSink(stream, writeFn)
+
+      await expect(sink.writeEvent(makeEnvelope())).rejects.toThrow('writeFn exploded')
+
+      // Listeners must be cleaned up — no accumulation on the stream
+      expect(stream.listenerCount('error')).toBe(0)
+      expect(stream.listenerCount('close')).toBe(0)
+      expect(stream.listenerCount('finish')).toBe(0)
+      expect(stream.listenerCount('drain')).toBe(0)
+    })
   })
 })

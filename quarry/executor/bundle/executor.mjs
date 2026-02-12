@@ -2202,7 +2202,14 @@ function writeWithBackpressure(stream, data, writeFn) {
     stream.on("error", onError);
     stream.on("close", onClose);
     stream.on("finish", onFinish);
-    const canContinue = writeFn(data);
+    let canContinue;
+    try {
+      canContinue = writeFn(data);
+    } catch (err) {
+      cleanup();
+      reject(err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
     if (canContinue) {
       setImmediate(() => settle(() => resolve3()));
     } else {

@@ -91,7 +91,17 @@ function writeWithBackpressure(
     stream.on('close', onClose)
     stream.on('finish', onFinish)
 
-    const canContinue = writeFn(data)
+    let canContinue: boolean
+    try {
+      canContinue = writeFn(data)
+    } catch (err) {
+      // writeFn threw synchronously — clean up listeners to prevent leaks.
+      // The Promise constructor would catch this, but cleanup() would never
+      // run because settle() is only called by event handlers.
+      cleanup()
+      reject(err instanceof Error ? err : new Error(String(err)))
+      return
+    }
 
     if (canContinue) {
       // Buffer accepted, resolve on next tick to ensure
