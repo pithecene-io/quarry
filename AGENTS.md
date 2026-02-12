@@ -44,6 +44,14 @@ If scope feels ambiguous or expanding, **pause and ask**.
   - ingestion vs persistence
   - policy vs mechanism
 
+## Stream & EventEmitter Discipline
+
+- **Never** use `Object.create()` or prototype delegation on `EventEmitter` instances or Node.js streams.
+  Prototype-chained `_events` diverge silently after listener cleanup cycles, breaking event delivery.
+- Compose (separate objects for separate concerns) instead of delegating via prototype.
+- If a stream's `.write()` must be intercepted, pass the original write function separately — do not create proxy objects.
+- Every IPC integration test must have an explicit timeout. A test that hangs is a deadlock, not a slow test.
+
 ## Proxy Discipline
 
 - Proxy selection is runtime-owned; executor only applies resolved endpoints.

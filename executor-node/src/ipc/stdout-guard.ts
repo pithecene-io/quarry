@@ -15,8 +15,10 @@
 import type { Writable } from 'node:stream'
 
 export type StdoutGuardResult = {
-  /** Stream whose .write() sends data through the real stdout fd. */
+  /** The real stdout stream for event listening and state inspection. */
   readonly ipcOutput: Writable
+  /** Original stdout.write, bypasses the guard patch for IPC frame data. */
+  readonly ipcWrite: (data: Buffer) => boolean
 }
 
 let installed = false
@@ -25,12 +27,15 @@ let installed = false
  * Install the stdout guard. Must be called exactly once per process.
  *
  * After this call:
- * - `ipcOutput.write(data)` → real stdout (binary IPC)
+ * - `ipcWrite(data)` → real stdout (binary IPC frames)
  * - `process.stdout.write(text)` → redirected to stderr with warning
  *
- * The returned `ipcOutput` inherits stream state and events from
- * process.stdout via prototype, so backpressure (`drain`), lifecycle
- * (`destroyed`, `writableEnded`), and event listeners all work correctly.
+ * Returns the real `process.stdout` stream (for event listening and state
+ * inspection) and the original write function (for IPC frame data). The
+ * stream and write function are separated because `process.stdout.write`
+ * is patched to intercept stray writes — IPC code must bypass the patch
+ * via `ipcWrite` while still listening for backpressure events (`drain`,
+ * `error`, etc.) on the real stream.
  *
  * @throws Error if called more than once (would capture the patched
  *   redirector instead of the real write, corrupting the IPC channel)
@@ -42,10 +47,6 @@ export function installStdoutGuard(): StdoutGuardResult {
   installed = true
 
   const origWrite = process.stdout.write.bind(process.stdout)
-
-  // Prototype-based proxy: inherits stream state + EventEmitter from real stdout
-  const ipcOutput = Object.create(process.stdout) as Writable
-  ipcOutput.write = origWrite
 
   // Patch process.stdout.write to redirect stray writes to stderr.
   // Always returns true: stray callers do not own backpressure on this
@@ -70,7 +71,10 @@ export function installStdoutGuard(): StdoutGuardResult {
     return true
   }) as typeof process.stdout.write
 
-  return { ipcOutput }
+  return {
+    ipcOutput: process.stdout,
+    ipcWrite: (data: Buffer) => origWrite(data)
+  }
 }
 
 /**

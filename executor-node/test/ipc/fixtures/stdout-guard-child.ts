@@ -1,9 +1,10 @@
 /**
  * Child process fixture for stdout-guard integration test.
  *
- * Installs the stdout guard, writes IPC frames via ipcOutput, injects a stray
- * stdout write (simulating third-party code), writes another IPC frame, drains
- * stdout, and exits. The parent test verifies:
+ * Installs the stdout guard, writes IPC frames via StdioSink (using ipcWrite
+ * to bypass the patched process.stdout.write), injects a stray stdout write
+ * (simulating third-party code), writes another IPC frame, drains stdout, and
+ * exits. The parent test verifies:
  * - stdout contains exactly 2 clean IPC frames (no stray text)
  * - stderr contains the stray text + guard warning
  */
@@ -11,8 +12,8 @@ import type { EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { StdioSink } from '../../../src/ipc/sink.js'
 import { installStdoutGuard } from '../../../src/ipc/stdout-guard.js'
 
-const { ipcOutput } = installStdoutGuard()
-const sink = new StdioSink(ipcOutput)
+const { ipcOutput, ipcWrite } = installStdoutGuard()
+const sink = new StdioSink(ipcOutput, ipcWrite)
 
 // First IPC frame
 await sink.writeEvent({

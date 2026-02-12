@@ -298,7 +298,7 @@ async function main(): Promise<never> {
   // Protect IPC channel from stray stdout writes by third-party code.
   // Must be installed after browser-mode early returns (which legitimately
   // write text to stdout) but before any IPC framing begins.
-  const { ipcOutput } = installStdoutGuard()
+  const { ipcOutput, ipcWrite } = installStdoutGuard()
 
   const scriptPath = args[0]
 
@@ -356,6 +356,7 @@ async function main(): Promise<never> {
     proxy,
     browserWSEndpoint,
     output: ipcOutput,
+    outputWrite: ipcWrite,
     puppeteerOptions: {
       // Headless by default for executor mode
       headless: true,
