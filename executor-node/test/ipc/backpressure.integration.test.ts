@@ -97,6 +97,13 @@ function runFixture(): Promise<{ stdout: Buffer; stderr: string; exitCode: numbe
         stdoutEnded = true
         tryResolve()
       })
+      // Guard against missed 'end': if stdout already ended before we
+      // attached the listener (possible when exit fires late), the 'end'
+      // event won't re-emit and stdoutEnded would never flip.
+      if (child.stdout!.readableEnded) {
+        stdoutEnded = true
+        tryResolve()
+      }
     }
 
     const tryResolve = (): void => {
