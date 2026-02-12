@@ -2172,7 +2172,7 @@ var init_frame = __esm({
 });
 
 // src/ipc/sink.ts
-function writeWithBackpressure(stream, data) {
+function writeWithBackpressure(stream, data, writeFn) {
   return new Promise((resolve3, reject) => {
     if (stream.destroyed) {
       reject(new StreamClosedError("destroyed"));
@@ -2202,7 +2202,7 @@ function writeWithBackpressure(stream, data) {
     stream.on("error", onError);
     stream.on("close", onClose);
     stream.on("finish", onFinish);
-    const canContinue = stream.write(data);
+    const canContinue = writeFn(data);
     if (canContinue) {
       setImmediate(() => settle(() => resolve3()));
     } else {
@@ -2242,16 +2242,25 @@ var init_sink = __esm({
       }
     };
     StdioSink = class {
-      constructor(output) {
+      /**
+       * @param output - The writable stream (used for state checks and event listening)
+       * @param writeFn - Optional function for actual writes. When omitted, defaults to
+       *   `output.write()`. When provided, allows the caller to bypass a patched
+       *   `output.write` (e.g. the stdout guard) while still using `output` for
+       *   backpressure events and stream state.
+       */
+      constructor(output, writeFn) {
         this.output = output;
+        this.writeFn = writeFn ?? ((data) => output.write(data));
       }
+      writeFn;
       /**
        * Write an event envelope as a framed message.
        * Blocks on backpressure per CONTRACT_IPC.md.
        */
       async writeEvent(envelope) {
         const frame = encodeEventFrame(envelope);
-        await writeWithBackpressure(this.output, frame);
+        await writeWithBackpressure(this.output, frame, this.writeFn);
       }
       /**
        * Write artifact binary data as chunked frames.
@@ -2260,7 +2269,7 @@ var init_sink = __esm({
        */
       async writeArtifactData(artifactId, data) {
         for (const frame of encodeArtifactChunks(artifactId, data)) {
-          await writeWithBackpressure(this.output, frame);
+          await writeWithBackpressure(this.output, frame, this.writeFn);
         }
       }
       /**
@@ -2273,7 +2282,7 @@ var init_sink = __esm({
        */
       async writeRunResult(outcome, proxyUsed) {
         const frame = encodeRunResultFrame(outcome, proxyUsed);
-        await writeWithBackpressure(this.output, frame);
+        await writeWithBackpressure(this.output, frame, this.writeFn);
       }
       /**
        * Write a sidecar file via file_write frame.
@@ -2286,7 +2295,7 @@ var init_sink = __esm({
        */
       async writeFile(filename, contentType, data) {
         const frame = encodeFileWriteFrame(filename, contentType, data);
-        await writeWithBackpressure(this.output, frame);
+        await writeWithBackpressure(this.output, frame, this.writeFn);
       }
     };
   }
@@ -2531,7 +2540,7 @@ function redactProxy(proxy) {
 }
 async function execute(config) {
   const output = config.output ?? process.stdout;
-  const stdioSink = new StdioSink(output);
+  const stdioSink = new StdioSink(output, config.outputWrite);
   const sink = new ObservingSink(stdioSink);
   let browser = null;
   let browserContext = null;
@@ -2717,8 +2726,6 @@ function installStdoutGuard() {
   }
   installed = true;
   const origWrite = process.stdout.write.bind(process.stdout);
-  const ipcOutput = Object.create(process.stdout);
-  ipcOutput.write = origWrite;
   process.stdout.write = ((chunk, encodingOrCallback, callback) => {
     const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
     const preview = text.replace(/\n/g, "\\n").slice(0, 200);
@@ -2731,7 +2738,10 @@ function installStdoutGuard() {
     }
     return true;
   });
-  return { ipcOutput };
+  return {
+    ipcOutput: process.stdout,
+    ipcWrite: (data) => origWrite(data)
+  };
 }
 
 // src/bin/executor.ts
@@ -2901,7 +2911,7 @@ async function main() {
     process.stderr.write("Run metadata is read from stdin as JSON.\n");
     process.exit(3);
   }
-  const { ipcOutput } = installStdoutGuard();
+  const { ipcOutput, ipcWrite } = installStdoutGuard();
   const scriptPath = args[0];
   let input;
   try {
@@ -2941,6 +2951,7 @@ async function main() {
     proxy,
     browserWSEndpoint,
     output: ipcOutput,
+    outputWrite: ipcWrite,
     puppeteerOptions: {
       // Headless by default for executor mode
       headless: true,

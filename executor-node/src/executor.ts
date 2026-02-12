@@ -211,6 +211,10 @@ export interface ExecutorConfig<Job = unknown> {
   readonly run: RunMeta
   /** Output stream for IPC frames (defaults to process.stdout) */
   readonly output?: Writable
+  /** Write function for IPC frame data. When provided, bypasses `output.write()`
+   *  so the stdout guard patch is not hit, while `output` is still used for
+   *  backpressure events and stream state. */
+  readonly outputWrite?: (data: Buffer) => boolean
   /** Puppeteer launch options */
   readonly puppeteerOptions?: LaunchOptions
   /** Optional resolved proxy endpoint per CONTRACT_PROXY.md */
@@ -430,7 +434,7 @@ function redactProxy(proxy: ProxyEndpoint): ProxyEndpointRedactedFrame {
  */
 export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promise<ExecutorResult> {
   const output = config.output ?? process.stdout
-  const stdioSink = new StdioSink(output)
+  const stdioSink = new StdioSink(output, config.outputWrite)
   const sink = new ObservingSink(stdioSink)
 
   let browser: Browser | null = null

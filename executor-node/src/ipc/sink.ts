@@ -40,13 +40,20 @@ export class StreamClosedError extends Error {
  * Write a buffer to a stream with backpressure handling.
  * Resolves only from a single code path to avoid double-resolution.
  *
- * @param stream - The writable stream
+ * @param stream - The writable stream (used for state checks and event listening)
  * @param data - The data to write
+ * @param writeFn - Function that performs the actual write, returning false on backpressure.
+ *   Separated from `stream` so callers can bypass a patched `stream.write`
+ *   (e.g. the stdout guard) while still listening for drain events on the real stream.
  * @returns Promise that resolves when data is accepted by the stream
  * @throws StreamClosedError if the stream is closed/finished
  * @throws Error if the stream emits an error
  */
-function writeWithBackpressure(stream: Writable, data: Buffer): Promise<void> {
+function writeWithBackpressure(
+  stream: Writable,
+  data: Buffer,
+  writeFn: (data: Buffer) => boolean
+): Promise<void> {
   return new Promise((resolve, reject) => {
     // Pre-check stream state
     if (stream.destroyed) {
@@ -84,7 +91,7 @@ function writeWithBackpressure(stream: Writable, data: Buffer): Promise<void> {
     stream.on('close', onClose)
     stream.on('finish', onFinish)
 
-    const canContinue = stream.write(data)
+    const canContinue = writeFn(data)
 
     if (canContinue) {
       // Buffer accepted, resolve on next tick to ensure
@@ -135,7 +142,21 @@ export function drainStdout(): Promise<void> {
  * - Writes block on backpressure
  */
 export class StdioSink implements EmitSink {
-  constructor(private readonly output: Writable) {}
+  private readonly writeFn: (data: Buffer) => boolean
+
+  /**
+   * @param output - The writable stream (used for state checks and event listening)
+   * @param writeFn - Optional function for actual writes. When omitted, defaults to
+   *   `output.write()`. When provided, allows the caller to bypass a patched
+   *   `output.write` (e.g. the stdout guard) while still using `output` for
+   *   backpressure events and stream state.
+   */
+  constructor(
+    private readonly output: Writable,
+    writeFn?: (data: Buffer) => boolean
+  ) {
+    this.writeFn = writeFn ?? ((data) => output.write(data))
+  }
 
   /**
    * Write an event envelope as a framed message.
@@ -143,7 +164,7 @@ export class StdioSink implements EmitSink {
    */
   async writeEvent(envelope: EventEnvelope): Promise<void> {
     const frame = encodeEventFrame(envelope)
-    await writeWithBackpressure(this.output, frame)
+    await writeWithBackpressure(this.output, frame, this.writeFn)
   }
 
   /**
@@ -153,7 +174,7 @@ export class StdioSink implements EmitSink {
    */
   async writeArtifactData(artifactId: ArtifactId, data: Buffer | Uint8Array): Promise<void> {
     for (const frame of encodeArtifactChunks(artifactId, data)) {
-      await writeWithBackpressure(this.output, frame)
+      await writeWithBackpressure(this.output, frame, this.writeFn)
     }
   }
 
@@ -170,7 +191,7 @@ export class StdioSink implements EmitSink {
     proxyUsed?: ProxyEndpointRedactedFrame
   ): Promise<void> {
     const frame = encodeRunResultFrame(outcome, proxyUsed)
-    await writeWithBackpressure(this.output, frame)
+    await writeWithBackpressure(this.output, frame, this.writeFn)
   }
 
   /**
@@ -184,6 +205,6 @@ export class StdioSink implements EmitSink {
    */
   async writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void> {
     const frame = encodeFileWriteFrame(filename, contentType, data)
-    await writeWithBackpressure(this.output, frame)
+    await writeWithBackpressure(this.output, frame, this.writeFn)
   }
 }

@@ -2,9 +2,9 @@
  * Unit tests for the stdout guard.
  *
  * These tests verify that installStdoutGuard() correctly:
- * - Returns an ipcOutput whose .write() calls the original stdout.write
+ * - Returns ipcWrite that calls the original stdout.write
+ * - Returns ipcOutput that IS process.stdout (for event listening)
  * - Patches process.stdout.write to redirect to stderr with a warning
- * - Preserves stream property access via prototype delegation
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installStdoutGuard, resetStdoutGuardForTest } from '../../src/ipc/stdout-guard.js'
@@ -22,18 +22,27 @@ describe('installStdoutGuard', () => {
     resetStdoutGuardForTest()
   })
 
-  it('ipcOutput.write sends data through the original stdout.write', () => {
+  it('ipcWrite sends data through the original stdout.write', () => {
     const writeSpy = vi.fn<typeof process.stdout.write>().mockReturnValue(true)
     process.stdout.write = writeSpy
 
-    const { ipcOutput } = installStdoutGuard()
+    const { ipcWrite } = installStdoutGuard()
 
     const data = Buffer.from([0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04])
-    ipcOutput.write(data)
+    ipcWrite(data)
 
-    // The spy captured the original write binding, so ipcOutput.write should
+    // The spy captured the original write binding, so ipcWrite should
     // call the write function that was current at install time
     expect(writeSpy).toHaveBeenCalledWith(data)
+  })
+
+  it('ipcOutput is the real process.stdout', () => {
+    const { ipcOutput } = installStdoutGuard()
+
+    // ipcOutput must be the real stream — no proxy, no Object.create.
+    // This ensures event listeners (drain, error, etc.) registered on
+    // ipcOutput fire when the underlying stream emits them.
+    expect(ipcOutput).toBe(process.stdout)
   })
 
   it('process.stdout.write redirects to stderr after guard is installed', () => {
@@ -86,23 +95,15 @@ describe('installStdoutGuard', () => {
     stderrSpy.mockRestore()
   })
 
-  it('ipcOutput inherits stream properties via prototype', () => {
+  it('ipcOutput exposes stream properties for state inspection', () => {
     const { ipcOutput } = installStdoutGuard()
 
-    // These should be accessible via prototype chain to real process.stdout
     expect(typeof ipcOutput.destroyed).toBe('boolean')
     expect(typeof ipcOutput.writableEnded).toBe('boolean')
     expect(typeof ipcOutput.writableFinished).toBe('boolean')
     expect(typeof ipcOutput.on).toBe('function')
     expect(typeof ipcOutput.off).toBe('function')
     expect(typeof ipcOutput.end).toBe('function')
-  })
-
-  it('ipcOutput.write is an own property, not inherited', () => {
-    const { ipcOutput } = installStdoutGuard()
-
-    // write should be an own property (the bound original)
-    expect(Object.prototype.hasOwnProperty.call(ipcOutput, 'write')).toBe(true)
   })
 
   it('process.stdout.write passes through encoding parameter', () => {

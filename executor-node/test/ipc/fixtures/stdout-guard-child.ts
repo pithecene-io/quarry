@@ -11,8 +11,8 @@ import type { EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { StdioSink } from '../../../src/ipc/sink.js'
 import { installStdoutGuard } from '../../../src/ipc/stdout-guard.js'
 
-const { ipcOutput } = installStdoutGuard()
-const sink = new StdioSink(ipcOutput)
+const { ipcOutput, ipcWrite } = installStdoutGuard()
+const sink = new StdioSink(ipcOutput, ipcWrite)
 
 // First IPC frame
 await sink.writeEvent({
