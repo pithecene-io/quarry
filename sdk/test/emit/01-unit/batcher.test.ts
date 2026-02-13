@@ -7,8 +7,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createBatcher } from '../../../src/batcher'
 import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
-import { createRunMeta, FakeSink } from '../_harness'
 import type { EnqueuePayload } from '../../../src/types/events'
+import { createRunMeta, FakeSink } from '../_harness'
 
 describe('createBatcher', () => {
   let sink: FakeSink
