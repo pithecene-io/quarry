@@ -1,5 +1,8 @@
 // Event types (from sdk/src/types/events.ts)
 
+// Batcher utility (public — userspace batching for fan-out)
+export type { Batcher, BatcherOptions } from './batcher'
+export { createBatcher } from './batcher'
 export type { CreateContextOptions } from './context'
 export { createContext } from './context'
 // Emit types
