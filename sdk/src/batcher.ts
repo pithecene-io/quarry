@@ -4,7 +4,7 @@ import type { EmitAPI } from './emit'
  * Options for creating a batcher.
  */
 export type BatcherOptions = {
-  /** Items per batch before auto-flush (>= 1) */
+  /** Items per batch before auto-flush (positive integer) */
   readonly size: number
   /** Target for all enqueue events */
   readonly target: string
@@ -43,8 +43,8 @@ export function createBatcher<T = Record<string, unknown>>(
   emit: Pick<EmitAPI, 'enqueue'>,
   options: BatcherOptions
 ): Batcher<T> {
-  if (!Number.isFinite(options.size) || options.size < 1) {
-    throw new RangeError(`Batcher size must be a finite number >= 1, got ${options.size}`)
+  if (!Number.isInteger(options.size) || options.size < 1) {
+    throw new RangeError(`Batcher size must be a positive integer, got ${options.size}`)
   }
 
   const buffer: T[] = []

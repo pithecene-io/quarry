@@ -384,6 +384,13 @@ describe('createBatcher', () => {
 
       expect(() => createBatcher(emit, { size: -Infinity, target: 'worker' })).toThrow(RangeError)
     })
+
+    it('fractional size > 1 throws RangeError', () => {
+      const emit = createEmitAPI(run, sink)
+
+      expect(() => createBatcher(emit, { size: 1.5, target: 'worker' })).toThrow(RangeError)
+      expect(() => createBatcher(emit, { size: 2.7, target: 'worker' })).toThrow(RangeError)
+    })
   })
 
   // ── Realistic usage ──────────────────────────────────────────────
