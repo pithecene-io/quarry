@@ -200,6 +200,33 @@ await ctx.emit.enqueue({
 await ctx.emit.rotateProxy({ reason: "rate limited" });
 ```
 
+### Batching Enqueue Calls
+
+For high fan-out workloads that discover hundreds or thousands of items,
+`createBatcher` groups items into fewer, larger enqueue events — reducing
+child run count and scheduling overhead.
+
+```typescript
+import { createBatcher } from "@pithecene-io/quarry-sdk";
+
+export default async function run(ctx: QuarryContext): Promise<void> {
+  const batcher = createBatcher(ctx.emit, {
+    size: 50,          // items per batch
+    target: "detail.ts",
+  });
+
+  for (const url of discoveredUrls) {
+    await batcher.add({ url });  // auto-flushes every 50 items
+  }
+  await batcher.flush();          // emit any remaining items
+}
+```
+
+- `size` must be a positive integer (throws `RangeError` otherwise)
+- Each flush emits a single `enqueue` event with `params: { items: T[] }`
+- Call `flush()` before `runComplete()` — items buffered after a terminal event are lost
+- Optional `source` and `category` in options override partition keys for all batched enqueue events
+
 ### Storage API
 
 `storage.put()` writes sidecar files directly to addressable storage paths,

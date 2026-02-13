@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- **SDK**: `createBatcher` utility for batching `emit.enqueue()` calls — accumulates items and emits fewer, larger enqueue events with `params.items`, reducing child run count for high fan-out workloads (#170)
+
+### Changed
+
+- **Container**: Go module layer split and multi-stage cache mounts for faster image builds (#167)
+- **CI**: Container build added to release dry-run workflow (#168)
 
 ---
 

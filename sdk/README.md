@@ -102,6 +102,31 @@ Sidecar file upload interface available via `ctx.storage`.
 Files land under the run's `files/` prefix. Use `emit.artifact()` for larger
 payloads or when chunk-level progress tracking is needed.
 
+### createBatcher
+
+Accumulates items and emits batched enqueue events, reducing child run count
+for high fan-out workloads.
+
+```typescript
+import { createBatcher } from '@pithecene-io/quarry-sdk'
+
+const batcher = createBatcher<{ url: string }>(ctx.emit, {
+  size: 50,
+  target: 'detail.ts',
+})
+
+await batcher.add({ url })   // auto-flushes every 50 items
+await batcher.flush()         // emit remaining items
+console.log(batcher.pending)  // 0
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `size` | `number` | Items per batch (positive integer, required) |
+| `target` | `string` | Enqueue target script (required) |
+| `source` | `string?` | Partition override |
+| `category` | `string?` | Partition override |
+
 ### Lifecycle Hooks
 
 Export these from your script module for lifecycle control:
