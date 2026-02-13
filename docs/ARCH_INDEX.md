@@ -67,17 +67,7 @@ Node-based executor implementation and IPC boundary.
 
 - `executor.ts` — core executor logic
 - `bin/executor.ts` — CLI entrypoint
-- `loader.ts` — runtime/bootstrap concerns
-- `index.ts` — package entrypoint
-
-#### executor-node/src/ipc/
-
-IPC implementation details for the executor side.
-
-- `frame.ts` — low-level frame encoding/decoding
-- `sink.ts` — IPC sink abstraction
-- `observing-sink.ts` — instrumentation/observation wrapper
-- `index.ts` — local entrypoint
+- `ipc/` — IPC framing, sink abstraction, and instrumentation
 
 ### executor-node/test/
 
@@ -93,14 +83,9 @@ Defines **stable APIs** for emitting events, artifacts, and lifecycle signals.
 ### sdk/src/
 
 - `emit.ts` — public emit API
-- `emit-impl.ts` — internal implementation
 - `context.ts` — execution context model
 - `hooks.ts` — lifecycle hooks
-- `index.ts` — SDK public entrypoint
-
-#### sdk/src/types/
-
-Shared domain types exposed by the SDK.
+- `types/` — shared domain types exposed by the SDK
 
 ### sdk/test/
 

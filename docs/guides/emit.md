@@ -66,6 +66,29 @@ When `quarry run` is invoked with `--depth <n>` (where n > 0), the runtime
 Without `--depth`, enqueue remains purely advisory. The emit contract is
 unchanged; the runtime's interpretation depends on CLI flags.
 
+### Batching for High Fan-Out
+
+When a script discovers hundreds or thousands of items, emitting one enqueue
+per item creates an equal number of child runs. `createBatcher` groups items
+into fewer, larger enqueue events:
+
+```typescript
+import { createBatcher } from "@pithecene-io/quarry-sdk";
+
+const batcher = createBatcher(ctx.emit, {
+  size: 50,
+  target: "process-batch.ts",
+});
+
+for (const url of discoveredUrls) {
+  await batcher.add({ url });  // auto-flushes every 50 items
+}
+await batcher.flush();          // emit remaining partial batch
+```
+
+Each flush emits a single enqueue event. The child script receives
+`{ items: T[] }` as its job payload.
+
 ---
 
 ## Convenience Log Methods
