@@ -16,7 +16,7 @@ import (
 // benchEnvelope returns a realistic event envelope for benchmarks.
 func benchEnvelope(seq int64) *types.EventEnvelope {
 	return &types.EventEnvelope{
-		ContractVersion: "0.7.2",
+		ContractVersion: "0.7.3",
 		EventID:         fmt.Sprintf("evt-%d", seq),
 		RunID:           "bench-run-001",
 		Seq:             seq,
@@ -232,7 +232,7 @@ func BenchmarkBufferedPolicy_DropPressure(b *testing.B) {
 
 	// Droppable event that will be dropped on each iteration
 	droppable := &types.EventEnvelope{
-		ContractVersion: "0.7.2",
+		ContractVersion: "0.7.3",
 		EventID:         "drop-001",
 		RunID:           "bench-run-001",
 		Seq:             100,
