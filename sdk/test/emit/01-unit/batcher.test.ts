@@ -302,7 +302,7 @@ describe('createBatcher', () => {
       await batcher.add({ id: 1 })
       await expect(batcher.flush()).rejects.toThrow('boom')
 
-      // Items lost, buffer cleared; new add + flush hits SinkFailedError
+      // Failed batch is lost (fail-fast: sink is poisoned, items undeliverable)
       await batcher.add({ id: 2 })
       await expect(batcher.flush()).rejects.toThrow(SinkFailedError)
     })
@@ -365,6 +365,24 @@ describe('createBatcher', () => {
       const emit = createEmitAPI(run, sink)
 
       expect(() => createBatcher(emit, { size: 0.5, target: 'worker' })).toThrow(RangeError)
+    })
+
+    it('NaN size throws RangeError', () => {
+      const emit = createEmitAPI(run, sink)
+
+      expect(() => createBatcher(emit, { size: NaN, target: 'worker' })).toThrow(RangeError)
+    })
+
+    it('Infinity size throws RangeError', () => {
+      const emit = createEmitAPI(run, sink)
+
+      expect(() => createBatcher(emit, { size: Infinity, target: 'worker' })).toThrow(RangeError)
+    })
+
+    it('-Infinity size throws RangeError', () => {
+      const emit = createEmitAPI(run, sink)
+
+      expect(() => createBatcher(emit, { size: -Infinity, target: 'worker' })).toThrow(RangeError)
     })
   })
 

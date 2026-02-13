@@ -21,7 +21,13 @@ export type BatcherOptions = {
 export type Batcher<T = Record<string, unknown>> = {
   /** Accumulate an item; auto-flushes when buffer reaches configured size. */
   readonly add: (item: T) => Promise<void>
-  /** Emit any buffered items as a single enqueue event. No-op if empty. */
+  /**
+   * Emit any buffered items as a single enqueue event. No-op if empty.
+   *
+   * On failure, buffered items are lost. This is consistent with emit's
+   * fail-fast semantics — after a sink failure the emit chain is poisoned
+   * and items can never be delivered.
+   */
   readonly flush: () => Promise<void>
   /** Number of unflushed items currently buffered. */
   readonly pending: number
@@ -37,8 +43,8 @@ export function createBatcher<T = Record<string, unknown>>(
   emit: Pick<EmitAPI, 'enqueue'>,
   options: BatcherOptions
 ): Batcher<T> {
-  if (options.size < 1) {
-    throw new RangeError(`Batcher size must be >= 1, got ${options.size}`)
+  if (!Number.isFinite(options.size) || options.size < 1) {
+    throw new RangeError(`Batcher size must be a finite number >= 1, got ${options.size}`)
   }
 
   const buffer: T[] = []
