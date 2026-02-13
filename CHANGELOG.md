@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+---
+
+## [0.8.0] - 2026-02-13
+
 ### Added
 
 - **SDK**: `createBatcher` utility for batching `emit.enqueue()` calls — accumulates items and emits fewer, larger enqueue events with `params.items`, reducing child run count for high fan-out workloads (#170)
@@ -417,6 +423,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.8.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.8.0
 [0.7.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.3
 [0.7.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.2
 [0.7.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.1
