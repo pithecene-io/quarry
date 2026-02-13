@@ -39,7 +39,13 @@ func (s *FailingStore) Put(_ context.Context, path string, _ io.Reader) error {
 }
 
 func (s *FailingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
-	return nil, s.GetErr
+	if s.GetErr != nil {
+		return nil, s.GetErr
+	}
+	// FailingStore never stores data; return not-found so callers
+	// (e.g. Lode's readLatestPointer) handle the absence gracefully
+	// instead of receiving a nil reader with a nil error.
+	return nil, os.ErrNotExist
 }
 
 func (s *FailingStore) Exists(_ context.Context, _ string) (bool, error) {

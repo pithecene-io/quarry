@@ -13,6 +13,23 @@ _No unreleased changes._
 
 ---
 
+## [0.7.3] - 2026-02-12
+
+### Changed
+
+- **Lode**: Upgrade Lode storage library to v0.7.3
+
+### Fixed
+
+- **IPC**: Eliminate stdout guard proxy to fix drain deadlock — `Object.create(process.stdout)` caused `_events` divergence after listener cleanup, silently breaking drain delivery and hanging the executor under backpressure; replaced with split contract (separate stream + writeFn) (#164)
+
+### Added
+
+- **IPC**: Backpressure integration test that deterministically proves drain path is exercised — spawns child, withholds parent reads until pipe fills, asserts `backpressure_events > 0` (#164)
+- **AGENTS.md**: Stream & EventEmitter discipline guardrail — bans `Object.create()` on EventEmitter instances, requires composition over prototype delegation (#164)
+
+---
+
 ## [0.7.2] - 2026-02-11
 
 ### Changed
@@ -393,6 +410,7 @@ _No unreleased changes._
 
 ---
 
+[0.7.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.3
 [0.7.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.2
 [0.7.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.1
 [0.7.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.0

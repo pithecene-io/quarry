@@ -51,7 +51,7 @@ const FRAME_COUNT = 50
 
 for (let i = 1; i <= FRAME_COUNT; i++) {
   await sink.writeEvent({
-    contract_version: '0.7.2',
+    contract_version: '0.7.3',
     event_id: `evt-${i}` as EventId,
     run_id: 'run-bp-test' as RunId,
     seq: i,
@@ -67,7 +67,7 @@ process.stdout.write('stray write during backpressure\n')
 
 // Terminal event
 await sink.writeEvent({
-  contract_version: '0.7.2',
+  contract_version: '0.7.3',
   event_id: `evt-${FRAME_COUNT + 1}` as EventId,
   run_id: 'run-bp-test' as RunId,
   seq: FRAME_COUNT + 1,
