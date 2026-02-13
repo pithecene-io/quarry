@@ -34,7 +34,12 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 RUN pnpm install --frozen-lockfile
 
-# Layer 2: source code
+# Layer 2: Go module download (cacheable separately from source)
+COPY quarry/go.mod quarry/go.sum quarry/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd quarry && go mod download
+
+# Layer 3: source code
 COPY sdk/ sdk/
 COPY executor-node/ executor-node/
 COPY quarry/ quarry/
@@ -45,7 +50,9 @@ RUN pnpm -C sdk run build \
   && pnpm -C executor-node run bundle
 
 WORKDIR /src/quarry
-RUN CGO_ENABLED=0 go build -o /usr/local/bin/quarry ./cmd/quarry
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /usr/local/bin/quarry ./cmd/quarry
 
 # =============================================================================
 # Stage 2: deps — install runtime Node.js dependencies
