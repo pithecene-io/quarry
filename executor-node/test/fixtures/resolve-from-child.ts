@@ -1,23 +1,23 @@
 /**
  * Child process fixture for resolve-from integration test.
  *
- * Exercises the ESM resolve hook end-to-end:
+ * Exercises the ESM resolve hook end-to-end using the production
+ * registerResolveFromHook function (not a copy):
  * 1. Reads QUARRY_RESOLVE_FROM from env (set by parent test)
- * 2. Registers the same hook code used in bin/executor.ts
+ * 2. Calls registerResolveFromHook() — same code path as bin/executor.ts
  * 3. Dynamically imports a bare specifier ("@test/greet") that only
  *    exists under the QUARRY_RESOLVE_FROM directory
  * 4. Writes the resolved value to stdout
  *
  * The parent test creates the fake package, spawns this fixture, and
- * asserts that the import succeeds and the fallback message appears
- * on stderr.
+ * asserts that the import succeeds and uses ESM import conditions.
  *
  * Exit codes:
  *   0 = import succeeded via fallback
  *   1 = import failed (hook didn't work)
  *   2 = QUARRY_RESOLVE_FROM not set
  */
-import { register } from 'node:module'
+import { registerResolveFromHook } from '../../src/resolve-from.js'
 
 const resolveFrom = process.env.QUARRY_RESOLVE_FROM
 if (!resolveFrom) {
@@ -25,42 +25,8 @@ if (!resolveFrom) {
   process.exit(2)
 }
 
-// Register the same hook used in bin/executor.ts
-const hookCode = `
-  import { pathToFileURL } from 'node:url';
-
-  let fallbackParentURL;
-
-  export function initialize(data) {
-    fallbackParentURL = pathToFileURL(data.resolveFrom + '/noop.js').href;
-  }
-
-  export async function resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
-      return nextResolve(specifier, context);
-    }
-
-    try {
-      return await nextResolve(specifier, context);
-    } catch (defaultErr) {
-      try {
-        const result = await nextResolve(specifier, {
-          ...context,
-          parentURL: fallbackParentURL,
-        });
-        process.stderr.write(
-          'quarry: resolved "' + specifier + '" via --resolve-from fallback\\n'
-        );
-        return result;
-      } catch {
-        throw defaultErr;
-      }
-    }
-  }
-`
-
-const hookUrl = `data:text/javascript;base64,${Buffer.from(hookCode).toString('base64')}`
-register(hookUrl, { data: { resolveFrom } })
+// Register the production hook — same call as bin/executor.ts
+await registerResolveFromHook(resolveFrom)
 
 // Now try to import a bare specifier that only exists in QUARRY_RESOLVE_FROM
 try {

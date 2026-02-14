@@ -10,8 +10,9 @@
  * - Without QUARRY_RESOLVE_FROM, the import fails (control case)
  */
 import { type ChildProcess, spawn } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -19,12 +20,12 @@ const testDir = dirname(fileURLToPath(import.meta.url))
 const fixturePath = resolve(testDir, 'fixtures/resolve-from-child.ts')
 const tsxBin = resolve(testDir, '../../node_modules/.bin/tsx')
 
-/** Temp directory for the fake node_modules tree. */
+/** Temp directory for the fake node_modules tree (unique per run). */
 let tmpDir: string
 
 beforeAll(() => {
-  // Create a temporary directory with a fake scoped package
-  tmpDir = join(testDir, '.tmp-resolve-from-test')
+  // Create a unique temporary directory to avoid cross-run interference
+  tmpDir = mkdtempSync(join(tmpdir(), 'quarry-resolve-from-test-'))
   const pkgDir = join(tmpDir, 'node_modules', '@test', 'greet')
   mkdirSync(pkgDir, { recursive: true })
 
