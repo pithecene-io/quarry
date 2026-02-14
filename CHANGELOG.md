@@ -13,6 +13,22 @@ _No unreleased changes._
 
 ---
 
+## [0.9.0] - 2026-02-13
+
+### Added
+
+- **SDK**: `prepare` lifecycle hook — transform or filter job payloads before browser launch; return `{ action: 'skip' }` to short-circuit a run without acquiring a browser (#175)
+- **SDK**: `beforeTerminal` lifecycle hook — outcome-aware hook that fires after script execution but before the terminal event, with emit still open; useful for emitting summary items or final metadata (#175)
+- **SDK**: `PrepareResult`, `PrepareHook`, `TerminalSignal`, `BeforeTerminalHook` type exports (#175)
+- **Executor**: Malformed `prepare` return validation — null, undefined, non-object, or missing `action` returns produce a diagnostic crash instead of an unhandled TypeError (#175)
+- **Docs**: Lifecycle hooks documented in PUBLIC_API.md, run guide, and emit guide (#175)
+- **Docs**: `CONTRACT_RUN.md` updated with lifecycle hook execution model and `prepare`-skip early return semantics
+- **Docs**: `CONTRACT_EMIT.md` updated with `skipped` and `reason` fields on `run_complete` summary
+- **Examples**: `hooks-prepare` and `hooks-before-terminal` runnable examples (#175)
+- **Testing**: 24 new executor tests and 7 loader validation tests for lifecycle hooks (#175)
+
+---
+
 ## [0.8.0] - 2026-02-13
 
 ### Added
@@ -423,6 +439,7 @@ _No unreleased changes._
 
 ---
 
+[0.9.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.9.0
 [0.8.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.8.0
 [0.7.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.3
 [0.7.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.2
