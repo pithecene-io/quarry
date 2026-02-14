@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/pithecene-io/quarry/types"
@@ -28,6 +30,10 @@ type ExecutorConfig struct {
 	// BrowserWSEndpoint is the optional WebSocket URL of an externally managed browser.
 	// When set, the executor connects instead of launching a new Chromium instance.
 	BrowserWSEndpoint string
+	// ResolveFrom is the optional path to a node_modules directory used for
+	// bare-specifier ESM resolution fallback. When set, the executor registers
+	// a custom resolve hook via module.register().
+	ResolveFrom string
 }
 
 // ExecutorResult represents the result of executor execution.
@@ -72,6 +78,25 @@ type executorInput struct {
 func (m *ExecutorManager) Start(ctx context.Context) error {
 	// Build command: quarry-executor <script-path>
 	m.cmd = exec.CommandContext(ctx, m.config.ExecutorPath, m.config.ScriptPath)
+
+	// Set module resolution env vars when --resolve-from is configured.
+	// QUARRY_RESOLVE_FROM tells the executor's ESM hook where to look.
+	// NODE_PATH provides CJS require() compat (ESM ignores NODE_PATH).
+	if m.config.ResolveFrom != "" {
+		m.cmd.Env = os.Environ()
+		m.cmd.Env = append(m.cmd.Env, "QUARRY_RESOLVE_FROM="+m.config.ResolveFrom)
+
+		// Prepend to NODE_PATH for CJS fallback
+		existing := os.Getenv("NODE_PATH")
+		if existing != "" {
+			m.cmd.Env = append(m.cmd.Env, "NODE_PATH="+m.config.ResolveFrom+string(os.PathListSeparator)+existing)
+		} else {
+			m.cmd.Env = append(m.cmd.Env, "NODE_PATH="+m.config.ResolveFrom)
+		}
+
+		// Remove duplicate NODE_PATH entries from inherited env
+		m.cmd.Env = deduplicateEnv(m.cmd.Env)
+	}
 
 	// Set up pipes
 	stdin, err := m.cmd.StdinPipe()
@@ -174,4 +199,23 @@ func (m *ExecutorManager) Kill() error {
 		return m.cmd.Process.Kill()
 	}
 	return nil
+}
+
+// deduplicateEnv keeps the last occurrence of each env var key.
+// This ensures our appended values (NODE_PATH, QUARRY_RESOLVE_FROM) win
+// over inherited duplicates from os.Environ().
+func deduplicateEnv(env []string) []string {
+	seen := make(map[string]int, len(env))
+	for i, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		seen[key] = i
+	}
+	result := make([]string, 0, len(seen))
+	for i, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if seen[key] == i {
+			result = append(result, entry)
+		}
+	}
+	return result
 }

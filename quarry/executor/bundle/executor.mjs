@@ -2983,6 +2983,53 @@ async function main() {
     process.exit(3);
   }
   const { ipcOutput, ipcWrite } = installStdoutGuard();
+  const resolveFrom = process.env.QUARRY_RESOLVE_FROM;
+  if (resolveFrom) {
+    const { register } = await import("node:module");
+    const hookCode = `
+      import { pathToFileURL } from 'node:url';
+
+      let fallbackParentURL;
+
+      export function initialize(data) {
+        // Construct a file:// URL pointing into the resolve-from directory.
+        // nextResolve uses parentURL as the resolution base, so ESM
+        // "imports" conditions are applied (not CJS "require" conditions).
+        fallbackParentURL = pathToFileURL(data.resolveFrom + '/noop.js').href;
+      }
+
+      export async function resolve(specifier, context, nextResolve) {
+        // Skip relative and absolute specifiers \u2014 only intercept bare specifiers
+        if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
+          return nextResolve(specifier, context);
+        }
+
+        // Try default resolution first
+        try {
+          return await nextResolve(specifier, context);
+        } catch (defaultErr) {
+          // Retry with parentURL pointing at --resolve-from directory.
+          // This preserves ESM import conditions (package.json "exports"
+          // with "import" key) unlike createRequire().resolve().
+          try {
+            const result = await nextResolve(specifier, {
+              ...context,
+              parentURL: fallbackParentURL,
+            });
+            process.stderr.write(
+              'quarry: resolved "' + specifier + '" via --resolve-from fallback\\n'
+            );
+            return result;
+          } catch {
+            // Re-throw the original error if fallback also fails
+            throw defaultErr;
+          }
+        }
+      }
+    `;
+    const hookUrl = `data:text/javascript;base64,${Buffer.from(hookCode).toString("base64")}`;
+    register(hookUrl, { data: { resolveFrom } });
+  }
   const scriptPath = args[0];
   let input;
   try {

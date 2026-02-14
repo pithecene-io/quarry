@@ -1446,6 +1446,126 @@ func TestParseAdapterConfig_MalformedHeader(t *testing.T) {
 	}
 }
 
+// --- --resolve-from validation ---
+
+func TestRunAction_ResolveFromNonexistentPath(t *testing.T) {
+	app := newTestApp()
+
+	dir := t.TempDir()
+	storageDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--source", "test",
+		"--storage-backend", "fs",
+		"--storage-path", storageDir,
+		"--resolve-from", "/nonexistent/node_modules",
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent --resolve-from path")
+	}
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("error should mention 'does not exist', got: %v", err)
+	}
+}
+
+func TestRunAction_ResolveFromNotADirectory(t *testing.T) {
+	app := newTestApp()
+
+	dir := t.TempDir()
+	storageDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a regular file to use as --resolve-from (should fail)
+	filePath := filepath.Join(dir, "not-a-dir.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--source", "test",
+		"--storage-backend", "fs",
+		"--storage-path", storageDir,
+		"--resolve-from", filePath,
+	})
+	if err == nil {
+		t.Fatal("expected error for file as --resolve-from")
+	}
+	if !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("error should mention 'not a directory', got: %v", err)
+	}
+}
+
+func TestRunAction_ResolveFromValidDirectory(t *testing.T) {
+	app := newTestApp()
+
+	dir := t.TempDir()
+	storageDir := filepath.Join(dir, "data")
+	nodeModulesDir := filepath.Join(dir, "node_modules")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nodeModulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--source", "test",
+		"--storage-backend", "fs",
+		"--storage-path", storageDir,
+		"--resolve-from", nodeModulesDir,
+	})
+	// Should pass resolve-from validation and fail later (executor resolution)
+	if err == nil {
+		t.Skip("executor found; cannot test validation-only path")
+	}
+	if strings.Contains(err.Error(), "resolve-from") {
+		t.Errorf("error should NOT be about --resolve-from, got: %v", err)
+	}
+}
+
+func TestRunAction_ResolveFromConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	storageDir := filepath.Join(dir, "data")
+	nodeModulesDir := filepath.Join(dir, "node_modules")
+	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nodeModulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(dir, "quarry.yaml")
+	configContent := "source: test\nstorage:\n  backend: fs\n  path: " + storageDir + "\nresolve_from: " + nodeModulesDir + "\n"
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := newTestApp()
+	err := app.Run([]string{"quarry", "run",
+		"--config", configPath,
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+	})
+	// Should pass resolve-from validation and fail later (executor resolution)
+	if err == nil {
+		t.Skip("executor found; cannot test validation-only path")
+	}
+	if strings.Contains(err.Error(), "resolve-from") {
+		t.Errorf("config resolve_from should be accepted, got: %v", err)
+	}
+}
+
 func TestParseAdapterConfig_RedisChannelFromConfig(t *testing.T) {
 	c := newAdapterTestContext(t, map[string]string{
 		"adapter-url": "redis://localhost:6379",

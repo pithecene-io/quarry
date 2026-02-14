@@ -229,6 +229,11 @@ ADVANCED:
 				Name:  "no-browser-reuse",
 				Usage: "Disable transparent browser reuse across runs",
 			},
+			// Module resolution flags
+			&cli.StringFlag{
+				Name:  "resolve-from",
+				Usage: "Path to node_modules directory for bare-specifier ESM resolution fallback (monorepo/container support)",
+			},
 			// Fan-out flags
 			&cli.IntFlag{
 				Name:  "depth",
@@ -350,6 +355,7 @@ type childFactory struct {
 	category          string
 	proxy             *types.ProxyEndpoint
 	browserWSEndpoint string
+	resolveFrom       string
 }
 
 // Run constructs and executes a single child run for the fan-out operator.
@@ -396,6 +402,7 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		FileWriter:        childFileWriter,
 		EnqueueObserver:   observer,
 		BrowserWSEndpoint: cf.browserWSEndpoint,
+		ResolveFrom:       cf.resolveFrom,
 		Source:            childSource,
 		Category:          childCategory,
 		Collector:         childCollector,
@@ -503,10 +510,30 @@ func runAction(c *cli.Context) error {
 	category := resolveString(c, "category", configVal(cfg, func(c *quarryconfig.Config) string { return c.Category }))
 	executor := resolveString(c, "executor", configVal(cfg, func(c *quarryconfig.Config) string { return c.Executor }))
 	browserWSEndpoint := resolveString(c, "browser-ws-endpoint", configVal(cfg, func(c *quarryconfig.Config) string { return c.BrowserWSEndpoint }))
+	resolveFrom := resolveString(c, "resolve-from", configVal(cfg, func(c *quarryconfig.Config) string { return c.ResolveFrom }))
 
 	// Manual validation for fields that were previously Required:true
 	if source == "" {
 		return cli.Exit("--source is required (provide via CLI flag or config file)", exitConfigError)
+	}
+
+	// Validate and absolutize --resolve-from
+	if resolveFrom != "" {
+		absResolveFrom, err := filepath.Abs(resolveFrom)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("--resolve-from: cannot resolve path %q: %v", resolveFrom, err), exitConfigError)
+		}
+		info, err := os.Stat(absResolveFrom)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return cli.Exit(fmt.Sprintf("--resolve-from: directory does not exist: %s", absResolveFrom), exitConfigError)
+			}
+			return cli.Exit(fmt.Sprintf("--resolve-from: cannot access %q: %v", absResolveFrom, err), exitConfigError)
+		}
+		if !info.IsDir() {
+			return cli.Exit(fmt.Sprintf("--resolve-from: not a directory: %s", absResolveFrom), exitConfigError)
+		}
+		resolveFrom = absResolveFrom
 	}
 
 	// Parse policy config with precedence
@@ -708,6 +735,7 @@ func runAction(c *cli.Context) error {
 		Proxy:             resolvedProxy,
 		FileWriter:        fileWriter,
 		BrowserWSEndpoint: browserWSEndpoint,
+		ResolveFrom:       resolveFrom,
 		Source:            source,
 		Category:          category,
 		Collector:         collector,
@@ -736,6 +764,7 @@ func runAction(c *cli.Context) error {
 			category:          category,
 			proxy:             resolvedProxy,
 			browserWSEndpoint: browserWSEndpoint,
+			resolveFrom:       resolveFrom,
 		}
 		return runWithFanOut(ctx, fanOut, rootConfig, factory, finalizer)
 	}

@@ -51,6 +51,9 @@ type RunConfig struct {
 	// BrowserWSEndpoint is the optional WebSocket URL of an externally managed browser.
 	// When set, the executor connects instead of launching a new Chromium instance.
 	BrowserWSEndpoint string
+	// ResolveFrom is the optional path to a node_modules directory used for
+	// bare-specifier ESM resolution fallback in workspace/monorepo setups.
+	ResolveFrom string
 	// Source is the partition key for origin system/provider.
 	Source string
 	// Category is the partition key for logical data type (default: "default").
@@ -134,6 +137,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		RunMeta:           r.config.RunMeta,
 		Proxy:             r.config.Proxy,
 		BrowserWSEndpoint: r.config.BrowserWSEndpoint,
+		ResolveFrom:       r.config.ResolveFrom,
 	}
 
 	var executor Executor

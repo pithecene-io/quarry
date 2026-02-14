@@ -283,6 +283,35 @@ The reusable browser server is:
 
 This is a permitted side-effect, not a background service.
 
+### Module Resolution (v0.9.0+)
+
+`quarry run` supports a `--resolve-from` flag for workspace and monorepo
+setups where scripts import bare specifiers (`@myorg/db`, `shared-utils`)
+that cannot be resolved from the script's directory.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--resolve-from` | string | | Path to `node_modules` directory for ESM resolution fallback |
+
+| Environment Variable | Set by | Description |
+|---------------------|--------|-------------|
+| `QUARRY_RESOLVE_FROM` | Go runtime | Absolute path to the resolution fallback directory |
+
+**Semantics:**
+- The flag value must be an existing directory. It is absolutized at parse time.
+- The Go runtime sets `QUARRY_RESOLVE_FROM` and prepends to `NODE_PATH` (CJS
+  fallback) on the executor's environment.
+- The Node executor registers an ESM resolve hook via `module.register()`.
+  The hook tries default resolution first, then falls back to
+  `createRequire(resolveFrom)` for bare specifiers only.
+- Relative and absolute specifiers are never intercepted by the hook.
+- Config file: `resolve_from: /app/node_modules` in YAML.
+
+**Why `NODE_PATH` alone is insufficient:**
+`NODE_PATH` only affects CJS `require()`. ESM `import` ignores it entirely.
+The `module.register()` hook is the correct mechanism for ESM (stable since
+Node 20.6+).
+
 ---
 
 ## `inspect` (single-entity introspection)

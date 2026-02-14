@@ -17,6 +17,7 @@ type Config struct {
 	Executor          string                      `yaml:"executor"`
 	BrowserWSEndpoint string                      `yaml:"browser_ws_endpoint"`
 	NoBrowserReuse    bool                        `yaml:"no_browser_reuse"`
+	ResolveFrom       string                      `yaml:"resolve_from"`
 	Storage           StorageConfig               `yaml:"storage"`
 	Policy   PolicyConfig                `yaml:"policy"`
 	Proxies  map[string]ProxyPoolConfig  `yaml:"proxies"`

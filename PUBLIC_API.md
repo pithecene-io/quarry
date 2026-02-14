@@ -411,6 +411,16 @@ By default, Quarry transparently reuses a persistent Chromium process across seq
 The browser auto-terminates after idle timeout (default 60s, configurable via `QUARRY_BROWSER_IDLE_TIMEOUT`).
 `--browser-ws-endpoint` takes priority over transparent reuse when set.
 
+**Module resolution:**
+
+| Flag | Description |
+|------|-------------|
+| `--resolve-from <path>` | Path to `node_modules` directory for ESM resolution fallback (monorepo/container support) |
+
+When scripts import workspace packages that are not resolvable from the
+script's directory, `--resolve-from` registers an ESM resolve hook to fall
+back to the specified `node_modules`. See `docs/contracts/CONTRACT_CLI.md`.
+
 **Advanced flags (development only):**
 
 | Flag | Description |
