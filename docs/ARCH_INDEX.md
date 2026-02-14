@@ -119,15 +119,60 @@ Non-normative.
 
 Go module root. Contains runtime, CLI, and core types.
 
-### Key files
+### quarry/types/
 
-- `types/version.go` — canonical version (all packages must match)
-- `types/proxy.go` — proxy domain types
-- `types/events.go` — event envelope and payload types
-- `proxy/selector.go` — proxy pool selection/rotation
-- `lode/sink.go` — Lode storage sink interface
-- `cli/config/` — YAML config file loader (env expansion, struct parsing)
-- `cli/reader/` — CLI read-side data access layer
+- `types/` — domain types: events, artifacts, lineage metadata, proxy configuration, and lockstep versioning
+
+### quarry/runtime/
+
+- `runtime/` — core execution orchestration: run lifecycle, executor management, IPC ingestion, artifact handling, and fan-out scheduling
+
+### quarry/ipc/
+
+- `ipc/` — frame encoding/decoding per CONTRACT_IPC.md (msgpack, 16 MiB frame limit, artifact chunking)
+
+### quarry/executor/
+
+- `executor/` — embedded executor lifecycle: extraction, SHA256 checksumming, temp directory management
+- `executor/bundle/` — embedded executor.mjs JavaScript bundle (non-Go asset)
+
+### quarry/policy/
+
+- `policy/` — ingestion policy interface: event buffering, drop rules, flush behavior, and observability stats
+
+### quarry/proxy/
+
+- `proxy/` — proxy pool selector: round-robin, random, and sticky strategies with recency windows
+
+### quarry/lode/
+
+- `lode/` — Lode-backed storage client: artifact chunking, checksumming, and Hive-partitioned dataset management
+
+### quarry/metrics/
+
+- `metrics/` — per-run metrics collection: lifecycle, ingestion, executor, and storage operation counters
+
+### quarry/log/
+
+- `log/` — structured JSON logging with run context fields (run_id, attempt, job_id)
+
+### quarry/adapter/
+
+- `adapter/` — event-bus adapter boundary for publishing run completion notifications
+- `adapter/redis/` — Redis pub/sub adapter with exponential backoff retry
+- `adapter/webhook/` — HTTP POST adapter with retryable and non-retriable error handling
+
+### quarry/cli/
+
+- `cli/cmd/` — CLI command implementations and shared flags (run, inspect, stats, list, debug, version)
+- `cli/config/` — YAML config file parsing with duration handling and proxy pool definitions
+- `cli/reader/` — read-side data access layer abstraction with dependency injection
+- `cli/render/` — output renderer: JSON, YAML, and table formats with TTY detection
+- `cli/tui/` — terminal UI dispatcher for inspect and stats commands (Bubble Tea)
+
+### quarry/cmd/quarry/
+
+- `cmd/quarry/` — CLI entrypoint: wires urfave/cli application with all commands
 
 ---
 
