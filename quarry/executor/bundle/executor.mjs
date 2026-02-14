@@ -2987,12 +2987,15 @@ async function main() {
   if (resolveFrom) {
     const { register } = await import("node:module");
     const hookCode = `
-      import { createRequire } from 'node:module';
+      import { pathToFileURL } from 'node:url';
 
-      let resolveFromPath;
+      let fallbackParentURL;
 
       export function initialize(data) {
-        resolveFromPath = data.resolveFrom;
+        // Construct a file:// URL pointing into the resolve-from directory.
+        // nextResolve uses parentURL as the resolution base, so ESM
+        // "imports" conditions are applied (not CJS "require" conditions).
+        fallbackParentURL = pathToFileURL(data.resolveFrom + '/noop.js').href;
       }
 
       export async function resolve(specifier, context, nextResolve) {
@@ -3004,15 +3007,22 @@ async function main() {
         // Try default resolution first
         try {
           return await nextResolve(specifier, context);
-        } catch (err) {
-          // Fall back to createRequire from the --resolve-from directory
+        } catch (defaultErr) {
+          // Retry with parentURL pointing at --resolve-from directory.
+          // This preserves ESM import conditions (package.json "exports"
+          // with "import" key) unlike createRequire().resolve().
           try {
-            const req = createRequire(resolveFromPath + '/noop.js');
-            const resolved = req.resolve(specifier);
-            return nextResolve(resolved, context);
+            const result = await nextResolve(specifier, {
+              ...context,
+              parentURL: fallbackParentURL,
+            });
+            process.stderr.write(
+              'quarry: resolved "' + specifier + '" via --resolve-from fallback\\n'
+            );
+            return result;
           } catch {
             // Re-throw the original error if fallback also fails
-            throw err;
+            throw defaultErr;
           }
         }
       }
