@@ -25,6 +25,8 @@
  */
 import { unlinkSync } from 'node:fs'
 import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
+import { chromiumArgs } from '../browser-args.js'
+import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 import { drainStdout } from '../ipc/sink.js'
 import { installStdoutGuard } from '../ipc/stdout-guard.js'
@@ -121,21 +123,13 @@ async function browserServer(scriptPath: string): Promise<never> {
     adblocker: process.env.QUARRY_ADBLOCKER === '1'
   })
 
-  // Build Chromium launch args
-  const launchArgs: string[] = []
-  if (process.env.QUARRY_NO_SANDBOX === '1') {
-    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox')
-  }
-
-  // Apply proxy at the browser level so all connections route through it
+  // Build Chromium launch args (proxy applied at the browser level)
   const proxyUrl = process.env.QUARRY_BROWSER_PROXY
-  if (proxyUrl) {
-    launchArgs.push(`--proxy-server=${proxyUrl}`)
-  }
+  const proxyArgs = proxyUrl ? [`--proxy-server=${proxyUrl}`] : []
 
   const browser = await puppeteer.launch({
     headless: true,
-    args: launchArgs
+    args: chromiumArgs(proxyArgs)
   })
 
   const wsEndpoint = browser.wsEndpoint()
@@ -153,7 +147,6 @@ async function browserServer(scriptPath: string): Promise<never> {
   const wsUrl = new URL(wsEndpoint)
   const baseUrl = `http://127.0.0.1:${wsUrl.port}`
 
-  let idleStartedAt: number | null = null
   const pollIntervalMs = 5_000
 
   /**
@@ -162,7 +155,7 @@ async function browserServer(scriptPath: string): Promise<never> {
    */
   async function countActivePages(): Promise<number> {
     const res = await fetch(`${baseUrl}/json/list`)
-    if (!res.ok) return 0
+    if (!res.ok) throw new Error(`/json/list returned ${res.status}`)
     const targets = (await res.json()) as Array<{ type: string; url: string }>
     return targets.filter((t) => t.type === 'page' && t.url !== 'about:blank').length
   }
@@ -177,8 +170,14 @@ async function browserServer(scriptPath: string): Promise<never> {
     }
   }
 
+  // Idle monitoring state — declared before shutdown() which reads it
+  const pollConfig = { idleTimeoutMs, maxConsecutiveFailures: 3 }
+  let pollState: IdlePollState = { idleStartedAt: null, consecutiveFailures: 0 }
+
   async function shutdown(): Promise<never> {
-    const idleSec = idleStartedAt ? Math.round((Date.now() - idleStartedAt) / 1000) : 0
+    const idleSec = pollState.idleStartedAt
+      ? Math.round((Date.now() - pollState.idleStartedAt) / 1000)
+      : 0
     process.stderr.write(`Browser server idle for ${idleSec}s, shutting down\n`)
     removeDiscoveryFile()
     await browser.close()
@@ -189,33 +188,31 @@ async function browserServer(scriptPath: string): Promise<never> {
   process.on('SIGTERM', () => void shutdown())
   process.on('SIGINT', () => void shutdown())
 
-  // Idle monitoring loop
   const timer = setInterval(async () => {
+    let fetchResult: { ok: true; activePages: number } | { ok: false }
     try {
-      const activePages = await countActivePages()
+      fetchResult = { ok: true, activePages: await countActivePages() }
+    } catch {
+      fetchResult = { ok: false }
+    }
 
-      if (activePages > 0) {
-        // Active work — reset idle timer
-        idleStartedAt = null
+    const action = evaluateIdlePoll(fetchResult, pollState, pollConfig)
+
+    switch (action.type) {
+      case 'continue':
+        pollState = action.nextState
         return
-      }
-
-      // No active pages
-      if (idleStartedAt === null) {
-        idleStartedAt = Date.now()
-        return
-      }
-
-      // Check if idle timeout exceeded
-      if (Date.now() - idleStartedAt >= idleTimeoutMs) {
+      case 'shutdown':
         clearInterval(timer)
         await shutdown()
-      }
-    } catch {
-      // /json/list failed — browser may have crashed, exit
-      clearInterval(timer)
-      removeDiscoveryFile()
-      process.exit(1)
+        return
+      case 'crash-exit':
+        process.stderr.write(
+          `Browser health check failed ${action.failures} times consecutively, exiting\n`
+        )
+        clearInterval(timer)
+        removeDiscoveryFile()
+        process.exit(1)
     }
   }, pollIntervalMs)
 
@@ -243,7 +240,7 @@ async function launchBrowserServer(scriptPath: string): Promise<never> {
 
   const browser = await puppeteer.launch({
     headless: true,
-    args: process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+    args: chromiumArgs()
   })
 
   // Print WS endpoint to stdout (Go runtime reads this line)
@@ -368,11 +365,8 @@ async function main(): Promise<never> {
     output: ipcOutput,
     outputWrite: ipcWrite,
     puppeteerOptions: {
-      // Headless by default for executor mode
       headless: true,
-      // Disable sandbox in containerized environments
-      args:
-        process.env.QUARRY_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
+      args: chromiumArgs()
     },
     // Stealth on by default; disable with QUARRY_STEALTH=0
     stealth: process.env.QUARRY_STEALTH !== '0',

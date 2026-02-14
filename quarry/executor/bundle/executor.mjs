@@ -2844,9 +2844,48 @@ var init_resolve_from = __esm({
 });
 
 // src/bin/executor.ts
+import { unlinkSync } from "node:fs";
+
+// src/browser-args.ts
+function chromiumArgs(extra = []) {
+  const args = ["--disable-dev-shm-usage", ...extra];
+  if (process.env.QUARRY_NO_SANDBOX === "1") {
+    args.push("--no-sandbox", "--disable-setuid-sandbox");
+  }
+  return args;
+}
+
+// src/browser-idle.ts
+function evaluateIdlePoll(fetchResult, state, config, now = Date.now()) {
+  if (!fetchResult.ok) {
+    const failures = state.consecutiveFailures + 1;
+    if (failures >= config.maxConsecutiveFailures) {
+      return { type: "crash-exit", failures };
+    }
+    return {
+      type: "continue",
+      nextState: { ...state, consecutiveFailures: failures }
+    };
+  }
+  if (fetchResult.activePages > 0) {
+    return {
+      type: "continue",
+      nextState: { idleStartedAt: null, consecutiveFailures: 0 }
+    };
+  }
+  const idleStartedAt = state.idleStartedAt ?? now;
+  if (now - idleStartedAt >= config.idleTimeoutMs) {
+    return { type: "shutdown" };
+  }
+  return {
+    type: "continue",
+    nextState: { idleStartedAt, consecutiveFailures: 0 }
+  };
+}
+
+// src/bin/executor.ts
 init_executor();
 init_sink();
-import { unlinkSync } from "node:fs";
 
 // src/ipc/stdout-guard.ts
 var installed = false;
@@ -2924,17 +2963,11 @@ async function browserServer(scriptPath) {
     stealth: process.env.QUARRY_STEALTH !== "0",
     adblocker: process.env.QUARRY_ADBLOCKER === "1"
   });
-  const launchArgs = [];
-  if (process.env.QUARRY_NO_SANDBOX === "1") {
-    launchArgs.push("--no-sandbox", "--disable-setuid-sandbox");
-  }
   const proxyUrl = process.env.QUARRY_BROWSER_PROXY;
-  if (proxyUrl) {
-    launchArgs.push(`--proxy-server=${proxyUrl}`);
-  }
+  const proxyArgs = proxyUrl ? [`--proxy-server=${proxyUrl}`] : [];
   const browser = await puppeteer.launch({
     headless: true,
-    args: launchArgs
+    args: chromiumArgs(proxyArgs)
   });
   const wsEndpoint = browser.wsEndpoint();
   process.stdout.write(`${wsEndpoint}
@@ -2945,11 +2978,10 @@ async function browserServer(scriptPath) {
   const discoveryFile = process.env.QUARRY_BROWSER_DISCOVERY_FILE ?? "";
   const wsUrl = new URL(wsEndpoint);
   const baseUrl = `http://127.0.0.1:${wsUrl.port}`;
-  let idleStartedAt = null;
   const pollIntervalMs = 5e3;
   async function countActivePages() {
     const res = await fetch(`${baseUrl}/json/list`);
-    if (!res.ok) return 0;
+    if (!res.ok) throw new Error(`/json/list returned ${res.status}`);
     const targets = await res.json();
     return targets.filter((t) => t.type === "page" && t.url !== "about:blank").length;
   }
@@ -2960,8 +2992,10 @@ async function browserServer(scriptPath) {
     } catch {
     }
   }
+  const pollConfig = { idleTimeoutMs, maxConsecutiveFailures: 3 };
+  let pollState = { idleStartedAt: null, consecutiveFailures: 0 };
   async function shutdown() {
-    const idleSec = idleStartedAt ? Math.round((Date.now() - idleStartedAt) / 1e3) : 0;
+    const idleSec = pollState.idleStartedAt ? Math.round((Date.now() - pollState.idleStartedAt) / 1e3) : 0;
     process.stderr.write(`Browser server idle for ${idleSec}s, shutting down
 `);
     removeDiscoveryFile();
@@ -2971,24 +3005,29 @@ async function browserServer(scriptPath) {
   process.on("SIGTERM", () => void shutdown());
   process.on("SIGINT", () => void shutdown());
   const timer = setInterval(async () => {
+    let fetchResult;
     try {
-      const activePages = await countActivePages();
-      if (activePages > 0) {
-        idleStartedAt = null;
+      fetchResult = { ok: true, activePages: await countActivePages() };
+    } catch {
+      fetchResult = { ok: false };
+    }
+    const action = evaluateIdlePoll(fetchResult, pollState, pollConfig);
+    switch (action.type) {
+      case "continue":
+        pollState = action.nextState;
         return;
-      }
-      if (idleStartedAt === null) {
-        idleStartedAt = Date.now();
-        return;
-      }
-      if (Date.now() - idleStartedAt >= idleTimeoutMs) {
+      case "shutdown":
         clearInterval(timer);
         await shutdown();
-      }
-    } catch {
-      clearInterval(timer);
-      removeDiscoveryFile();
-      process.exit(1);
+        return;
+      case "crash-exit":
+        process.stderr.write(
+          `Browser health check failed ${action.failures} times consecutively, exiting
+`
+        );
+        clearInterval(timer);
+        removeDiscoveryFile();
+        process.exit(1);
     }
   }, pollIntervalMs);
   while (true) {
@@ -3003,7 +3042,7 @@ async function launchBrowserServer(scriptPath) {
   });
   const browser = await puppeteer.launch({
     headless: true,
-    args: process.env.QUARRY_NO_SANDBOX === "1" ? ["--no-sandbox", "--disable-setuid-sandbox"] : []
+    args: chromiumArgs()
   });
   const wsEndpoint = browser.wsEndpoint();
   process.stdout.write(`${wsEndpoint}
@@ -3088,10 +3127,8 @@ async function main() {
     output: ipcOutput,
     outputWrite: ipcWrite,
     puppeteerOptions: {
-      // Headless by default for executor mode
       headless: true,
-      // Disable sandbox in containerized environments
-      args: process.env.QUARRY_NO_SANDBOX === "1" ? ["--no-sandbox", "--disable-setuid-sandbox"] : []
+      args: chromiumArgs()
     },
     // Stealth on by default; disable with QUARRY_STEALTH=0
     stealth: process.env.QUARRY_STEALTH !== "0",
