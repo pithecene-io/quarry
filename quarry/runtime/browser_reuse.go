@@ -82,16 +82,25 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 			return "", errors.New("browser reuse: proxy mismatch")
 		}
 
-		// Health check
-		if err := healthCheck(disc.WSEndpoint); err == nil {
-			age := time.Since(mustParseTime(disc.StartedAt))
-			fmt.Fprintf(os.Stderr, "Reusing browser server (pid=%d, age=%s)\n", disc.PID, age.Round(time.Second))
-			return disc.WSEndpoint, nil
+		// Fast-path: check process liveness before the 2s HTTP health check
+		switch processStatus(disc.PID) {
+		case processGone:
+			fmt.Fprintf(os.Stderr, "Browser server process gone (pid=%d), relaunching\n", disc.PID)
+			_ = os.Remove(discoveryPath)
+		case processZombie:
+			fmt.Fprintf(os.Stderr, "Zombie browser server detected (pid=%d), cleaning up and relaunching\n", disc.PID)
+			cleanupStaleProcess(disc.PID)
+			_ = os.Remove(discoveryPath)
+		default:
+			if err := healthCheck(disc.WSEndpoint); err == nil {
+				age := time.Since(mustParseTime(disc.StartedAt))
+				fmt.Fprintf(os.Stderr, "Reusing browser server (pid=%d, age=%s)\n", disc.PID, age.Round(time.Second))
+				return disc.WSEndpoint, nil
+			}
+			fmt.Fprintf(os.Stderr, "Stale browser server detected (pid=%d), cleaning up and relaunching\n", disc.PID)
+			cleanupStaleProcess(disc.PID)
+			_ = os.Remove(discoveryPath)
 		}
-
-		// Stale — remove and relaunch
-		fmt.Fprintf(os.Stderr, "Stale browser server detected (pid=%d), relaunching\n", disc.PID)
-		_ = os.Remove(discoveryPath)
 	}
 
 	// Launch new browser server
@@ -157,6 +166,65 @@ func healthCheck(wsEndpoint string) error {
 		return fmt.Errorf("health check returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+type processState int
+
+const (
+	processGone    processState = iota // PID does not exist
+	processZombie                      // PID exists but is zombie/defunct
+	processHealthy                     // PID exists and is running
+)
+
+// processStatus checks whether a PID is alive, zombie, or gone.
+// On non-Linux systems where /proc is unavailable, falls back to signal-0 only
+// (conservative — zombies will be caught by the subsequent health check).
+func processStatus(pid int) processState {
+	if err := syscall.Kill(pid, 0); err != nil {
+		return processGone
+	}
+
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		// /proc unavailable (non-Linux) — conservatively assume healthy
+		return processHealthy
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "State:") {
+			if strings.Contains(line, "Z") {
+				return processZombie
+			}
+			return processHealthy
+		}
+	}
+
+	return processHealthy
+}
+
+// isBrowserServerProcess checks whether a PID belongs to a Quarry browser
+// server by reading /proc/{pid}/cmdline for the --browser-server flag.
+// Returns false if /proc is unavailable (non-Linux) or the cmdline doesn't match.
+func isBrowserServerProcess(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false
+	}
+	for _, arg := range strings.Split(string(data), "\x00") {
+		if arg == "--browser-server" {
+			return true
+		}
+	}
+	return false
+}
+
+// cleanupStaleProcess attempts to kill a stale browser server's process group.
+// Only kills if the PID is verified to belong to a browser server process
+// (via /proc cmdline check), preventing accidental kills after PID reuse.
+func cleanupStaleProcess(pid int) {
+	if isBrowserServerProcess(pid) {
+		killProcessGroup(pid)
+	}
 }
 
 // proxyHash returns a deterministic hash of proxy config for mismatch detection.
