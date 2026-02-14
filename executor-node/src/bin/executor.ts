@@ -300,6 +300,48 @@ async function main(): Promise<never> {
   // write text to stdout) but before any IPC framing begins.
   const { ipcOutput, ipcWrite } = installStdoutGuard()
 
+  // Register ESM resolve hook for --resolve-from support.
+  // NODE_PATH only works for CJS require(); ESM needs module.register().
+  // The hook tries default resolution first, then falls back to
+  // createRequire(resolveFrom) for bare specifiers.
+  const resolveFrom = process.env.QUARRY_RESOLVE_FROM
+  if (resolveFrom) {
+    const { register } = await import('node:module')
+    const hookCode = `
+      import { createRequire } from 'node:module';
+
+      let resolveFromPath;
+
+      export function initialize(data) {
+        resolveFromPath = data.resolveFrom;
+      }
+
+      export async function resolve(specifier, context, nextResolve) {
+        // Skip relative and absolute specifiers — only intercept bare specifiers
+        if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
+          return nextResolve(specifier, context);
+        }
+
+        // Try default resolution first
+        try {
+          return await nextResolve(specifier, context);
+        } catch (err) {
+          // Fall back to createRequire from the --resolve-from directory
+          try {
+            const req = createRequire(resolveFromPath + '/noop.js');
+            const resolved = req.resolve(specifier);
+            return nextResolve(resolved, context);
+          } catch {
+            // Re-throw the original error if fallback also fails
+            throw err;
+          }
+        }
+      }
+    `
+    const hookUrl = `data:text/javascript;base64,${Buffer.from(hookCode).toString('base64')}`
+    register(hookUrl, { data: { resolveFrom } })
+  }
+
   const scriptPath = args[0]
 
   // Read and parse stdin

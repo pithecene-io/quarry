@@ -137,6 +137,17 @@ at runtime. `--max-runs` is mandatory as a safety rail.
 | `--tui` | bool | `false` | Interactive TUI (inspect/stats only) |
 | `--quiet` | bool | `false` | Suppress run result output |
 
+### Module Resolution
+
+| Flag | Type | Purpose |
+|------|------|---------|
+| `--resolve-from` | path | Path to `node_modules` directory for bare-specifier ESM resolution fallback (monorepo/container support) |
+
+When scripts import workspace packages (`@myorg/db`, `shared-utils`) that
+are not resolvable from the script's own directory, `--resolve-from` tells
+the executor where to look. Must be an existing directory; absolutized at
+parse time. See `docs/contracts/CONTRACT_CLI.md` for semantics.
+
 ### Browser Reuse
 
 | Flag | Type | Purpose |
@@ -178,6 +189,7 @@ by the Node executor process, not the Go runtime.
 | `QUARRY_ADBLOCKER` | disabled | Puppeteer adblocker plugin. Set to `1` to enable. |
 | `QUARRY_NO_SANDBOX` | disabled | Disable Chromium sandbox (required in containers/CI). Set to `1` to enable. |
 | `QUARRY_BROWSER_IDLE_TIMEOUT` | `60` | Seconds before the reusable browser server self-terminates after all pages close. Read by both the Go runtime (to pass to the browser server) and the executor (as its idle timer). |
+| `QUARRY_RESOLVE_FROM` | — | Absolute path to `node_modules` for ESM resolution fallback. Set automatically by the Go runtime when `--resolve-from` is specified; not typically set manually. |
 
 ### Usage
 
@@ -241,6 +253,9 @@ category: default
 # Executor path override (development only).
 # The bundled binary auto-resolves the executor; only needed for local dev builds.
 # executor: ./executor-node/dist/bin/executor.js
+
+# ESM resolution fallback for workspace/monorepo scripts.
+# resolve_from: /app/node_modules
 
 storage:
   dataset: quarry
@@ -401,8 +416,10 @@ quarry run (Go runtime)
   ├── Flag defaults (lowest precedence)
   └── Spawns executor subprocess
         ├── stdin JSON → run_id, attempt, job, proxy endpoint, browser_ws_endpoint
-        └── env vars → QUARRY_STEALTH, QUARRY_ADBLOCKER, QUARRY_NO_SANDBOX
-              └── Controls Puppeteer browser behavior
+        ├── env vars → QUARRY_STEALTH, QUARRY_ADBLOCKER, QUARRY_NO_SANDBOX
+        │     └── Controls Puppeteer browser behavior
+        └── env vars → QUARRY_RESOLVE_FROM (from --resolve-from)
+              └── Registers ESM resolve hook for workspace imports
 ```
 
 The Go runtime merges CLI flags and config file values (CLI wins), resolves

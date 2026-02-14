@@ -126,6 +126,37 @@ redis-cli SUBSCRIBE quarry:run_completed
 
 ---
 
+## Monorepo with workspace dependencies
+
+When scripts import workspace packages (`@myorg/db`, `shared-utils`) that
+live in a monorepo `node_modules` tree, use `--resolve-from` to tell the
+executor where to find them:
+
+```yaml
+services:
+  quarry:
+    image: ghcr.io/pithecene-io/quarry:0.7.3
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./node_modules:/work/node_modules:ro
+      - ./packages:/work/packages:ro
+      - ./data:/work/data
+    command:
+      - run
+      - --script=./scripts/my-script.ts
+      - --run-id=scheduled-run
+      - --source=my-source
+      - --storage-backend=fs
+      - --storage-path=./data
+      - --resolve-from=./node_modules
+```
+
+The `--resolve-from` flag registers an ESM resolve hook so bare specifiers
+(`import { db } from '@myorg/db'`) resolve via the specified `node_modules`
+directory when they cannot be found from the script's own location.
+
+---
+
 ## Slim image with external browser
 
 ```yaml

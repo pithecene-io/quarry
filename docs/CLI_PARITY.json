@@ -249,6 +249,12 @@
           "required": false,
           "description": "Disable transparent browser reuse across runs",
           "notes": "When set, each run launches and closes its own Chromium instance. By default, a reusable browser server is started and shared across sequential runs."
+        },
+        "resolve-from": {
+          "type": "string",
+          "required": false,
+          "description": "Path to node_modules directory for bare-specifier ESM resolution fallback (monorepo/container support)",
+          "notes": "Must be an existing directory. The executor registers an ESM resolve hook that falls back to this path for bare specifiers that cannot be resolved from the script's location."
         }
       }
     },
