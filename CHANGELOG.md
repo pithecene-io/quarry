@@ -13,6 +13,20 @@ _No unreleased changes._
 
 ---
 
+## [0.10.0] - 2026-02-14
+
+### Added
+
+- **Executor**: `--resolve-from` CLI flag for workspace module resolution — registers an ESM resolve hook that retries bare-specifier resolution from a specified directory, preserving ESM import conditions (#178)
+- **Executor**: `registerResolveFromHook()` extracted into `src/resolve-from.ts` — centralizes hook code to prevent copy drift between executor, test fixture, and unit tests
+
+### Changed
+
+- **Testing**: Integration test fixture now imports production hook module instead of embedding a copy
+- **Testing**: Resolve-from integration test uses unique OS temp directories (`mkdtempSync`) to prevent cross-run interference
+
+---
+
 ## [0.9.0] - 2026-02-13
 
 ### Added
@@ -439,6 +453,7 @@ _No unreleased changes._
 
 ---
 
+[0.10.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.10.0
 [0.9.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.9.0
 [0.8.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.8.0
 [0.7.3]: https://github.com/pithecene-io/quarry/releases/tag/v0.7.3

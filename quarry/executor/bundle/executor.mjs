@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.9.0
+// Quarry Executor Bundle v0.10.0
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: task executor:bundle
 
@@ -214,7 +214,7 @@ var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError;
 var init_dist = __esm({
   "../sdk/dist/index.mjs"() {
     "use strict";
-    CONTRACT_VERSION = "0.9.0";
+    CONTRACT_VERSION = "0.10.0";
     TerminalEventError = class extends Error {
       constructor() {
         super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
@@ -2784,6 +2784,65 @@ var init_executor = __esm({
   }
 });
 
+// src/resolve-from.ts
+var resolve_from_exports = {};
+__export(resolve_from_exports, {
+  registerResolveFromHook: () => registerResolveFromHook,
+  resolveFromHookCode: () => resolveFromHookCode
+});
+async function registerResolveFromHook(resolveFrom) {
+  const { register } = await import("node:module");
+  const hookUrl = `data:text/javascript;base64,${Buffer.from(resolveFromHookCode).toString("base64")}`;
+  register(hookUrl, { data: { resolveFrom } });
+}
+var resolveFromHookCode;
+var init_resolve_from = __esm({
+  "src/resolve-from.ts"() {
+    "use strict";
+    resolveFromHookCode = `
+  import { pathToFileURL } from 'node:url';
+
+  let fallbackParentURL;
+
+  export function initialize(data) {
+    // Construct a file:// URL pointing into the resolve-from directory.
+    // nextResolve uses parentURL as the resolution base, so ESM
+    // "imports" conditions are applied (not CJS "require" conditions).
+    fallbackParentURL = pathToFileURL(data.resolveFrom + '/noop.js').href;
+  }
+
+  export async function resolve(specifier, context, nextResolve) {
+    // Skip relative and absolute specifiers \u2014 only intercept bare specifiers
+    if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
+      return nextResolve(specifier, context);
+    }
+
+    // Try default resolution first
+    try {
+      return await nextResolve(specifier, context);
+    } catch (defaultErr) {
+      // Retry with parentURL pointing at --resolve-from directory.
+      // This preserves ESM import conditions (package.json "exports"
+      // with "import" key) unlike CJS require-based resolution.
+      try {
+        const result = await nextResolve(specifier, {
+          ...context,
+          parentURL: fallbackParentURL,
+        });
+        process.stderr.write(
+          'quarry: resolved "' + specifier + '" via --resolve-from fallback\\n'
+        );
+        return result;
+      } catch {
+        // Re-throw the original error if fallback also fails
+        throw defaultErr;
+      }
+    }
+  }
+`;
+  }
+});
+
 // src/bin/executor.ts
 init_executor();
 init_sink();
@@ -2985,50 +3044,8 @@ async function main() {
   const { ipcOutput, ipcWrite } = installStdoutGuard();
   const resolveFrom = process.env.QUARRY_RESOLVE_FROM;
   if (resolveFrom) {
-    const { register } = await import("node:module");
-    const hookCode = `
-      import { pathToFileURL } from 'node:url';
-
-      let fallbackParentURL;
-
-      export function initialize(data) {
-        // Construct a file:// URL pointing into the resolve-from directory.
-        // nextResolve uses parentURL as the resolution base, so ESM
-        // "imports" conditions are applied (not CJS "require" conditions).
-        fallbackParentURL = pathToFileURL(data.resolveFrom + '/noop.js').href;
-      }
-
-      export async function resolve(specifier, context, nextResolve) {
-        // Skip relative and absolute specifiers \u2014 only intercept bare specifiers
-        if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) {
-          return nextResolve(specifier, context);
-        }
-
-        // Try default resolution first
-        try {
-          return await nextResolve(specifier, context);
-        } catch (defaultErr) {
-          // Retry with parentURL pointing at --resolve-from directory.
-          // This preserves ESM import conditions (package.json "exports"
-          // with "import" key) unlike createRequire().resolve().
-          try {
-            const result = await nextResolve(specifier, {
-              ...context,
-              parentURL: fallbackParentURL,
-            });
-            process.stderr.write(
-              'quarry: resolved "' + specifier + '" via --resolve-from fallback\\n'
-            );
-            return result;
-          } catch {
-            // Re-throw the original error if fallback also fails
-            throw defaultErr;
-          }
-        }
-      }
-    `;
-    const hookUrl = `data:text/javascript;base64,${Buffer.from(hookCode).toString("base64")}`;
-    register(hookUrl, { data: { resolveFrom } });
+    const { registerResolveFromHook: registerResolveFromHook2 } = await Promise.resolve().then(() => (init_resolve_from(), resolve_from_exports));
+    await registerResolveFromHook2(resolveFrom);
   }
   const scriptPath = args[0];
   let input;
