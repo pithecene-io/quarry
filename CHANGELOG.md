@@ -20,10 +20,17 @@ _No unreleased changes._
 - **Executor**: `--resolve-from` CLI flag for workspace module resolution — registers an ESM resolve hook that retries bare-specifier resolution from a specified directory, preserving ESM import conditions (#178)
 - **Executor**: `registerResolveFromHook()` extracted into `src/resolve-from.ts` — centralizes hook code to prevent copy drift between executor, test fixture, and unit tests
 
+### Fixed
+
+- **Runtime**: Detect zombie/dead browser server processes before attempting health check — avoids wasting 2s on a connection to a dead process; kill stale process groups only after verifying PID ownership via `/proc` cmdline check (#181, #182)
+- **Executor**: Add `--disable-dev-shm-usage` to all Chromium launch paths — prevents renderer crashes from `/dev/shm` exhaustion in containerized environments (#183, #185)
+- **Executor**: Tolerate transient `/json/list` polling failures in browser server idle monitor — requires 3 consecutive failures before exit instead of crashing on the first; non-OK HTTP responses now correctly count as failures (#183, #185)
+
 ### Changed
 
 - **Testing**: Integration test fixture now imports production hook module instead of embedding a copy
 - **Testing**: Resolve-from integration test uses unique OS temp directories (`mkdtempSync`) to prevent cross-run interference
+- **Executor**: Chromium launch args centralized into `chromiumArgs()` helper (`browser-args.ts`); idle poll evaluation extracted into pure `evaluateIdlePoll()` function (`browser-idle.ts`) with 18 unit tests
 
 ---
 
