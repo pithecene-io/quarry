@@ -10,68 +10,68 @@
  * @module
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { type ChildProcess, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = resolve(__dirname, "..");
-const EXAMPLES_DIR = join(ROOT_DIR, "examples");
-const MANIFEST_PATH = join(EXAMPLES_DIR, "manifest.json");
-const OUTPUT_DIR = join(ROOT_DIR, ".example-runs");
-const QUARRY_BIN = join(ROOT_DIR, "quarry", "quarry");
-const EXECUTOR_BIN = join(ROOT_DIR, "executor-node", "dist", "bin", "executor.js");
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT_DIR = resolve(__dirname, '..')
+const EXAMPLES_DIR = join(ROOT_DIR, 'examples')
+const MANIFEST_PATH = join(EXAMPLES_DIR, 'manifest.json')
+const OUTPUT_DIR = join(ROOT_DIR, '.example-runs')
+const QUARRY_BIN = join(ROOT_DIR, 'quarry', 'quarry')
+const EXECUTOR_BIN = join(ROOT_DIR, 'executor-node', 'dist', 'bin', 'executor.js')
 
 interface ExampleExpected {
-  events?: Record<string, number>;
+  events?: Record<string, number>
   artifacts?: Array<{
-    name: string;
-    content_type: string;
-    min_size?: number;
-  }>;
-  terminal: "run_complete" | "run_error";
-  exit_code?: number;
+    name: string
+    content_type: string
+    min_size?: number
+  }>
+  terminal: 'run_complete' | 'run_error'
+  exit_code?: number
 }
 
 interface Example {
-  name: string;
-  script: string;
-  description: string;
-  expected: ExampleExpected;
+  name: string
+  script: string
+  description: string
+  expected: ExampleExpected
 }
 
 interface Manifest {
-  examples: Example[];
+  examples: Example[]
 }
 
 interface RunResult {
-  name: string;
-  passed: boolean;
-  duration: number;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  errors: string[];
+  name: string
+  passed: boolean
+  duration: number
+  exitCode: number
+  stdout: string
+  stderr: string
+  errors: string[]
 }
 
 function loadManifest(): Manifest {
-  const content = readFileSync(MANIFEST_PATH, "utf8");
-  return JSON.parse(content) as Manifest;
+  const content = readFileSync(MANIFEST_PATH, 'utf8')
+  return JSON.parse(content) as Manifest
 }
 
 async function buildQuarry(): Promise<void> {
-  console.log("Building quarry CLI...");
-  await runCommand("go", ["build", "-o", QUARRY_BIN, "./cmd/quarry"], {
-    cwd: join(ROOT_DIR, "quarry"),
-  });
+  console.log('Building quarry CLI...')
+  await runCommand('go', ['build', '-o', QUARRY_BIN, './cmd/quarry'], {
+    cwd: join(ROOT_DIR, 'quarry')
+  })
 }
 
 async function buildExecutor(): Promise<void> {
-  console.log("Building executor...");
-  await runCommand("pnpm", ["run", "build"], {
-    cwd: join(ROOT_DIR, "executor-node"),
-  });
+  console.log('Building executor...')
+  await runCommand('pnpm', ['run', 'build'], {
+    cwd: join(ROOT_DIR, 'executor-node')
+  })
 }
 
 function runCommand(
@@ -82,92 +82,98 @@ function runCommand(
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, {
       cwd: options.cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
 
-    let stdout = "";
-    let stderr = "";
+    let stdout = ''
+    let stderr = ''
 
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString()
+    })
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString()
+    })
 
-    const timeout = options.timeout ?? 60000;
+    const timeout = options.timeout ?? 60000
     const timer = setTimeout(() => {
-      proc.kill("SIGKILL");
-      reject(new Error(`Command timed out after ${timeout}ms`));
-    }, timeout);
+      proc.kill('SIGKILL')
+      reject(new Error(`Command timed out after ${timeout}ms`))
+    }, timeout)
 
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode: code ?? 1 });
-    });
+    proc.on('close', (code) => {
+      clearTimeout(timer)
+      resolve({ stdout, stderr, exitCode: code ?? 1 })
+    })
 
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+    proc.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+  })
 }
 
 async function runExample(example: Example): Promise<RunResult> {
-  const runId = `example-${example.name}-${Date.now()}`;
-  const storagePath = join(OUTPUT_DIR, example.name);
+  const runId = `example-${example.name}-${Date.now()}`
+  const storagePath = join(OUTPUT_DIR, example.name)
 
   // Ensure storage directory exists
-  mkdirSync(storagePath, { recursive: true });
+  mkdirSync(storagePath, { recursive: true })
 
-  const scriptPath = join(EXAMPLES_DIR, example.script);
-  const startTime = Date.now();
-  const errors: string[] = [];
+  const scriptPath = join(EXAMPLES_DIR, example.script)
+  const startTime = Date.now()
+  const errors: string[] = []
 
   // Build the command
   const args = [
-    "run",
-    "--script", scriptPath,
-    "--run-id", runId,
-    "--source", "example-runner",
-    "--category", "examples",
-    "--no-browser-reuse",
-    "--executor", EXECUTOR_BIN,
-    "--storage-backend", "fs",
-    "--storage-path", storagePath,
-    "--policy", "strict",
-  ];
+    'run',
+    '--script',
+    scriptPath,
+    '--run-id',
+    runId,
+    '--source',
+    'example-runner',
+    '--category',
+    'examples',
+    '--no-browser-reuse',
+    '--executor',
+    EXECUTOR_BIN,
+    '--storage-backend',
+    'fs',
+    '--storage-path',
+    storagePath,
+    '--policy',
+    'strict'
+  ]
 
-  console.log(`  Running: ${QUARRY_BIN} ${args.join(" ")}`);
+  console.log(`  Running: ${QUARRY_BIN} ${args.join(' ')}`)
 
-  let result: { stdout: string; stderr: string; exitCode: number };
+  let result: { stdout: string; stderr: string; exitCode: number }
   try {
     result = await runCommand(QUARRY_BIN, args, {
       cwd: ROOT_DIR,
-      timeout: 120000, // 2 minute timeout per example
-    });
+      timeout: 120000 // 2 minute timeout per example
+    })
   } catch (err) {
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startTime
     return {
       name: example.name,
       passed: false,
       duration,
       exitCode: -1,
-      stdout: "",
+      stdout: '',
       stderr: err instanceof Error ? err.message : String(err),
-      errors: [`Failed to run: ${err}`],
-    };
+      errors: [`Failed to run: ${err}`]
+    }
   }
 
-  const duration = Date.now() - startTime;
+  const duration = Date.now() - startTime
 
   // Validate exit code
-  const expectedExitCode = example.expected.exit_code ?? 0;
+  const expectedExitCode = example.expected.exit_code ?? 0
   if (result.exitCode !== expectedExitCode) {
-    errors.push(
-      `Exit code mismatch: expected ${expectedExitCode}, got ${result.exitCode}`
-    );
+    errors.push(`Exit code mismatch: expected ${expectedExitCode}, got ${result.exitCode}`)
   }
 
   // Exit-code validation is the primary correctness signal: the runtime maps
@@ -177,16 +183,16 @@ async function runExample(example: Example): Promise<RunResult> {
   // improving confidence beyond what exit codes already guarantee.
 
   // Write logs
-  const logPath = join(storagePath, "run.log");
+  const logPath = join(storagePath, 'run.log')
   writeFileSync(
     logPath,
     `=== ${example.name} ===\n` +
-    `Run ID: ${runId}\n` +
-    `Duration: ${duration}ms\n` +
-    `Exit Code: ${result.exitCode}\n` +
-    `\n=== STDOUT ===\n${result.stdout}\n` +
-    `\n=== STDERR ===\n${result.stderr}\n`
-  );
+      `Run ID: ${runId}\n` +
+      `Duration: ${duration}ms\n` +
+      `Exit Code: ${result.exitCode}\n` +
+      `\n=== STDOUT ===\n${result.stdout}\n` +
+      `\n=== STDERR ===\n${result.stderr}\n`
+  )
 
   return {
     name: example.name,
@@ -195,61 +201,61 @@ async function runExample(example: Example): Promise<RunResult> {
     exitCode: result.exitCode,
     stdout: result.stdout,
     stderr: result.stderr,
-    errors,
-  };
+    errors
+  }
 }
 
 async function main(): Promise<void> {
-  console.log("Quarry Example Runner");
-  console.log("=====================\n");
+  console.log('Quarry Example Runner')
+  console.log('=====================\n')
 
   // Ensure output directory exists
-  mkdirSync(OUTPUT_DIR, { recursive: true });
+  mkdirSync(OUTPUT_DIR, { recursive: true })
 
   // Load manifest
-  const manifest = loadManifest();
-  console.log(`Found ${manifest.examples.length} examples\n`);
+  const manifest = loadManifest()
+  console.log(`Found ${manifest.examples.length} examples\n`)
 
   // Build components
   try {
-    await buildQuarry();
-    await buildExecutor();
+    await buildQuarry()
+    await buildExecutor()
   } catch (err) {
-    console.error("Build failed:", err);
-    process.exit(1);
+    console.error('Build failed:', err)
+    process.exit(1)
   }
 
-  console.log("\nRunning examples...\n");
+  console.log('\nRunning examples...\n')
 
   // Run each example
-  const results: RunResult[] = [];
+  const results: RunResult[] = []
   for (const example of manifest.examples) {
-    console.log(`[${example.name}] ${example.description}`);
+    console.log(`[${example.name}] ${example.description}`)
 
-    const result = await runExample(example);
-    results.push(result);
+    const result = await runExample(example)
+    results.push(result)
 
     if (result.passed) {
-      console.log(`  ✅ PASSED (${result.duration}ms)\n`);
+      console.log(`  ✅ PASSED (${result.duration}ms)\n`)
     } else {
-      console.log(`  ❌ FAILED (${result.duration}ms)`);
+      console.log(`  ❌ FAILED (${result.duration}ms)`)
       for (const error of result.errors) {
-        console.log(`     - ${error}`);
+        console.log(`     - ${error}`)
       }
-      console.log();
+      console.log()
     }
   }
 
   // Summary
-  console.log("\n=== Summary ===");
-  const passed = results.filter((r) => r.passed).length;
-  const failed = results.filter((r) => !r.passed).length;
-  console.log(`Passed: ${passed}/${results.length}`);
-  console.log(`Failed: ${failed}/${results.length}`);
-  console.log(`Logs: ${OUTPUT_DIR}`);
+  console.log('\n=== Summary ===')
+  const passed = results.filter((r) => r.passed).length
+  const failed = results.filter((r) => !r.passed).length
+  console.log(`Passed: ${passed}/${results.length}`)
+  console.log(`Failed: ${failed}/${results.length}`)
+  console.log(`Logs: ${OUTPUT_DIR}`)
 
   // Write summary JSON
-  const summaryPath = join(OUTPUT_DIR, "summary.json");
+  const summaryPath = join(OUTPUT_DIR, 'summary.json')
   writeFileSync(
     summaryPath,
     JSON.stringify(
@@ -263,20 +269,20 @@ async function main(): Promise<void> {
           passed: r.passed,
           duration: r.duration,
           exitCode: r.exitCode,
-          errors: r.errors,
-        })),
+          errors: r.errors
+        }))
       },
       null,
       2
     )
-  );
+  )
 
   if (failed > 0) {
-    process.exit(1);
+    process.exit(1)
   }
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+  console.error('Fatal error:', err)
+  process.exit(1)
+})

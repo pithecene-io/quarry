@@ -30,6 +30,7 @@ At a high level:
 ## Where To Start
 
 - Authoring scripts: `docs/guides/emit.md`
+- Lifecycle hooks: `PUBLIC_API.md` (Lifecycle Hooks section)
 - Running jobs: `docs/guides/cli.md`
 - Configuration reference: `docs/guides/configuration.md`
 - Proxies: `docs/guides/proxy.md`

@@ -1,4 +1,49 @@
-import type { QuarryContext } from './types/context'
+import type { QuarryContext, RunMeta } from './types/context'
+
+/**
+ * Result of a `prepare` hook invocation.
+ *
+ * - `{ action: 'continue' }` — proceed with the original job.
+ * - `{ action: 'continue', job }` — proceed with a transformed job.
+ * - `{ action: 'skip', reason? }` — skip the run entirely.
+ */
+export type PrepareResult<Job = unknown> =
+  | { action: 'continue'; job?: Job }
+  | { action: 'skip'; reason?: string }
+
+/**
+ * Hook called before browser launch to inspect or transform the job payload.
+ *
+ * Returning `{ action: 'skip' }` short-circuits the run: the executor emits
+ * `run_complete` with `{ skipped: true }` and returns without launching a browser.
+ * No other hooks (beforeRun, afterRun, onError, beforeTerminal, cleanup) are
+ * called on the skip path — no browser or context exists.
+ *
+ * Returning `{ action: 'continue', job }` replaces the job for all downstream hooks.
+ *
+ * Must return a valid `PrepareResult`. Non-object or missing `action` returns
+ * are treated as a crash with a diagnostic message.
+ */
+export type PrepareHook<Job = unknown> = (
+  job: Job,
+  run: RunMeta
+) => Promise<PrepareResult<Job>> | PrepareResult<Job>
+
+/**
+ * Signal passed to `beforeTerminal` describing how the script finished.
+ */
+export type TerminalSignal = { outcome: 'completed' } | { outcome: 'error'; error: unknown }
+
+/**
+ * Hook called after script execution but before the executor emits the
+ * terminal event. Emit is still open — the hook may emit items or logs.
+ *
+ * If the hook throws, the error is swallowed (consistent with onError/cleanup).
+ */
+export type BeforeTerminalHook<Job = unknown> = (
+  signal: TerminalSignal,
+  ctx: QuarryContext<Job>
+) => Promise<void> | void
 
 /**
  * Hook called before the main script function executes.
@@ -25,6 +70,9 @@ export type OnErrorHook<Job = unknown> = (
 /**
  * Hook called during cleanup, regardless of success or failure.
  * Similar to a finally block.
+ *
+ * Not called when `prepare` returns `{ action: 'skip' }` — the run
+ * short-circuits before browser acquisition, so no context exists.
  */
 export type CleanupHook<Job = unknown> = (ctx: QuarryContext<Job>) => Promise<void> | void
 
@@ -33,9 +81,11 @@ export type CleanupHook<Job = unknown> = (ctx: QuarryContext<Job>) => Promise<vo
  * All hooks are optional.
  */
 export interface QuarryHooks<Job = unknown> {
+  prepare?: PrepareHook<Job>
   beforeRun?: BeforeRunHook<Job>
   afterRun?: AfterRunHook<Job>
   onError?: OnErrorHook<Job>
+  beforeTerminal?: BeforeTerminalHook<Job>
   cleanup?: CleanupHook<Job>
 }
 

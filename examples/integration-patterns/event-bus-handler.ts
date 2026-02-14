@@ -15,56 +15,56 @@
 
 // Event payload structure (matches event-bus-sns.sh output)
 type RunCompletedEvent = {
-  event_type: "run_completed";
-  run_id: string;
-  source: string;
-  day: string;
-  outcome: "success" | "error";
-  storage_path: string;
-  timestamp: string;
-};
+  event_type: 'run_completed'
+  run_id: string
+  source: string
+  day: string
+  outcome: 'success' | 'error'
+  storage_path: string
+  timestamp: string
+}
 
 // Simulated processed runs store (use a real database in production)
-const processedRuns = new Set<string>();
+const processedRuns = new Set<string>()
 
 /**
  * Main handler function for run completion events.
  * Designed to be idempotent - safe to call multiple times with the same event.
  */
 export async function handleRunCompleted(event: RunCompletedEvent): Promise<void> {
-  console.log(`[handler] Received event for run: ${event.run_id}`);
+  console.log(`[handler] Received event for run: ${event.run_id}`)
 
   // 1. Validate event
-  if (event.event_type !== "run_completed") {
-    console.log(`[handler] Ignoring non-completion event: ${event.event_type}`);
-    return;
+  if (event.event_type !== 'run_completed') {
+    console.log(`[handler] Ignoring non-completion event: ${event.event_type}`)
+    return
   }
 
   // 2. Check idempotency - skip if already processed
   if (processedRuns.has(event.run_id)) {
-    console.log(`[handler] Run ${event.run_id} already processed, skipping`);
-    return;
+    console.log(`[handler] Run ${event.run_id} already processed, skipping`)
+    return
   }
 
   // 3. Skip failed runs (or handle differently based on your needs)
-  if (event.outcome !== "success") {
-    console.log(`[handler] Run ${event.run_id} failed, skipping processing`);
+  if (event.outcome !== 'success') {
+    console.log(`[handler] Run ${event.run_id} failed, skipping processing`)
     // Optionally: send to dead letter queue, alert, etc.
-    return;
+    return
   }
 
   try {
     // 4. Read and process events from storage
-    console.log(`[handler] Processing run ${event.run_id} from ${event.storage_path}`);
-    await processRunData(event);
+    console.log(`[handler] Processing run ${event.run_id} from ${event.storage_path}`)
+    await processRunData(event)
 
     // 5. Mark as processed (after successful processing)
-    processedRuns.add(event.run_id);
-    console.log(`[handler] Successfully processed run ${event.run_id}`);
+    processedRuns.add(event.run_id)
+    console.log(`[handler] Successfully processed run ${event.run_id}`)
   } catch (error) {
-    console.error(`[handler] Failed to process run ${event.run_id}:`, error);
+    console.error(`[handler] Failed to process run ${event.run_id}:`, error)
     // In production: retry with backoff, send to DLQ, etc.
-    throw error;
+    throw error
   }
 }
 
@@ -74,9 +74,9 @@ export async function handleRunCompleted(event: RunCompletedEvent): Promise<void
  */
 async function processRunData(event: RunCompletedEvent): Promise<void> {
   // Example: Read items from the run's storage path
-  const itemsPath = `${event.storage_path}/event_type=item/data.jsonl`;
+  const itemsPath = `${event.storage_path}/event_type=item/data.jsonl`
 
-  console.log(`[handler] Reading items from: ${itemsPath}`);
+  console.log(`[handler] Reading items from: ${itemsPath}`)
 
   // In production, use appropriate storage client:
   // - fs.readFileSync for local filesystem
@@ -84,13 +84,13 @@ async function processRunData(event: RunCompletedEvent): Promise<void> {
   // - etc.
 
   // Simulated processing
-  const items = await readItemsFromStorage(itemsPath);
+  const items = await readItemsFromStorage(itemsPath)
 
   for (const item of items) {
-    await transformAndLoad(item, event);
+    await transformAndLoad(item, event)
   }
 
-  console.log(`[handler] Processed ${items.length} items from run ${event.run_id}`);
+  console.log(`[handler] Processed ${items.length} items from run ${event.run_id}`)
 }
 
 /**
@@ -100,7 +100,7 @@ async function processRunData(event: RunCompletedEvent): Promise<void> {
 async function readItemsFromStorage(_path: string): Promise<unknown[]> {
   // Simulated - return empty array
   // In production: read JSONL file, parse each line
-  return [];
+  return []
 }
 
 /**
@@ -110,39 +110,39 @@ async function readItemsFromStorage(_path: string): Promise<unknown[]> {
 async function transformAndLoad(item: unknown, event: RunCompletedEvent): Promise<void> {
   // Example transformation
   const transformed = {
-    ...item as object,
+    ...(item as object),
     _source: event.source,
     _run_id: event.run_id,
-    _processed_at: new Date().toISOString(),
-  };
+    _processed_at: new Date().toISOString()
+  }
 
   // Example: Insert into database, send to API, etc.
-  console.log(`[handler] Transformed item:`, transformed);
+  console.log(`[handler] Transformed item:`, transformed)
 }
 
 // Example: AWS Lambda handler wrapper
 export async function lambdaHandler(sqsEvent: { Records: Array<{ body: string }> }): Promise<void> {
   for (const record of sqsEvent.Records) {
     // SNS wraps the message in another layer
-    const snsMessage = JSON.parse(record.body);
-    const event: RunCompletedEvent = JSON.parse(snsMessage.Message);
-    await handleRunCompleted(event);
+    const snsMessage = JSON.parse(record.body)
+    const event: RunCompletedEvent = JSON.parse(snsMessage.Message)
+    await handleRunCompleted(event)
   }
 }
 
 // Example: Direct invocation for testing
 if (import.meta.url === `file://${process.argv[1]}`) {
   const testEvent: RunCompletedEvent = {
-    event_type: "run_completed",
-    run_id: "test-run-001",
-    source: "demo",
-    day: "2026-02-04",
-    outcome: "success",
-    storage_path: "./quarry-data/source=demo/day=2026-02-04/run_id=test-run-001",
-    timestamp: new Date().toISOString(),
-  };
+    event_type: 'run_completed',
+    run_id: 'test-run-001',
+    source: 'demo',
+    day: '2026-02-04',
+    outcome: 'success',
+    storage_path: './quarry-data/source=demo/day=2026-02-04/run_id=test-run-001',
+    timestamp: new Date().toISOString()
+  }
 
   handleRunCompleted(testEvent)
-    .then(() => console.log("Handler completed"))
-    .catch((err) => console.error("Handler failed:", err));
+    .then(() => console.log('Handler completed'))
+    .catch((err) => console.error('Handler failed:', err))
 }

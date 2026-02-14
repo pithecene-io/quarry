@@ -20,6 +20,24 @@ ID stays the same across retries.
 
 ---
 
+## Lifecycle Hooks
+
+Scripts may export **optional lifecycle hooks** alongside the default function.
+Hooks allow scripts to intercept the run at well-defined points without
+building external wrappers.
+
+**Execution order (happy path):**
+
+`prepare` → acquire browser → `beforeRun` → `script()` → `afterRun` → `beforeTerminal` → auto-emit terminal → `cleanup`
+
+**Error path:** replaces `afterRun` with `onError`; other hooks run normally.
+
+**Skip path:** `prepare` returns `{ action: 'skip' }` → emit `run_complete({skipped})` → done. No browser, no context, no other hooks.
+
+See `PUBLIC_API.md` for the full hook reference with signatures and examples.
+
+---
+
 ## Outcomes
 
 Runs end in one of a few outcomes:

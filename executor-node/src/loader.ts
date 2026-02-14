@@ -31,9 +31,11 @@ export interface LoadedScript<Job = unknown> {
   readonly script: QuarryScript<Job>
   /** Optional lifecycle hooks */
   readonly hooks: {
+    readonly prepare?: QuarryScriptModule<Job>['prepare']
     readonly beforeRun?: QuarryScriptModule<Job>['beforeRun']
     readonly afterRun?: QuarryScriptModule<Job>['afterRun']
     readonly onError?: QuarryScriptModule<Job>['onError']
+    readonly beforeTerminal?: QuarryScriptModule<Job>['beforeTerminal']
     readonly cleanup?: QuarryScriptModule<Job>['cleanup']
   }
   /** Original module for debugging */
@@ -95,7 +97,14 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
   }
 
   // Validate optional hooks
-  const HOOK_NAMES = ['beforeRun', 'afterRun', 'onError', 'cleanup'] as const
+  const HOOK_NAMES = [
+    'prepare',
+    'beforeRun',
+    'afterRun',
+    'onError',
+    'beforeTerminal',
+    'cleanup'
+  ] as const
   for (const name of HOOK_NAMES) {
     if (!isOptionalFunction(mod[name])) {
       throw new ScriptLoadError(scriptPath, `${name} hook is not a function`)
@@ -108,9 +117,11 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
   return {
     script: validatedModule.default,
     hooks: {
+      prepare: validatedModule.prepare,
       beforeRun: validatedModule.beforeRun,
       afterRun: validatedModule.afterRun,
       onError: validatedModule.onError,
+      beforeTerminal: validatedModule.beforeTerminal,
       cleanup: validatedModule.cleanup
     },
     module: validatedModule

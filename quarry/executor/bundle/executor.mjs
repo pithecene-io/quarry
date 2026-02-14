@@ -2337,7 +2337,14 @@ async function loadScript(scriptPath) {
   if (!isFunction(mod.default)) {
     throw new ScriptLoadError(scriptPath, "default export is not a function");
   }
-  const HOOK_NAMES = ["beforeRun", "afterRun", "onError", "cleanup"];
+  const HOOK_NAMES = [
+    "prepare",
+    "beforeRun",
+    "afterRun",
+    "onError",
+    "beforeTerminal",
+    "cleanup"
+  ];
   for (const name of HOOK_NAMES) {
     if (!isOptionalFunction(mod[name])) {
       throw new ScriptLoadError(scriptPath, `${name} hook is not a function`);
@@ -2347,9 +2354,11 @@ async function loadScript(scriptPath) {
   return {
     script: validatedModule.default,
     hooks: {
+      prepare: validatedModule.prepare,
       beforeRun: validatedModule.beforeRun,
       afterRun: validatedModule.afterRun,
       onError: validatedModule.onError,
+      beforeTerminal: validatedModule.beforeTerminal,
       cleanup: validatedModule.cleanup
     },
     module: validatedModule
@@ -2611,6 +2620,52 @@ async function execute(config) {
       }
       throw err;
     }
+    let effectiveJob = config.job;
+    if (script.hooks.prepare) {
+      let prepareResult;
+      try {
+        prepareResult = await script.hooks.prepare(config.job, config.run);
+      } catch (err) {
+        const message = errorMessage(err);
+        const crashOutcome = { status: "crash", message };
+        await emitRunResult(stdioSink, crashOutcome, config.proxy);
+        return { outcome: crashOutcome, terminalEmitted: false };
+      }
+      if (prepareResult === null || prepareResult === void 0 || typeof prepareResult !== "object" || !("action" in prepareResult)) {
+        const crashOutcome = {
+          status: "crash",
+          message: `prepare hook must return { action: 'continue' | 'skip' }, got: ${String(prepareResult)}`
+        };
+        await emitRunResult(stdioSink, crashOutcome, config.proxy);
+        return { outcome: crashOutcome, terminalEmitted: false };
+      }
+      if (prepareResult.action === "skip") {
+        const { emit } = createAPIs(config.run, sink);
+        const summary = { skipped: true };
+        if (prepareResult.reason !== void 0) {
+          summary.reason = prepareResult.reason;
+        }
+        try {
+          await emit.runComplete({ summary });
+        } catch {
+        }
+        const result2 = determineOutcome(sink);
+        await emitRunResult(stdioSink, result2.outcome, config.proxy);
+        return result2;
+      }
+      if (prepareResult.action === "continue") {
+        if (prepareResult.job !== void 0) {
+          effectiveJob = prepareResult.job;
+        }
+      } else {
+        const crashOutcome = {
+          status: "crash",
+          message: `prepare hook returned unrecognized action: ${prepareResult.action}`
+        };
+        await emitRunResult(stdioSink, crashOutcome, config.proxy);
+        return { outcome: crashOutcome, terminalEmitted: false };
+      }
+    }
     if (config.browserWSEndpoint) {
       const puppeteer = await getVanillaPuppeteer(config.scriptPath);
       browser = await puppeteer.connect({ browserWSEndpoint: config.browserWSEndpoint });
@@ -2633,13 +2688,14 @@ async function execute(config) {
       });
     }
     ctx = createContext({
-      job: config.job,
+      job: effectiveJob,
       run: config.run,
       page,
       browser,
       browserContext,
       sink
     });
+    let rawScriptError = null;
     try {
       if (script.hooks.beforeRun) {
         await script.hooks.beforeRun(ctx);
@@ -2650,6 +2706,7 @@ async function execute(config) {
       }
     } catch (err) {
       scriptThrew = true;
+      rawScriptError = err;
       scriptError = {
         message: errorMessage(err),
         stack: err instanceof Error ? err.stack : void 0
@@ -2659,6 +2716,13 @@ async function execute(config) {
           await script.hooks.onError(err, ctx);
         } catch {
         }
+      }
+    }
+    if (script.hooks.beforeTerminal && !sink.isSinkFailed() && sink.getTerminalState() === null) {
+      const signal = rawScriptError !== null ? { outcome: "error", error: rawScriptError } : { outcome: "completed" };
+      try {
+        await script.hooks.beforeTerminal(signal, ctx);
+      } catch {
       }
     }
     if (!sink.isSinkFailed() && sink.getTerminalState() === null) {

@@ -120,6 +120,84 @@ export default async function run(ctx: QuarryContext): Promise<void> {
 
 This is the **only** supported entry point shape.
 
+### Lifecycle Hooks
+
+Scripts may export **optional lifecycle hooks** alongside the default function.
+All hooks are optional — scripts that export none behave identically to today.
+
+```typescript
+import type { QuarryContext, PrepareResult, TerminalSignal, RunMeta } from "@pithecene-io/quarry-sdk";
+
+// Runs before browser launch. Can skip or transform the job.
+export function prepare(job: unknown, run: RunMeta): PrepareResult {
+  if (isStale(job)) return { action: "skip", reason: "stale job" };
+  return { action: "continue", job: enrichJob(job) };
+}
+
+// Runs before the main script function
+export async function beforeRun(ctx: QuarryContext): Promise<void> { }
+
+// Main script (required)
+export default async function run(ctx: QuarryContext): Promise<void> { }
+
+// Runs after script completes successfully (not called on error)
+export async function afterRun(ctx: QuarryContext): Promise<void> { }
+
+// Runs when the script throws (not called after manual terminal emit)
+export async function onError(error: unknown, ctx: QuarryContext): Promise<void> { }
+
+// Runs after script execution, before terminal event. Emit is still open.
+export async function beforeTerminal(signal: TerminalSignal, ctx: QuarryContext): Promise<void> { }
+
+// Runs after terminal emission attempt. Context exists but emit throws.
+export async function cleanup(ctx: QuarryContext): Promise<void> { }
+```
+
+**Execution order:**
+
+```
+load script
+    │
+    ▼
+[prepare]  ──skip──▶ emit run_complete({skipped}) → run_result → return
+    │
+    │ continue (optionally with transformed job)
+    ▼
+acquire browser → create context
+    │
+    ▼
+[beforeRun] → script() → [afterRun] (success) / [onError] (error)
+    │
+    ▼
+[beforeTerminal]  (emit still open)
+    │
+    ▼
+auto-emit terminal → [cleanup] → run_result → return
+```
+
+**Hook rules:**
+
+| Hook | When it runs | Receives | Error handling |
+|------|-------------|----------|----------------|
+| `prepare` | Before browser launch | `(job, run)` | Throw → crash (no browser launched) |
+| `beforeRun` | Before script | `(ctx)` | Throw → enters error path |
+| `afterRun` | After script success | `(ctx)` | Throw → enters error path |
+| `onError` | After script error | `(error, ctx)` | Swallowed |
+| `beforeTerminal` | Before terminal emit | `(signal, ctx)` | Swallowed |
+| `cleanup` | After terminal attempt | `(ctx)` | Swallowed |
+
+**`prepare` return values:**
+
+| Return | Behavior |
+|--------|----------|
+| `{ action: "continue" }` | Proceed with original job |
+| `{ action: "continue", job }` | Proceed with transformed job |
+| `{ action: "skip" }` | Skip run — emit `run_complete({skipped: true})` |
+| `{ action: "skip", reason }` | Skip run — emit `run_complete({skipped: true, reason})` |
+
+> **Note:** When `prepare` returns `skip`, **no other hooks run** — there is no
+> browser, no context, and no cleanup. The run completes immediately.
+
 ### Context Object
 
 The `QuarryContext` provides:
@@ -375,6 +453,8 @@ All examples use local fixtures (no external network calls).
 | `examples/toy-pagination/` | Multi-page pagination | 6 items |
 | `examples/artifact-snapshot/` | Screenshot artifact | 1 artifact |
 | `examples/intentional-failure/` | Error handling test | 1 item + error |
+| `examples/hooks-prepare/` | Job filtering with `prepare` | skipped or 1 item |
+| `examples/hooks-before-terminal/` | Summary emission via `beforeTerminal` | items + summary |
 
 Run all examples:
 ```bash
@@ -415,6 +495,59 @@ export default async function run(ctx: QuarryContext): Promise<void> {
     content_type: "image/png",
     data
   });
+}
+```
+
+### Example: Skip Stale Jobs with `prepare`
+
+```typescript
+// examples/hooks-prepare/script.ts
+import type { PrepareResult, QuarryContext, RunMeta } from "@pithecene-io/quarry-sdk";
+
+type Job = { url: string; fetched_at?: string };
+
+export function prepare(job: Job, _run: RunMeta): PrepareResult<Job> {
+  if (job.fetched_at) {
+    const age = Date.now() - new Date(job.fetched_at).getTime();
+    if (age < 3_600_000) {
+      return { action: "skip", reason: "fetched less than 1h ago" };
+    }
+  }
+  return { action: "continue" };
+}
+
+export default async function run(ctx: QuarryContext<Job>): Promise<void> {
+  await ctx.page.goto(ctx.job.url);
+  const title = await ctx.page.title();
+  await ctx.emit.item({ item_type: "page", data: { url: ctx.job.url, title } });
+}
+```
+
+### Example: Emit Summary with `beforeTerminal`
+
+```typescript
+// examples/hooks-before-terminal/script.ts
+import type { QuarryContext, TerminalSignal } from "@pithecene-io/quarry-sdk";
+
+let itemCount = 0;
+
+export default async function run(ctx: QuarryContext): Promise<void> {
+  for (const product of ["Widget", "Gadget", "Gizmo"]) {
+    await ctx.emit.item({ item_type: "product", data: { name: product } });
+    itemCount++;
+  }
+}
+
+export async function beforeTerminal(
+  signal: TerminalSignal,
+  ctx: QuarryContext
+): Promise<void> {
+  if (signal.outcome === "completed") {
+    await ctx.emit.item({
+      item_type: "run_summary",
+      data: { total_items: itemCount }
+    });
+  }
 }
 ```
 
