@@ -63,6 +63,68 @@ script, not a re-execution of the same job.
 
 ---
 
+## Lifecycle Hooks (v0.9.0+)
+
+Scripts may export optional lifecycle hooks alongside the default run function.
+Hooks are invoked by the executor at well-defined points in the run lifecycle.
+
+### Execution Order
+
+```
+load script
+    │
+    ▼
+[prepare]  ──skip──▶ emit run_complete({skipped}) → run_result → return
+    │
+    │ continue (optionally with transformed job)
+    ▼
+acquire browser → create context
+    │
+    ▼
+[beforeRun] → script() → [afterRun] (success) / [onError] (error)
+    │
+    ▼
+[beforeTerminal]  (emit still open, terminal not yet written)
+    │
+    ▼
+auto-emit terminal → [cleanup] → run_result → return
+```
+
+### `prepare`
+
+- Invoked **before** browser acquisition.
+- Receives the raw job payload and run metadata.
+- Returns `{ action: 'continue' }` to proceed, optionally with a
+  transformed `job` field that replaces the original payload.
+- Returns `{ action: 'skip', reason? }` to short-circuit the run.
+  On skip, the executor emits `run_complete` with `{ skipped: true }` in
+  the summary and returns immediately. **No browser is launched** and no
+  downstream hooks (`beforeRun`, `afterRun`, `onError`, `beforeTerminal`,
+  `cleanup`) are invoked.
+- If `prepare` throws, the run is classified as a crash. No browser is launched.
+
+### `beforeTerminal`
+
+- Invoked **after** `afterRun`/`onError` but **before** the terminal event
+  (`run_complete` or `run_error`) is auto-emitted.
+- The emit channel is still open; the hook may emit items, logs, or artifacts.
+- Receives a `TerminalSignal`: `{ outcome: 'completed' }` on success,
+  `{ outcome: 'error', error }` on script failure.
+- **Not invoked** when the script has already emitted a terminal event
+  manually, or when the IPC sink has failed.
+- If `beforeTerminal` throws, the error is swallowed and the terminal event
+  is still emitted (consistent with `onError`/`cleanup` error handling).
+
+### Hook Contract Rules
+
+- All hooks are optional. Scripts that do not export hooks behave identically
+  to pre-0.9.0.
+- Hook exports must be functions. Non-function exports of hook names cause
+  a load-time validation error.
+- `cleanup` is **not called** on `prepare`-skip paths (no context exists).
+
+---
+
 ## Idempotency Expectations
 
 - Runs are **append-only**; no event mutation is allowed after emission.

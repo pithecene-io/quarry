@@ -1,19 +1,19 @@
-# Support Posture — Quarry v0.7.3
+# Support Posture — Quarry v0.9.0
 
-This document defines support expectations for Quarry v0.7.3.
+This document defines support expectations for Quarry v0.9.0.
 
 ---
 
 ## Maturity Level
 
-**v0.7.3 is an early release.** APIs and behaviors may change in subsequent
+**v0.9.0 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
 
 ---
 
 ## Known Issues
 
-_No known issues in v0.7.3._
+_No known issues in v0.9.0._
 
 ---
 
@@ -30,6 +30,7 @@ _No known issues in v0.7.3._
 | Filesystem storage backend | Supported |
 | S3 storage backend | Supported |
 | SDK emit API | Supported |
+| Lifecycle hooks (`prepare`, `beforeTerminal`) | Supported |
 | Fan-out (`--depth`) | Experimental |
 
 ### Supported Platforms
@@ -136,5 +137,5 @@ quarry version
 
 ## No Warranty
 
-Quarry v0.7.3 is provided "as is" without warranty of any kind.
+Quarry v0.9.0 is provided "as is" without warranty of any kind.
 See LICENSE for details.

@@ -141,6 +141,17 @@ Represents normal completion of the script.
 Required payload fields:
 - `summary` (object, optional)
 
+#### Reserved summary fields (v0.9.0+)
+
+When the `prepare` hook returns `{ action: 'skip' }`, the executor emits
+`run_complete` with the following reserved fields in `summary`:
+
+- `skipped` (boolean) — `true` when the run was skipped by `prepare`
+- `reason` (string, optional) — skip reason provided by the hook
+
+Scripts should not use `skipped` or `reason` as summary keys for other
+purposes. These fields are set by the executor, not by user code.
+
 ---
 
 ## Storage API (`storage.put()`)
