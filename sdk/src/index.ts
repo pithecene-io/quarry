@@ -27,10 +27,14 @@ export { createAPIs, createEmitAPI, StorageFilenameError, TerminalEventError } f
 export type {
   AfterRunHook,
   BeforeRunHook,
+  BeforeTerminalHook,
   CleanupHook,
   OnErrorHook,
+  PrepareHook,
+  PrepareResult,
   QuarryHooks,
-  QuarryScriptModule
+  QuarryScriptModule,
+  TerminalSignal
 } from './hooks'
 // Proxy validation (from sdk/src/proxy.ts)
 export type { ProxyValidationError, ProxyValidationResult, ProxyValidationWarning } from './proxy'

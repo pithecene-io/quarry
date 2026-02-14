@@ -22,12 +22,15 @@ import { dirname, resolve } from 'node:path'
 import type { Writable } from 'node:stream'
 import {
   type CreateContextOptions,
+  createAPIs,
   createContext,
   type JobId,
+  type PrepareResult,
   type ProxyEndpoint,
   type RunId,
   type RunMeta,
-  TerminalEventError
+  TerminalEventError,
+  type TerminalSignal
 } from '@pithecene-io/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
 import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
@@ -419,9 +422,10 @@ function redactProxy(proxy: ProxyEndpoint): ProxyEndpointRedactedFrame {
  * 4. Script completed without terminal → completed (auto-emit run_complete)
  *
  * Lifecycle ordering:
- * - beforeRun → script → afterRun (success path)
- * - beforeRun → script → onError (failure path)
- * - cleanup always runs after terminal emission attempt
+ * - prepare → acquire browser → beforeRun → script → afterRun (success path)
+ * - prepare → acquire browser → beforeRun → script → onError (failure path)
+ * - beforeTerminal fires after afterRun/onError, before auto-emit terminal
+ * - cleanup runs after terminal emission attempt (not called on prepare-skip)
  *
  * @remarks
  * **Cleanup hook contract**: The cleanup hook receives the same context but
@@ -515,7 +519,68 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       throw err
     }
 
-    // 2. Acquire browser (connect to existing or launch new)
+    // 2. Run prepare hook (before browser launch)
+    let effectiveJob: Job = config.job
+    if (script.hooks.prepare) {
+      let prepareResult: PrepareResult<Job>
+      try {
+        prepareResult = await script.hooks.prepare(config.job, config.run)
+      } catch (err) {
+        const message = errorMessage(err)
+        const crashOutcome: ExecutionOutcome = { status: 'crash', message }
+        await emitRunResult(stdioSink, crashOutcome, config.proxy)
+        return { outcome: crashOutcome, terminalEmitted: false }
+      }
+
+      // Validate shape before accessing .action — a null/undefined/non-object
+      // return would otherwise throw a generic TypeError with poor diagnostics.
+      if (
+        prepareResult === null ||
+        prepareResult === undefined ||
+        typeof prepareResult !== 'object' ||
+        !('action' in prepareResult)
+      ) {
+        const crashOutcome: ExecutionOutcome = {
+          status: 'crash',
+          message: `prepare hook must return { action: 'continue' | 'skip' }, got: ${String(prepareResult)}`
+        }
+        await emitRunResult(stdioSink, crashOutcome, config.proxy)
+        return { outcome: crashOutcome, terminalEmitted: false }
+      }
+
+      if (prepareResult.action === 'skip') {
+        // Emit run_complete with skipped summary, no browser launched
+        const { emit } = createAPIs(config.run, sink)
+        const summary: Record<string, unknown> = { skipped: true }
+        if (prepareResult.reason !== undefined) {
+          summary.reason = prepareResult.reason
+        }
+        try {
+          await emit.runComplete({ summary })
+        } catch {
+          // Sink failure — determineOutcome will handle
+        }
+        const result = determineOutcome(sink)
+        await emitRunResult(stdioSink, result.outcome, config.proxy)
+        return result
+      }
+
+      if (prepareResult.action === 'continue') {
+        if (prepareResult.job !== undefined) {
+          effectiveJob = prepareResult.job
+        }
+      } else {
+        // Unrecognized action — runtime guard per AGENTS.md "explicit behavior"
+        const crashOutcome: ExecutionOutcome = {
+          status: 'crash',
+          message: `prepare hook returned unrecognized action: ${(prepareResult as Record<string, unknown>).action}`
+        }
+        await emitRunResult(stdioSink, crashOutcome, config.proxy)
+        return { outcome: crashOutcome, terminalEmitted: false }
+      }
+    }
+
+    // 3. Acquire browser (connect to existing or launch new)
     if (config.browserWSEndpoint) {
       // Connect mode: use vanilla puppeteer (no stealth/adblocker plugins)
       const puppeteer = await getVanillaPuppeteer(config.scriptPath)
@@ -542,9 +607,9 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       })
     }
 
-    // 3. Create context (single instance, reused throughout lifecycle)
+    // 4. Create context (single instance, reused throughout lifecycle)
     ctx = createContext<Job>({
-      job: config.job,
+      job: effectiveJob,
       run: config.run,
       page,
       browser,
@@ -552,7 +617,8 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       sink
     })
 
-    // 4. Execute with lifecycle hooks
+    // 5. Execute with lifecycle hooks
+    let rawScriptError: unknown = null
     try {
       // beforeRun hook
       if (script.hooks.beforeRun) {
@@ -569,6 +635,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
     } catch (err) {
       // Script threw - capture for outcome determination
       scriptThrew = true
+      rawScriptError = err
       scriptError = {
         message: errorMessage(err),
         stack: err instanceof Error ? err.stack : undefined
@@ -587,7 +654,19 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       }
     }
 
-    // 5. Auto-emit terminal if needed and sink is healthy
+    // 6. beforeTerminal hook (if executor owns terminal & sink healthy)
+    if (script.hooks.beforeTerminal && !sink.isSinkFailed() && sink.getTerminalState() === null) {
+      const signal: TerminalSignal = rawScriptError !== null
+        ? { outcome: 'error', error: rawScriptError }
+        : { outcome: 'completed' }
+      try {
+        await script.hooks.beforeTerminal(signal, ctx)
+      } catch {
+        // Swallow — consistent with onError/cleanup pattern
+      }
+    }
+
+    // 7. Auto-emit terminal if needed and sink is healthy
     if (!sink.isSinkFailed() && sink.getTerminalState() === null) {
       try {
         if (scriptThrew && scriptError) {
@@ -609,7 +688,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       }
     }
 
-    // 6. Cleanup hook (always runs, after terminal emission attempt)
+    // 8. Cleanup hook (runs after terminal emission attempt; skipped on prepare-skip)
     // NOTE: cleanup MUST NOT emit events; they will throw TerminalEventError
     if (script.hooks.cleanup && ctx) {
       try {
@@ -619,10 +698,10 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       }
     }
 
-    // 7. Determine final outcome
+    // 9. Determine final outcome
     const result = determineOutcome(sink)
 
-    // 8. Emit run_result control frame per CONTRACT_IPC.md
+    // 10. Emit run_result control frame per CONTRACT_IPC.md
     // This is emitted exactly once, after terminal event emission attempt
     await emitRunResult(stdioSink, result.outcome, config.proxy)
 

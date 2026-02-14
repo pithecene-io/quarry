@@ -485,6 +485,374 @@ describe('execute()', () => {
       expect(cleanup).toHaveBeenCalled()
     })
   })
+
+  describe('prepare hook', () => {
+    it('proceeds normally when prepare returns continue', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ action: 'continue' })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(scriptFn).toHaveBeenCalled()
+    })
+
+    it('passes transformed job when prepare returns continue with job', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const transformedJob = { transformed: true, url: 'https://example.com' }
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ action: 'continue', job: transformedJob })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(scriptFn).toHaveBeenCalledTimes(1)
+      // The context passed to the script should contain the transformed job
+      const ctx = scriptFn.mock.calls[0][0]
+      expect(ctx.job).toEqual(transformedJob)
+    })
+
+    it('skips run when prepare returns skip with reason', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ action: 'skip', reason: 'duplicate job' })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(result.terminalEmitted).toBe(true)
+      if (result.outcome.status === 'completed') {
+        expect(result.outcome.summary).toEqual({ skipped: true, reason: 'duplicate job' })
+      }
+      // Script must NOT have been called
+      expect(scriptFn).not.toHaveBeenCalled()
+      // Browser must NOT have been launched
+      expect(puppeteer.launch).not.toHaveBeenCalled()
+    })
+
+    it('skips run when prepare returns skip without reason', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ action: 'skip' })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(result.terminalEmitted).toBe(true)
+      if (result.outcome.status === 'completed') {
+        expect(result.outcome.summary).toEqual({ skipped: true })
+      }
+      expect(scriptFn).not.toHaveBeenCalled()
+    })
+
+    it('returns crash when prepare throws', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockRejectedValue(new Error('prepare boom'))
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('crash')
+      if (result.outcome.status === 'crash') {
+        expect(result.outcome.message).toBe('prepare boom')
+      }
+      expect(scriptFn).not.toHaveBeenCalled()
+      expect(puppeteer.launch).not.toHaveBeenCalled()
+    })
+
+    it('executes normally when prepare is not exported', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {}
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(scriptFn).toHaveBeenCalled()
+    })
+
+    it('does not call any downstream hooks on prepare skip', async () => {
+      const beforeRun = vi.fn()
+      const afterRun = vi.fn()
+      const onError = vi.fn()
+      const beforeTerminal = vi.fn()
+      const cleanup = vi.fn()
+      const mockScript = createMockScript({
+        script: vi.fn().mockResolvedValue(undefined),
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ action: 'skip', reason: 'stale' }),
+          beforeRun,
+          afterRun,
+          onError,
+          beforeTerminal,
+          cleanup
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(beforeRun).not.toHaveBeenCalled()
+      expect(afterRun).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalled()
+      expect(beforeTerminal).not.toHaveBeenCalled()
+      expect(cleanup).not.toHaveBeenCalled()
+    })
+
+    it('returns crash with diagnostic when prepare returns null', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue(null)
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('crash')
+      if (result.outcome.status === 'crash') {
+        expect(result.outcome.message).toContain('prepare hook must return')
+      }
+      expect(scriptFn).not.toHaveBeenCalled()
+    })
+
+    it('returns crash with diagnostic when prepare returns undefined', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue(undefined)
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('crash')
+      if (result.outcome.status === 'crash') {
+        expect(result.outcome.message).toContain('prepare hook must return')
+      }
+      expect(scriptFn).not.toHaveBeenCalled()
+    })
+
+    it('returns crash with diagnostic when prepare returns object without action', async () => {
+      const scriptFn = vi.fn().mockResolvedValue(undefined)
+      const mockScript = createMockScript({
+        script: scriptFn,
+        hooks: {
+          prepare: vi.fn().mockResolvedValue({ foo: 'bar' })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('crash')
+      if (result.outcome.status === 'crash') {
+        expect(result.outcome.message).toContain('prepare hook must return')
+      }
+      expect(scriptFn).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('beforeTerminal hook', () => {
+    it('fires with completed signal on success path', async () => {
+      const beforeTerminal = vi.fn()
+      const mockScript = createMockScript({
+        script: vi.fn().mockResolvedValue(undefined),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(beforeTerminal).toHaveBeenCalledTimes(1)
+      const [signal, ctx] = beforeTerminal.mock.calls[0]
+      expect(signal).toEqual({ outcome: 'completed' })
+      expect(ctx).toHaveProperty('emit')
+      expect(ctx).toHaveProperty('job')
+    })
+
+    it('fires with error signal on error path', async () => {
+      const scriptError = new Error('Script failed')
+      const beforeTerminal = vi.fn()
+      const mockScript = createMockScript({
+        script: vi.fn().mockRejectedValue(scriptError),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(beforeTerminal).toHaveBeenCalledTimes(1)
+      const [signal] = beforeTerminal.mock.calls[0]
+      expect(signal.outcome).toBe('error')
+      expect(signal.error).toBe(scriptError)
+    })
+
+    it('can emit items from beforeTerminal', async () => {
+      const beforeTerminal = vi.fn().mockImplementation(async (_signal, ctx) => {
+        await ctx.emit.item({ item_type: 'summary', data: { total: 42 } })
+      })
+      const mockScript = createMockScript({
+        script: vi.fn().mockResolvedValue(undefined),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(beforeTerminal).toHaveBeenCalled()
+    })
+
+    it('is NOT called when script manually emitted terminal', async () => {
+      const beforeTerminal = vi.fn()
+      const mockScript = createMockScript({
+        script: vi.fn().mockImplementation(async (ctx) => {
+          await ctx.emit.runComplete({ summary: { done: true } })
+        }),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(beforeTerminal).not.toHaveBeenCalled()
+    })
+
+    it('is NOT called when script emitted terminal then threw', async () => {
+      const beforeTerminal = vi.fn()
+      const mockScript = createMockScript({
+        script: vi.fn().mockImplementation(async (ctx) => {
+          await ctx.emit.runComplete()
+          throw new Error('Post-terminal throw')
+        }),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(beforeTerminal).not.toHaveBeenCalled()
+    })
+
+    it('suppresses auto-terminal when hook emits terminal itself', async () => {
+      const beforeTerminal = vi.fn().mockImplementation(async (_signal, ctx) => {
+        await ctx.emit.runComplete({ summary: { hook_terminal: true } })
+      })
+      const mockScript = createMockScript({
+        script: vi.fn().mockResolvedValue(undefined),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(result.terminalEmitted).toBe(true)
+      if (result.outcome.status === 'completed') {
+        expect(result.outcome.summary).toEqual({ hook_terminal: true })
+      }
+    })
+
+    it('swallows errors and terminal is still emitted', async () => {
+      const beforeTerminal = vi.fn().mockRejectedValue(new Error('hook boom'))
+      const mockScript = createMockScript({
+        script: vi.fn().mockResolvedValue(undefined),
+        hooks: { beforeTerminal }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      const result = await execute(createConfig())
+
+      expect(result.outcome.status).toBe('completed')
+      expect(result.terminalEmitted).toBe(true)
+      expect(beforeTerminal).toHaveBeenCalled()
+    })
+
+    it('fires afterRun → beforeTerminal → cleanup in order on success', async () => {
+      const callOrder: string[] = []
+      const mockScript = createMockScript({
+        script: vi.fn().mockImplementation(async () => {
+          callOrder.push('script')
+        }),
+        hooks: {
+          afterRun: vi.fn().mockImplementation(async () => {
+            callOrder.push('afterRun')
+          }),
+          beforeTerminal: vi.fn().mockImplementation(async () => {
+            callOrder.push('beforeTerminal')
+          }),
+          cleanup: vi.fn().mockImplementation(async () => {
+            callOrder.push('cleanup')
+          })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(callOrder).toEqual(['script', 'afterRun', 'beforeTerminal', 'cleanup'])
+    })
+
+    it('fires onError → beforeTerminal → cleanup in order on error', async () => {
+      const callOrder: string[] = []
+      const mockScript = createMockScript({
+        script: vi.fn().mockImplementation(async () => {
+          callOrder.push('script')
+          throw new Error('boom')
+        }),
+        hooks: {
+          onError: vi.fn().mockImplementation(async () => {
+            callOrder.push('onError')
+          }),
+          beforeTerminal: vi.fn().mockImplementation(async () => {
+            callOrder.push('beforeTerminal')
+          }),
+          cleanup: vi.fn().mockImplementation(async () => {
+            callOrder.push('cleanup')
+          })
+        }
+      })
+      ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+      await execute(createConfig())
+
+      expect(callOrder).toEqual(['script', 'onError', 'beforeTerminal', 'cleanup'])
+    })
+  })
 })
 
 describe('SinkAlreadyFailedError', () => {
@@ -649,6 +1017,57 @@ describe('run_result frame emission', () => {
     const runResult = extractRunResultFrame(mockOutput)
     expect(runResult).not.toBeNull()
     expect(runResult!.proxy_used).toBeUndefined()
+  })
+
+  it('emits run_result frame when prepare returns skip', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockResolvedValue(undefined),
+      hooks: {
+        prepare: vi.fn().mockResolvedValue({ action: 'skip', reason: 'dup' })
+      }
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.type).toBe('run_result')
+    expect(runResult!.outcome.status).toBe('completed')
+  })
+
+  it('emits run_result frame when prepare throws', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockResolvedValue(undefined),
+      hooks: {
+        prepare: vi.fn().mockRejectedValue(new Error('boom'))
+      }
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.outcome.status).toBe('crash')
+    expect(runResult!.outcome.message).toBe('boom')
+  })
+
+  it('emits run_result frame when prepare returns malformed result', async () => {
+    const mockScript = createMockScript({
+      script: vi.fn().mockResolvedValue(undefined),
+      hooks: {
+        prepare: vi.fn().mockResolvedValue(null)
+      }
+    })
+    ;(loadScript as Mock).mockResolvedValue(mockScript)
+
+    await execute(createConfig())
+
+    const runResult = extractRunResultFrame(mockOutput)
+    expect(runResult).not.toBeNull()
+    expect(runResult!.outcome.status).toBe('crash')
+    expect(runResult!.outcome.message).toContain('prepare hook must return')
   })
 })
 
