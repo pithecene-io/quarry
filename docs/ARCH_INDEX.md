@@ -14,9 +14,17 @@ Do not update for internal refactors.
 ## Root
 
 - `AGENTS.md` — development guardrails and agent constraints
+- `CHANGELOG.md` — release history
+- `CLAUDE.md` — repository constitution
+- `Dockerfile` — container image definition
+- `LICENSE` — project license
 - `PUBLIC_API.md` — user-facing API and setup guide
+- `README.md` — project overview
+- `SUPPORT.md` — support and contribution guide
 - `Taskfile.yaml` — task orchestration and developer workflows
 - `biome.json` — formatting and linting configuration
+- `mise.toml` — toolchain version pinning
+- `package.json` — monorepo root metadata
 - `pnpm-workspace.yaml` — monorepo layout
 
 ---
@@ -39,6 +47,14 @@ User-facing guides (informational).
 - `guides/proxy.md` — user-facing proxy guide
 - `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
 - `guides/temporal.md` — Temporal orchestration integration guide
+- `guides/benchmarks.md` — benchmark methodology and results
+
+### docs/ (top-level)
+
+- `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
+- `RELEASE_READINESS_v0.3.0.md` — historical release readiness (v0.3.0)
+- `ingress-models.md` — data ingestion modeling
+- `CLI_PARITY.json` — CLI flag parity tracking
 
 ### docs/contracts/
 
@@ -53,7 +69,6 @@ Normative contracts (authoritative). These documents define **system behavior**.
 - `contracts/CONTRACT_LODE.md` — persistence and storage interaction
 - `contracts/CONTRACT_METRICS.md` — runtime metrics surface and CLI stats requirements
 - `contracts/CONTRACT_INTEGRATION.md` — event-bus adapter boundary and delivery semantics
-- `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
 Contracts are authoritative over code.
 
@@ -116,12 +131,33 @@ Go module root. Contains runtime, CLI, and core types.
 
 ---
 
+## scripts/
+
+Developer tooling and test harnesses.
+
+- `run-examples.ts` — manifest-driven example runner
+
+---
+
+## .github/
+
+CI/CD workflows.
+
+### .github/workflows/
+
+- `workflows/ci.yml` — continuous integration
+- `workflows/nightly.yml` — nightly checks
+- `workflows/release.yml` — release automation
+- `workflows/release-dry-run.yml` — release dry-run validation
+
+---
+
 ## Architectural Notes
 
 - Contracts in `docs/` are **normative**
 - `executor-node/` owns execution and IPC concerns
 - `sdk/` is the public-facing API surface
-- Generated artifacts (`dist/`, `node_modules/`) are non-authoritative
+- Generated artifacts (`dist/`, `node_modules/`, `.example-runs/`) are non-authoritative
 - IPC is treated as a hard boundary
 
 This index is intentionally stable and low-detail.
