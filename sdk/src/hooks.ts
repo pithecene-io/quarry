@@ -32,9 +32,7 @@ export type PrepareHook<Job = unknown> = (
 /**
  * Signal passed to `beforeTerminal` describing how the script finished.
  */
-export type TerminalSignal =
-  | { outcome: 'completed' }
-  | { outcome: 'error'; error: unknown }
+export type TerminalSignal = { outcome: 'completed' } | { outcome: 'error'; error: unknown }
 
 /**
  * Hook called after script execution but before the executor emits the

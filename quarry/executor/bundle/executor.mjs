@@ -2337,7 +2337,14 @@ async function loadScript(scriptPath) {
   if (!isFunction(mod.default)) {
     throw new ScriptLoadError(scriptPath, "default export is not a function");
   }
-  const HOOK_NAMES = ["prepare", "beforeRun", "afterRun", "onError", "beforeTerminal", "cleanup"];
+  const HOOK_NAMES = [
+    "prepare",
+    "beforeRun",
+    "afterRun",
+    "onError",
+    "beforeTerminal",
+    "cleanup"
+  ];
   for (const name of HOOK_NAMES) {
     if (!isOptionalFunction(mod[name])) {
       throw new ScriptLoadError(scriptPath, `${name} hook is not a function`);

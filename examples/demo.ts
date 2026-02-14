@@ -1,8 +1,8 @@
-import type { QuarryContext } from "@pithecene-io/quarry-sdk";
+import type { QuarryContext } from '@pithecene-io/quarry-sdk'
 
 export default async function run(ctx: QuarryContext): Promise<void> {
   await ctx.emit.item({
-    item_type: "demo",
-    data: { message: "hello from quarry" }
-  });
+    item_type: 'demo',
+    data: { message: 'hello from quarry' }
+  })
 }

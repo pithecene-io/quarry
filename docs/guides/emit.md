@@ -29,6 +29,11 @@ Some advisory types exist (`enqueue`, `rotate_proxy`), but they are optional.
 - **Errors**: emit `run_error` and then terminate.
 - **Completion**: emit `run_complete` once the script finishes.
 
+> **Tip:** The `beforeTerminal` lifecycle hook fires after script execution
+> but before the terminal event, with emit still open. This is useful for
+> emitting summary items or final metadata. See `PUBLIC_API.md` (Lifecycle
+> Hooks section) for details.
+
 ---
 
 ## Ordering Guarantees

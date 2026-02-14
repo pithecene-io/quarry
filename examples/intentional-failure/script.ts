@@ -1,4 +1,4 @@
-import type { QuarryContext } from "@pithecene-io/quarry-sdk";
+import type { QuarryContext } from '@pithecene-io/quarry-sdk'
 
 /**
  * Intentional failure example for testing error paths.
@@ -8,10 +8,10 @@ import type { QuarryContext } from "@pithecene-io/quarry-sdk";
 export default async function run(ctx: QuarryContext): Promise<void> {
   // Emit one item first to show partial progress is possible
   await ctx.emit.item({
-    item_type: "before_failure",
-    data: { message: "this item should be emitted" }
-  });
+    item_type: 'before_failure',
+    data: { message: 'this item should be emitted' }
+  })
 
   // Intentionally throw an error
-  throw new Error("Intentional failure for testing");
+  throw new Error('Intentional failure for testing')
 }

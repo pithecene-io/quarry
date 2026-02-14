@@ -78,6 +78,29 @@
         },
         "terminal": "run_complete"
       }
+    },
+    {
+      "name": "hooks-prepare",
+      "script": "hooks-prepare/script.ts",
+      "description": "Prepare hook: skip stale jobs before browser launch",
+      "job": { "url": "https://example.com" },
+      "expected": {
+        "events": {
+          "item": 1
+        },
+        "terminal": "run_complete"
+      }
+    },
+    {
+      "name": "hooks-before-terminal",
+      "script": "hooks-before-terminal/script.ts",
+      "description": "BeforeTerminal hook: emit summary after script execution",
+      "expected": {
+        "events": {
+          "item": 4
+        },
+        "terminal": "run_complete"
+      }
     }
   ]
 }

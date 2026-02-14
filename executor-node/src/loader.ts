@@ -97,7 +97,14 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
   }
 
   // Validate optional hooks
-  const HOOK_NAMES = ['prepare', 'beforeRun', 'afterRun', 'onError', 'beforeTerminal', 'cleanup'] as const
+  const HOOK_NAMES = [
+    'prepare',
+    'beforeRun',
+    'afterRun',
+    'onError',
+    'beforeTerminal',
+    'cleanup'
+  ] as const
   for (const name of HOOK_NAMES) {
     if (!isOptionalFunction(mod[name])) {
       throw new ScriptLoadError(scriptPath, `${name} hook is not a function`)

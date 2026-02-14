@@ -656,9 +656,10 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
 
     // 6. beforeTerminal hook (if executor owns terminal & sink healthy)
     if (script.hooks.beforeTerminal && !sink.isSinkFailed() && sink.getTerminalState() === null) {
-      const signal: TerminalSignal = rawScriptError !== null
-        ? { outcome: 'error', error: rawScriptError }
-        : { outcome: 'completed' }
+      const signal: TerminalSignal =
+        rawScriptError !== null
+          ? { outcome: 'error', error: rawScriptError }
+          : { outcome: 'completed' }
       try {
         await script.hooks.beforeTerminal(signal, ctx)
       } catch {

@@ -37,7 +37,12 @@
   },
   "overrides": [
     {
-      "includes": ["scripts/**", "testdata/**", "executor-node/scripts/**", "executor-node/testdata/**"],
+      "includes": [
+        "scripts/**",
+        "testdata/**",
+        "executor-node/scripts/**",
+        "executor-node/testdata/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
