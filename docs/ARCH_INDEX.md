@@ -14,9 +14,17 @@ Do not update for internal refactors.
 ## Root
 
 - `AGENTS.md` — development guardrails and agent constraints
+- `CHANGELOG.md` — release history
+- `CLAUDE.md` — repository constitution
+- `Dockerfile` — container image definition
+- `LICENSE` — project license
 - `PUBLIC_API.md` — user-facing API and setup guide
+- `README.md` — project overview
+- `SUPPORT.md` — support and contribution guide
 - `Taskfile.yaml` — task orchestration and developer workflows
 - `biome.json` — formatting and linting configuration
+- `mise.toml` — toolchain version pinning
+- `package.json` — monorepo root metadata
 - `pnpm-workspace.yaml` — monorepo layout
 
 ---
@@ -39,6 +47,14 @@ User-facing guides (informational).
 - `guides/proxy.md` — user-facing proxy guide
 - `guides/integration.md` — downstream ETL trigger patterns (event-bus, polling)
 - `guides/temporal.md` — Temporal orchestration integration guide
+- `guides/benchmarks.md` — benchmark methodology and results
+
+### docs/ (top-level)
+
+- `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
+- `RELEASE_READINESS_v0.3.0.md` — historical release readiness (v0.3.0)
+- `ingress-models.md` — data ingestion modeling
+- `CLI_PARITY.json` — CLI flag parity tracking
 
 ### docs/contracts/
 
@@ -53,7 +69,6 @@ Normative contracts (authoritative). These documents define **system behavior**.
 - `contracts/CONTRACT_LODE.md` — persistence and storage interaction
 - `contracts/CONTRACT_METRICS.md` — runtime metrics surface and CLI stats requirements
 - `contracts/CONTRACT_INTEGRATION.md` — event-bus adapter boundary and delivery semantics
-- `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 
 Contracts are authoritative over code.
 
@@ -104,15 +119,81 @@ Non-normative.
 
 Go module root. Contains runtime, CLI, and core types.
 
-### Key files
+### quarry/types/
 
-- `types/version.go` — canonical version (all packages must match)
-- `types/proxy.go` — proxy domain types
-- `types/events.go` — event envelope and payload types
-- `proxy/selector.go` — proxy pool selection/rotation
-- `lode/sink.go` — Lode storage sink interface
-- `cli/config/` — YAML config file loader (env expansion, struct parsing)
-- `cli/reader/` — CLI read-side data access layer
+- `types/` — domain types: events, artifacts, lineage metadata, proxy configuration, and lockstep versioning
+
+### quarry/runtime/
+
+- `runtime/` — core execution orchestration: run lifecycle, executor management, IPC ingestion, artifact handling, and fan-out scheduling
+
+### quarry/ipc/
+
+- `ipc/` — frame encoding/decoding per CONTRACT_IPC.md (msgpack, 16 MiB frame limit, artifact chunking)
+
+### quarry/executor/
+
+- `executor/` — embedded executor lifecycle: extraction, SHA256 checksumming, temp directory management
+- `executor/bundle/` — embedded executor.mjs JavaScript bundle (non-Go asset)
+
+### quarry/policy/
+
+- `policy/` — ingestion policy interface: event buffering, drop rules, flush behavior, and observability stats
+
+### quarry/proxy/
+
+- `proxy/` — proxy pool selector: round-robin, random, and sticky strategies with recency windows
+
+### quarry/lode/
+
+- `lode/` — Lode-backed storage client: artifact chunking, checksumming, and Hive-partitioned dataset management
+
+### quarry/metrics/
+
+- `metrics/` — per-run metrics collection: lifecycle, ingestion, executor, and storage operation counters
+
+### quarry/log/
+
+- `log/` — structured JSON logging with run context fields (run_id, attempt, job_id)
+
+### quarry/adapter/
+
+- `adapter/` — event-bus adapter boundary for publishing run completion notifications
+- `adapter/redis/` — Redis pub/sub adapter with exponential backoff retry
+- `adapter/webhook/` — HTTP POST adapter with retryable and non-retriable error handling
+
+### quarry/cli/
+
+- `cli/cmd/` — CLI command implementations and shared flags (run, inspect, stats, list, debug, version)
+- `cli/config/` — YAML config file parsing with duration handling and proxy pool definitions
+- `cli/reader/` — read-side data access layer abstraction with dependency injection
+- `cli/render/` — output renderer: JSON, YAML, and table formats with TTY detection
+- `cli/tui/` — terminal UI dispatcher for inspect and stats commands (Bubble Tea)
+
+### quarry/cmd/quarry/
+
+- `cmd/quarry/` — CLI entrypoint: wires urfave/cli application with all commands
+
+---
+
+## scripts/
+
+Developer tooling and test harnesses.
+
+- `run-examples.ts` — manifest-driven example runner
+
+---
+
+## .github/
+
+CI/CD workflows.
+
+### .github/workflows/
+
+- `workflows/ci.yml` — continuous integration
+- `workflows/nightly.yml` — nightly checks
+- `workflows/release.yml` — release automation
+- `workflows/release-dry-run.yml` — release dry-run validation
 
 ---
 
@@ -121,7 +202,7 @@ Go module root. Contains runtime, CLI, and core types.
 - Contracts in `docs/` are **normative**
 - `executor-node/` owns execution and IPC concerns
 - `sdk/` is the public-facing API surface
-- Generated artifacts (`dist/`, `node_modules/`) are non-authoritative
+- Generated artifacts (`dist/`, `node_modules/`, `.example-runs/`) are non-authoritative
 - IPC is treated as a hard boundary
 
 This index is intentionally stable and low-detail.
