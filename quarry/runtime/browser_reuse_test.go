@@ -228,6 +228,79 @@ func TestHealthCheck_Errors(t *testing.T) {
 	}
 }
 
+func TestProcessStatus(t *testing.T) {
+	t.Run("self is healthy", func(t *testing.T) {
+		if s := processStatus(os.Getpid()); s != processHealthy {
+			t.Errorf("current process: got %d, want processHealthy", s)
+		}
+	})
+
+	t.Run("nonexistent is gone", func(t *testing.T) {
+		// PID 2^22-1 is extremely unlikely to exist
+		if s := processStatus(4194303); s != processGone {
+			t.Errorf("nonexistent PID: got %d, want processGone", s)
+		}
+	})
+
+	t.Run("zombie is detected", func(t *testing.T) {
+		// Fork a child that exits immediately — without Wait() it becomes a zombie
+		cmd := exec.Command("true")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		pid := cmd.Process.Pid
+
+		// Give the child time to exit and become zombie
+		time.Sleep(100 * time.Millisecond)
+
+		s := processStatus(pid)
+
+		// Reap the zombie so we don't leak
+		_ = cmd.Wait()
+
+		if s != processZombie {
+			t.Errorf("zombie process: got %d, want processZombie", s)
+		}
+	})
+}
+
+func TestIsBrowserServerProcess(t *testing.T) {
+	t.Run("self is not browser server", func(t *testing.T) {
+		if isBrowserServerProcess(os.Getpid()) {
+			t.Error("test process should not be identified as browser server")
+		}
+	})
+
+	t.Run("nonexistent returns false", func(t *testing.T) {
+		if isBrowserServerProcess(4194303) {
+			t.Error("nonexistent PID should return false")
+		}
+	})
+}
+
+func TestCleanupStaleProcess_SkipsNonOwned(t *testing.T) {
+	// Launch a non-browser-server process in its own session
+	cmd := exec.Command("sleep", "60")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	pid := cmd.Process.Pid
+
+	// cleanupStaleProcess must NOT kill it — cmdline doesn't contain --browser-server
+	cleanupStaleProcess(pid)
+
+	// Verify it's still alive
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Errorf("non-owned process was killed by cleanupStaleProcess: %v", err)
+	}
+
+	// Clean up
+	killProcessGroup(pid)
+	_ = cmd.Wait()
+}
+
 func TestMustParseTime(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		if mustParseTime("2026-02-10T12:00:00Z").IsZero() {
