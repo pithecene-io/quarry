@@ -190,7 +190,7 @@ Repo-local AI governance: skill definitions for structural validation.
 
 ### ai/skills/repo-convention-enforcer/v1/
 
-- `SKILL.md` — observation-mode structural validator
+- `SKILL.md` — structural enforcement validator
 - `input.schema.json` — skill input schema
 - `output.schema.json` — skill output schema
 
