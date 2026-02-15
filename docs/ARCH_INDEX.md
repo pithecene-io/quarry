@@ -184,6 +184,18 @@ Developer tooling and test harnesses.
 
 ---
 
+## ai/
+
+Repo-local AI governance: skill definitions for structural validation.
+
+### ai/skills/repo-convention-enforcer/v1/
+
+- `SKILL.md` — structural enforcement validator
+- `input.schema.json` — skill input schema
+- `output.schema.json` — skill output schema
+
+---
+
 ## .github/
 
 CI/CD workflows.
