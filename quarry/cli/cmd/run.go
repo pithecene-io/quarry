@@ -132,6 +132,10 @@ ADVANCED:
 				Name:  "quiet",
 				Usage: "Suppress result output",
 			},
+			&cli.StringFlag{
+				Name:  "report",
+				Usage: "Write structured JSON report to path on exit (use - for stderr)",
+			},
 			// Partition key flags
 			&cli.StringFlag{
 				Name:  "source",
@@ -444,14 +448,16 @@ type runFinalizer struct {
 	policyChoice   policyChoice
 	startTime      time.Time
 	quiet          bool
+	reportPath     string
 }
 
-// Finalize persists metrics, notifies the adapter, and prints results.
+// Finalize persists metrics, notifies the adapter, writes the report, and prints results.
 // duration is computed from startTime internally.
 func (f *runFinalizer) Finalize(result *runtime.RunResult) {
 	duration := time.Since(f.startTime)
 	f.persistMetrics(duration)
 	f.notifyAdapter(result, duration)
+	f.writeReport(result)
 	f.printResults(result, duration)
 }
 
@@ -483,6 +489,17 @@ func (f *runFinalizer) notifyAdapter(result *runtime.RunResult, duration time.Du
 	defer cancel()
 	if err := adpt.Publish(ctx, event); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: adapter notification failed: %v\n", err)
+	}
+}
+
+func (f *runFinalizer) writeReport(result *runtime.RunResult) {
+	if f.reportPath == "" {
+		return
+	}
+	exitCode := outcomeToExitCode(result.Outcome.Status)
+	report := runtime.BuildRunReport(result, f.collector.Snapshot(), f.policyChoice.name, exitCode)
+	if err := runtime.WriteRunReport(report, f.reportPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write report: %v\n", err)
 	}
 }
 
@@ -723,6 +740,7 @@ func runAction(c *cli.Context) error {
 		policyChoice:   choice,
 		startTime:      startTime,
 		quiet:          c.Bool("quiet"),
+		reportPath:     c.String("report"),
 	}
 
 	// Build root run config

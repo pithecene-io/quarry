@@ -84,6 +84,9 @@ type RunResult struct {
 	// ProxyUsed is the proxy endpoint used (redacted, no password).
 	// Nil if no proxy was configured.
 	ProxyUsed *types.ProxyEndpointRedacted
+	// TerminalSummary is the payload from the terminal event (run_complete or run_error).
+	// Nil if no terminal event was received.
+	TerminalSummary map[string]any
 }
 
 // RunOrchestrator orchestrates a single run.
@@ -408,6 +411,9 @@ func (r *RunOrchestrator) buildResult(
 
 	if ingestion != nil {
 		result.EventCount = ingestion.CurrentSeq()
+		if termEvent, hasTerm := ingestion.GetTerminalEvent(); hasTerm && termEvent.Payload != nil {
+			result.TerminalSummary = termEvent.Payload
+		}
 	}
 
 	// Record run outcome metrics per CONTRACT_METRICS.md

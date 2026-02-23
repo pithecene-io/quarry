@@ -150,6 +150,23 @@ The `run` command exit code is determined by execution outcome:
 `policy_failure` and `version_mismatch` share exit code 3 because both
 are non-retryable configuration errors that cannot be resolved by re-running.
 
+### Structured Exit Report (v1.0.0+)
+
+`quarry run` supports an optional `--report` flag that writes a structured
+JSON report on exit, making every run machine-auditable.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--report` | string | | Path to write JSON report on exit (use `-` for stderr) |
+
+**Semantics:**
+- The report is written after metrics persistence and adapter notification.
+- The report JSON structure is documented in CONTRACT_RUN.md §Structured Exit Report.
+- `--report -` writes the report to stderr (useful for piping/capturing).
+- Report write failures are logged to stderr as warnings and do not affect
+  the run exit code.
+- The `exit_code` field in the report matches the process exit code.
+
 ### Streaming Policy Flags (v0.7.0+)
 
 `quarry run` supports a `streaming` ingestion policy with configurable flush
