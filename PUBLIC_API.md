@@ -432,6 +432,27 @@ When scripts import workspace packages that are not resolvable from the
 script's directory, `--resolve-from` registers an ESM resolve hook to fall
 back to the specified `node_modules`. See `docs/contracts/CONTRACT_CLI.md`.
 
+**Validation:**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Validate script loadability without executing a run (no browser, no storage) |
+
+When `--dry-run` is set, only `--script` and `--run-id` are required. Storage,
+policy, proxy, and adapter configuration are skipped entirely. The executor
+loads the script module (with `--resolve-from` hook if configured), validates
+the default export and hook signatures, and reports the result. Exit 0 = valid,
+exit 1 = invalid.
+
+```bash
+# Validate a script loads correctly
+quarry run --dry-run --script ./my-script.ts --run-id test --source test
+
+# Validate with --resolve-from (monorepo/container)
+quarry run --dry-run --script ./my-script.ts --run-id test --source test \
+  --resolve-from /app/node_modules
+```
+
 **Advanced flags (development only):**
 
 | Flag | Description |

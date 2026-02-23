@@ -216,6 +216,72 @@ func TestExecutorInputJSON_OmitsStorageWhenNil(t *testing.T) {
 	}
 }
 
+func TestScriptValidation_ValidJSON(t *testing.T) {
+	input := `{"valid":true,"exports":{"default":true,"hooks":["prepare","cleanup"]}}`
+
+	var result ScriptValidation
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if !result.Valid {
+		t.Error("expected valid=true")
+	}
+	if result.Exports == nil {
+		t.Fatal("expected exports to be non-nil")
+	}
+	if !result.Exports.Default {
+		t.Error("expected exports.default=true")
+	}
+	if len(result.Exports.Hooks) != 2 {
+		t.Errorf("expected 2 hooks, got %d", len(result.Exports.Hooks))
+	}
+	if result.Exports.Hooks[0] != "prepare" {
+		t.Errorf("hooks[0] = %q, want %q", result.Exports.Hooks[0], "prepare")
+	}
+	if result.Exports.Hooks[1] != "cleanup" {
+		t.Errorf("hooks[1] = %q, want %q", result.Exports.Hooks[1], "cleanup")
+	}
+}
+
+func TestScriptValidation_InvalidJSON(t *testing.T) {
+	input := `{"valid":false,"error":"Failed to load script \"bad.ts\": missing default export"}`
+
+	var result ScriptValidation
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if result.Valid {
+		t.Error("expected valid=false")
+	}
+	if result.Exports != nil {
+		t.Error("expected exports to be nil")
+	}
+	if result.Error == "" {
+		t.Error("expected error message")
+	}
+}
+
+func TestScriptValidation_EmptyHooks(t *testing.T) {
+	input := `{"valid":true,"exports":{"default":true,"hooks":[]}}`
+
+	var result ScriptValidation
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if !result.Valid {
+		t.Error("expected valid=true")
+	}
+	if result.Exports == nil {
+		t.Fatal("expected exports to be non-nil")
+	}
+	if len(result.Exports.Hooks) != 0 {
+		t.Errorf("expected 0 hooks, got %d", len(result.Exports.Hooks))
+	}
+}
+
 // TestDeriveDay_UTCMidnightBoundary verifies DeriveDay determinism and
 // correct day rollover at UTC midnight. The integration test that exercises
 // the actual child-run wiring (where the day-drift bug lived) is in

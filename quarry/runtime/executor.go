@@ -218,6 +218,64 @@ func (m *ExecutorManager) Kill() error {
 	return nil
 }
 
+// ScriptExports describes the exports found in a validated script module.
+type ScriptExports struct {
+	Default bool     `json:"default"`
+	Hooks   []string `json:"hooks"`
+}
+
+// ScriptValidation is the result of executor --validate.
+type ScriptValidation struct {
+	Valid   bool          `json:"valid"`
+	Exports *ScriptExports `json:"exports,omitempty"`
+	Error   string        `json:"error,omitempty"`
+}
+
+// ValidateScript spawns the executor in --validate mode and returns the
+// script validation result. This loads the script module and checks its
+// shape without launching a browser or setting up IPC.
+func ValidateScript(ctx context.Context, executorPath, scriptPath, resolveFrom string) (*ScriptValidation, error) {
+	cmd := exec.CommandContext(ctx, executorPath, "--validate", scriptPath)
+
+	// Set module resolution env vars when --resolve-from is configured
+	if resolveFrom != "" {
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, "QUARRY_RESOLVE_FROM="+resolveFrom)
+
+		existing := os.Getenv("NODE_PATH")
+		if existing != "" {
+			cmd.Env = append(cmd.Env, "NODE_PATH="+resolveFrom+string(os.PathListSeparator)+existing)
+		} else {
+			cmd.Env = append(cmd.Env, "NODE_PATH="+resolveFrom)
+		}
+		cmd.Env = deduplicateEnv(cmd.Env)
+	}
+
+	stdout, err := cmd.Output()
+	if err != nil {
+		// If the process exited with code 1 and produced stdout, parse it
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(stdout) > 0 {
+			var result ScriptValidation
+			if jsonErr := json.Unmarshal(stdout, &result); jsonErr == nil {
+				return &result, nil
+			}
+		}
+		// If process produced stderr, include it
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("executor validate failed: %w\nstderr: %s", err, string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("executor validate failed: %w", err)
+	}
+
+	var result ScriptValidation
+	if err := json.Unmarshal(stdout, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse validation result: %w", err)
+	}
+
+	return &result, nil
+}
+
 // deduplicateEnv keeps the last occurrence of each env var key.
 // This ensures our appended values (NODE_PATH, QUARRY_RESOLVE_FROM) win
 // over inherited duplicates from os.Environ().

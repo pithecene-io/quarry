@@ -30,6 +30,7 @@ import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 import { drainStdout } from '../ipc/sink.js'
 import { installStdoutGuard } from '../ipc/stdout-guard.js'
+import { type LoadedScript, loadScript, ScriptLoadError } from '../loader.js'
 import { parseStoragePartition } from '../parse-storage-partition.js'
 
 /**
@@ -38,6 +39,63 @@ import { parseStoragePartition } from '../parse-storage-partition.js'
 function fatalError(message: string): never {
   process.stderr.write(`Error: ${message}\n`)
   process.exit(3)
+}
+
+/** Known lifecycle hook names to report. */
+const HOOK_NAMES = [
+  'prepare',
+  'beforeRun',
+  'afterRun',
+  'onError',
+  'beforeTerminal',
+  'cleanup'
+] as const
+
+/**
+ * Validate a script module without executing it.
+ *
+ * Registers the --resolve-from ESM hook if configured, loads the script,
+ * validates its shape, and prints a JSON result to stdout.
+ *
+ * Exit codes:
+ * - 0: Script is valid
+ * - 1: Script load or validation failed
+ */
+async function validateScript(scriptPath: string): Promise<never> {
+  // Register ESM resolve hook if configured (same as normal execution path)
+  const resolveFrom = process.env.QUARRY_RESOLVE_FROM
+  if (resolveFrom) {
+    const { registerResolveFromHook } = await import('../resolve-from.js')
+    await registerResolveFromHook(resolveFrom)
+  }
+
+  let loaded: LoadedScript
+  try {
+    loaded = await loadScript(scriptPath)
+  } catch (err) {
+    const message = err instanceof ScriptLoadError ? err.message : errorMessage(err)
+    const result = { valid: false, error: message }
+    process.stdout.write(JSON.stringify(result) + '\n')
+    process.exit(1)
+  }
+
+  // Report which hooks are present
+  const hooks: string[] = []
+  for (const name of HOOK_NAMES) {
+    if (loaded.hooks[name] !== undefined) {
+      hooks.push(name)
+    }
+  }
+
+  const result = {
+    valid: true,
+    exports: {
+      default: true,
+      hooks
+    }
+  }
+  process.stdout.write(JSON.stringify(result) + '\n')
+  process.exit(0)
 }
 
 /**
@@ -275,6 +333,16 @@ async function main(): Promise<never> {
       process.exit(3)
     }
     return browserServer(scriptPath)
+  }
+
+  // Validate mode: load script and check shape without executing
+  if (args[0] === '--validate') {
+    const scriptPath = args[1]
+    if (!scriptPath) {
+      process.stderr.write('Usage: quarry-executor --validate <script-path>\n')
+      process.exit(3)
+    }
+    return validateScript(scriptPath)
   }
 
   // Legacy browser server mode: stdin-managed lifetime for fan-out

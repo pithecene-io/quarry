@@ -167,6 +167,28 @@ JSON report on exit, making every run machine-auditable.
   the run exit code.
 - The `exit_code` field in the report matches the process exit code.
 
+### Dry-Run Validation (v1.1.0+)
+
+`quarry run` supports a `--dry-run` flag that validates script loadability
+without executing a run. No browser is launched, no storage is written,
+and no policy/proxy/adapter config is required.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | bool | `false` | Validate script loadability only |
+
+**Semantics:**
+- When `--dry-run` is set, `--source`, `--storage-backend`, and `--storage-path`
+  are not required. Only `--script` and `--run-id` are required.
+- The executor is spawned in `--validate` mode, which loads the script module
+  (including `--resolve-from` ESM hook registration if configured), validates
+  the default export and optional hook signatures, and exits.
+- Output is human-readable validation summary to stderr.
+- Exit code 0 = script is loadable and well-formed.
+- Exit code 1 = script load or validation failed.
+- Exit code 2 = executor binary missing or failed to spawn.
+- Policy, storage, proxy, adapter, and fan-out configuration are skipped entirely.
+
 ### Streaming Policy Flags (v0.7.0+)
 
 `quarry run` supports a `streaming` ingestion policy with configurable flush

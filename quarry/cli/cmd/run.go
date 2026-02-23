@@ -132,6 +132,10 @@ ADVANCED:
 				Name:  "quiet",
 				Usage: "Suppress result output",
 			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Validate script loadability without executing a run (no browser, no storage)",
+			},
 			&cli.StringFlag{
 				Name:  "report",
 				Usage: "Write structured JSON report to path on exit (use - for stderr)",
@@ -532,8 +536,11 @@ func runAction(c *cli.Context) error {
 	browserWSEndpoint := resolveString(c, "browser-ws-endpoint", configVal(cfg, func(c *quarryconfig.Config) string { return c.BrowserWSEndpoint }))
 	resolveFrom := resolveString(c, "resolve-from", configVal(cfg, func(c *quarryconfig.Config) string { return c.ResolveFrom }))
 
+	dryRun := c.Bool("dry-run")
+
 	// Manual validation for fields that were previously Required:true
-	if source == "" {
+	// In dry-run mode, --source is not required (script validation only)
+	if source == "" && !dryRun {
 		return cli.Exit("--source is required (provide via CLI flag or config file)", exitConfigError)
 	}
 
@@ -554,6 +561,16 @@ func runAction(c *cli.Context) error {
 			return cli.Exit(fmt.Sprintf("--resolve-from: not a directory: %s", absResolveFrom), exitConfigError)
 		}
 		resolveFrom = absResolveFrom
+	}
+
+	// Dry-run mode: validate script loadability only.
+	// Skip policy, storage, proxy, adapter, and fan-out config entirely.
+	if dryRun {
+		executorPath, err := resolveExecutor(executor)
+		if err != nil {
+			return cli.Exit(err.Error(), exitConfigError)
+		}
+		return runDryRun(c.Context, executorPath, c.String("script"), resolveFrom)
 	}
 
 	// Parse policy config with precedence
@@ -862,6 +879,40 @@ func runWithFanOut(
 
 	// Exit code is determined by root run outcome only
 	return cli.Exit("", outcomeToExitCode(rootResult.Outcome.Status))
+}
+
+// runDryRun validates script loadability via the executor's --validate mode.
+// It prints a human-readable summary to stderr and exits 0 (valid) or 1 (invalid).
+func runDryRun(ctx context.Context, executorPath, scriptPath, resolveFrom string) error {
+	fmt.Fprintf(os.Stderr, "Dry-run validation:\n")
+	fmt.Fprintf(os.Stderr, "  script:   %s\n", scriptPath)
+	fmt.Fprintf(os.Stderr, "  executor: %s\n", executorPath)
+	if resolveFrom != "" {
+		fmt.Fprintf(os.Stderr, "  resolve-from: %s\n", resolveFrom)
+	}
+	fmt.Fprintln(os.Stderr)
+
+	result, err := runtime.ValidateScript(ctx, executorPath, scriptPath, resolveFrom)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  ✗ Executor failed: %v\n\nValidation failed.\n", err)
+		return cli.Exit("", exitScriptError)
+	}
+
+	if !result.Valid {
+		fmt.Fprintf(os.Stderr, "  ✗ Script load failed: %s\n\nValidation failed.\n", result.Error)
+		return cli.Exit("", exitScriptError)
+	}
+
+	fmt.Fprintf(os.Stderr, "  ✓ Script loaded successfully\n")
+	if result.Exports != nil {
+		fmt.Fprintf(os.Stderr, "  ✓ Default export: function\n")
+		if len(result.Exports.Hooks) > 0 {
+			fmt.Fprintf(os.Stderr, "  ✓ Hooks: %s\n", strings.Join(result.Exports.Hooks, ", "))
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\nValidation passed.\n")
+
+	return cli.Exit("", exitSuccess)
 }
 
 // resolveString returns the CLI flag value if explicitly set, else the config
