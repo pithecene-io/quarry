@@ -38,7 +38,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
-function createAPIs(run, sink) {
+function buildStorageKey(partition, filename) {
+  return `datasets/${partition.dataset}/partitions/source=${partition.source}/category=${partition.category}/day=${partition.day}/run_id=${partition.run_id}/files/${filename}`;
+}
+function createAPIs(run, sink, storagePartition) {
   let seq = 0;
   let terminalEmitted = false;
   let sinkFailed = null;
@@ -193,12 +196,13 @@ function createAPIs(run, sink) {
         assertNotTerminal();
         validateFilename(options.filename);
         await sink.writeFile(options.filename, options.content_type, options.data);
+        return { key: storagePartition ? buildStorageKey(storagePartition, options.filename) : "" };
       });
     } }
   };
 }
 function createContext(options) {
-  const { emit, storage } = createAPIs(options.run, options.sink);
+  const { emit, storage } = createAPIs(options.run, options.sink, options.storagePartition);
   const ctx = {
     job: options.job,
     run: Object.freeze(options.run),
@@ -2640,7 +2644,7 @@ async function execute(config) {
         return { outcome: crashOutcome, terminalEmitted: false };
       }
       if (prepareResult.action === "skip") {
-        const { emit } = createAPIs(config.run, sink);
+        const { emit } = createAPIs(config.run, sink, config.storagePartition);
         const summary = { skipped: true };
         if (prepareResult.reason !== void 0) {
           summary.reason = prepareResult.reason;
@@ -2693,7 +2697,8 @@ async function execute(config) {
       page,
       browser,
       browserContext,
-      sink
+      sink,
+      storagePartition: config.storagePartition
     });
     let rawScriptError = null;
     try {
@@ -3117,12 +3122,26 @@ async function main() {
   } catch (err) {
     fatalError(`parsing proxy: ${errorMessage(err)}`);
   }
+  let storagePartition;
+  if (inputObj.storage !== null && inputObj.storage !== void 0 && typeof inputObj.storage === "object") {
+    const sp = inputObj.storage;
+    if (typeof sp.dataset === "string" && sp.dataset !== "" && typeof sp.source === "string" && sp.source !== "" && typeof sp.category === "string" && sp.category !== "" && typeof sp.day === "string" && sp.day !== "" && typeof sp.run_id === "string" && sp.run_id !== "") {
+      storagePartition = {
+        dataset: sp.dataset,
+        source: sp.source,
+        category: sp.category,
+        day: sp.day,
+        run_id: sp.run_id
+      };
+    }
+  }
   const browserWSEndpoint = typeof inputObj.browser_ws_endpoint === "string" && inputObj.browser_ws_endpoint !== "" ? inputObj.browser_ws_endpoint : void 0;
   const result = await execute({
     scriptPath,
     job,
     run,
     proxy,
+    storagePartition,
     browserWSEndpoint,
     output: ipcOutput,
     outputWrite: ipcWrite,

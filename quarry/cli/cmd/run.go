@@ -405,6 +405,8 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		ResolveFrom:       cf.resolveFrom,
 		Source:            childSource,
 		Category:          childCategory,
+		StorageDataset:    cf.storageDataset,
+		StorageDay:        lode.DeriveDay(time.Now()),
 		Collector:         childCollector,
 	}
 
@@ -738,6 +740,8 @@ func runAction(c *cli.Context) error {
 		ResolveFrom:       resolveFrom,
 		Source:            source,
 		Category:          category,
+		StorageDataset:    storageDataset,
+		StorageDay:        lode.DeriveDay(startTime),
 		Collector:         collector,
 	}
 

@@ -11,7 +11,9 @@ import type {
   EmitRunErrorOptions,
   EmitSink,
   StorageAPI,
-  StoragePutOptions
+  StoragePartitionMeta,
+  StoragePutOptions,
+  StoragePutResult
 } from './emit'
 import type { RunMeta } from './types/context'
 import type { ArtifactId, EventEnvelope, EventId, EventType, PayloadMap } from './types/events'
@@ -49,15 +51,35 @@ export class StorageFilenameError extends Error {
 }
 
 /**
+ * Compute the Hive-partitioned storage key for a sidecar file.
+ * Must exactly match Go's buildFilePath() in quarry/lode/file_writer.go.
+ *
+ * Format: datasets/{dataset}/partitions/source={source}/category={category}/day={day}/run_id={runID}/files/{filename}
+ */
+export function buildStorageKey(partition: StoragePartitionMeta, filename: string): string {
+  return `datasets/${partition.dataset}/partitions/source=${partition.source}/category=${partition.category}/day=${partition.day}/run_id=${partition.run_id}/files/${filename}`
+}
+
+/**
  * Create both EmitAPI and StorageAPI backed by a shared EmitSink.
  *
  * Both APIs share a single promise chain for ordering and fail-fast.
  * Emission is serialized to ensure strict ordering and correct
  * terminal state handling.
  *
+ * @param run - Run metadata
+ * @param sink - Emit sink for writing events/artifacts/files
+ * @param storagePartition - Optional storage partition metadata for key computation.
+ *   When provided, storage.put() returns the resolved storage key.
+ *   When absent, storage.put() returns an empty key (pre-v1.0 behavior).
+ *
  * @internal
  */
-export function createAPIs(run: RunMeta, sink: EmitSink): { emit: EmitAPI; storage: StorageAPI } {
+export function createAPIs(
+  run: RunMeta,
+  sink: EmitSink,
+  storagePartition?: StoragePartitionMeta
+): { emit: EmitAPI; storage: StorageAPI } {
   let seq = 0
   let terminalEmitted = false
   let sinkFailed: unknown = null
@@ -258,11 +280,15 @@ export function createAPIs(run: RunMeta, sink: EmitSink): { emit: EmitAPI; stora
   }
 
   const storage: StorageAPI = {
-    put(options: StoragePutOptions): Promise<void> {
+    put(options: StoragePutOptions): Promise<StoragePutResult> {
       return serialize(async () => {
         assertNotTerminal()
         validateFilename(options.filename)
         await sink.writeFile(options.filename, options.content_type, options.data)
+        const key = storagePartition
+          ? buildStorageKey(storagePartition, options.filename)
+          : ''
+        return { key }
       })
     }
   }

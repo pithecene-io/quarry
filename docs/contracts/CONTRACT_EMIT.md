@@ -169,6 +169,29 @@ the event envelope, sequence numbering, and policy pipeline entirely.
   not counted in `seq`.
 - Files are transported as `file_write` IPC frames (see CONTRACT_IPC.md).
 
+### Return Value (v1.0.0+)
+
+`storage.put()` returns `Promise<StoragePutResult>`:
+
+```typescript
+interface StoragePutResult {
+  /** The resolved Hive-partitioned storage key */
+  key: string
+}
+```
+
+The key follows the Hive partition formula:
+```
+datasets/{dataset}/partitions/source={source}/category={category}/day={day}/run_id={runID}/files/{filename}
+```
+
+All components are known at executor startup and passed via the `storage`
+field in the executor stdin payload (see CONTRACT_IPC.md). The SDK computes
+the key deterministically — no bidirectional IPC round-trip is needed.
+
+When storage partition metadata is not provided (e.g. older CLI versions),
+the key is an empty string.
+
 ### Filename Rules
 
 - Must not be empty.

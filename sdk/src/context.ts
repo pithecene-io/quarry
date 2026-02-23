@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
-import type { EmitSink } from './emit'
+import type { EmitSink, StoragePartitionMeta } from './emit'
 import { createAPIs } from './emit-impl'
 import type { QuarryContext, RunMeta } from './types/context'
 
@@ -16,6 +16,8 @@ export interface CreateContextOptions<Job = unknown> {
   browser: Browser
   browserContext: BrowserContext
   sink: EmitSink
+  /** Storage partition metadata for SDK-side key computation. @internal */
+  storagePartition?: StoragePartitionMeta
 }
 
 /**
@@ -27,7 +29,7 @@ export interface CreateContextOptions<Job = unknown> {
 export function createContext<Job = unknown>(
   options: CreateContextOptions<Job>
 ): QuarryContext<Job> {
-  const { emit, storage } = createAPIs(options.run, options.sink)
+  const { emit, storage } = createAPIs(options.run, options.sink, options.storagePartition)
 
   const ctx: QuarryContext<Job> = {
     job: options.job,

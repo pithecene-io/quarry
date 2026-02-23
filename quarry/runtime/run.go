@@ -58,6 +58,12 @@ type RunConfig struct {
 	Source string
 	// Category is the partition key for logical data type (default: "default").
 	Category string
+	// StorageDataset is the Lode dataset ID (e.g. "quarry").
+	// Used to construct StoragePartition for executor input.
+	StorageDataset string
+	// StorageDay is the partition day (YYYY-MM-DD UTC).
+	// Used to construct StoragePartition for executor input.
+	StorageDay string
 	// Collector is the metrics collector for this run per CONTRACT_METRICS.md.
 	// If nil, no metrics are recorded (all Collector methods are nil-safe).
 	Collector *metrics.Collector
@@ -138,6 +144,17 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		Proxy:             r.config.Proxy,
 		BrowserWSEndpoint: r.config.BrowserWSEndpoint,
 		ResolveFrom:       r.config.ResolveFrom,
+	}
+
+	// Attach storage partition metadata for SDK-side key computation
+	if r.config.StorageDataset != "" && r.config.StorageDay != "" {
+		execConfig.Storage = &StoragePartition{
+			Dataset:  r.config.StorageDataset,
+			Source:   r.config.Source,
+			Category: r.config.Category,
+			Day:      r.config.StorageDay,
+			RunID:    r.config.RunMeta.RunID,
+		}
 	}
 
 	var executor Executor

@@ -34,6 +34,10 @@ type ExecutorConfig struct {
 	// bare-specifier ESM resolution fallback. When set, the executor registers
 	// a custom resolve hook via module.register().
 	ResolveFrom string
+	// Storage is the optional Hive partition metadata for SDK-side key computation.
+	// When set, the executor passes this to the SDK so storage.put() can return
+	// the resolved storage key without a bidirectional IPC round-trip.
+	Storage *StoragePartition
 }
 
 // ExecutorResult represents the result of executor execution.
@@ -60,6 +64,17 @@ func NewExecutorManager(config *ExecutorConfig) *ExecutorManager {
 	}
 }
 
+// StoragePartition describes the Hive partition metadata passed to the executor.
+// The executor uses this to compute deterministic storage keys client-side,
+// avoiding a bidirectional IPC round-trip.
+type StoragePartition struct {
+	Dataset  string `json:"dataset"`
+	Source   string `json:"source"`
+	Category string `json:"category"`
+	Day      string `json:"day"`
+	RunID    string `json:"run_id"`
+}
+
 // executorInput is the JSON structure written to executor stdin.
 type executorInput struct {
 	RunID       string               `json:"run_id"`
@@ -69,6 +84,7 @@ type executorInput struct {
 	Job               any                  `json:"job"`
 	Proxy             *types.ProxyEndpoint `json:"proxy,omitempty"`
 	BrowserWSEndpoint string               `json:"browser_ws_endpoint,omitempty"`
+	Storage           *StoragePartition    `json:"storage,omitempty"`
 }
 
 // Start starts the executor process.
@@ -131,6 +147,7 @@ func (m *ExecutorManager) Start(ctx context.Context) error {
 		Job:               m.config.Job,
 		Proxy:             m.config.Proxy,
 		BrowserWSEndpoint: m.config.BrowserWSEndpoint,
+		Storage:           m.config.Storage,
 	}
 
 	if err := json.NewEncoder(stdin).Encode(input); err != nil {

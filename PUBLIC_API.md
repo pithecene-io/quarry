@@ -312,10 +312,20 @@ bypassing the event pipeline.
 
 ```typescript
 // Write a file to storage (e.g., images, CSVs, raw HTML)
-await ctx.storage.put({
+const result = await ctx.storage.put({
   filename: "product-image.png",
   content_type: "image/png",
   data: buffer  // Buffer or Uint8Array
+});
+
+// result.key is the resolved Hive-partitioned storage path
+// e.g. "datasets/quarry/partitions/source=my-source/category=default/day=2026-02-23/run_id=run-001/files/product-image.png"
+console.log(result.key);
+
+// Include the storage key in emitted items for downstream correlation
+await ctx.emit.item({
+  item_type: "product",
+  data: { name: "Example", image_key: result.key }
 });
 ```
 
@@ -324,6 +334,7 @@ Rules:
 - Maximum file size: 8 MiB
 - Shares ordering and fail-fast with `emit.*`
 - Cannot be called after a terminal event (`run_complete` / `run_error`)
+- Returns `StoragePutResult` with the resolved `key` (v1.0.0+)
 
 Files land at Hive-partitioned paths under the storage root:
 ```

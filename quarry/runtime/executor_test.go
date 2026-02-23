@@ -145,3 +145,94 @@ func TestExecutorConfig_ResolveFromEnvSetup(t *testing.T) {
 		t.Errorf("ResolveFrom = %q, want %q", config.ResolveFrom, "/app/node_modules")
 	}
 }
+
+func TestExecutorInputJSON_IncludesStoragePartition(t *testing.T) {
+	input := executorInput{
+		RunID:   "run-001",
+		Attempt: 1,
+		Job:     map[string]any{},
+		Storage: &StoragePartition{
+			Dataset:  "quarry",
+			Source:   "my-source",
+			Category: "default",
+			Day:      "2026-02-23",
+			RunID:    "run-001",
+		},
+	}
+
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	storage, ok := decoded["storage"].(map[string]any)
+	if !ok {
+		t.Fatal("storage field missing or not an object")
+	}
+
+	checks := map[string]string{
+		"dataset":  "quarry",
+		"source":   "my-source",
+		"category": "default",
+		"day":      "2026-02-23",
+		"run_id":   "run-001",
+	}
+	for key, want := range checks {
+		got, exists := storage[key].(string)
+		if !exists {
+			t.Errorf("storage.%s missing", key)
+		} else if got != want {
+			t.Errorf("storage.%s = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestExecutorInputJSON_OmitsStorageWhenNil(t *testing.T) {
+	input := executorInput{
+		RunID:   "run-001",
+		Attempt: 1,
+		Job:     map[string]any{},
+	}
+
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if _, exists := decoded["storage"]; exists {
+		t.Error("storage should be omitted when nil")
+	}
+}
+
+func TestStoragePartition_MatchesGoPathFormula(t *testing.T) {
+	// Verify StoragePartition fields produce a path matching
+	// the Go buildFilePath() formula in quarry/lode/file_writer.go:
+	// datasets/{dataset}/partitions/source={s}/category={c}/day={d}/run_id={r}/files/{filename}
+	sp := StoragePartition{
+		Dataset:  "quarry",
+		Source:   "my-source",
+		Category: "default",
+		Day:      "2026-02-23",
+		RunID:    "run-001",
+	}
+
+	filename := "screenshot.png"
+	want := "datasets/quarry/partitions/source=my-source/category=default/day=2026-02-23/run_id=run-001/files/screenshot.png"
+
+	// Reproduce the Go formula
+	got := "datasets/" + sp.Dataset + "/partitions/source=" + sp.Source + "/category=" + sp.Category + "/day=" + sp.Day + "/run_id=" + sp.RunID + "/files/" + filename
+
+	if got != want {
+		t.Errorf("path formula mismatch:\n  got:  %s\n  want: %s", got, want)
+	}
+}

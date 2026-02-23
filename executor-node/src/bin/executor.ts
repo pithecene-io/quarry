@@ -24,7 +24,7 @@
  * @module
  */
 import { unlinkSync } from 'node:fs'
-import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
+import type { ProxyEndpoint, StoragePartitionMeta } from '@pithecene-io/quarry-sdk'
 import { chromiumArgs } from '../browser-args.js'
 import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
@@ -349,6 +349,27 @@ async function main(): Promise<never> {
     fatalError(`parsing proxy: ${errorMessage(err)}`)
   }
 
+  // Parse optional storage partition metadata for SDK-side key computation
+  let storagePartition: StoragePartitionMeta | undefined
+  if (inputObj.storage !== null && inputObj.storage !== undefined && typeof inputObj.storage === 'object') {
+    const sp = inputObj.storage as Record<string, unknown>
+    if (
+      typeof sp.dataset === 'string' && sp.dataset !== '' &&
+      typeof sp.source === 'string' && sp.source !== '' &&
+      typeof sp.category === 'string' && sp.category !== '' &&
+      typeof sp.day === 'string' && sp.day !== '' &&
+      typeof sp.run_id === 'string' && sp.run_id !== ''
+    ) {
+      storagePartition = {
+        dataset: sp.dataset,
+        source: sp.source,
+        category: sp.category,
+        day: sp.day,
+        run_id: sp.run_id
+      }
+    }
+  }
+
   // Parse optional browser WebSocket endpoint
   const browserWSEndpoint =
     typeof inputObj.browser_ws_endpoint === 'string' && inputObj.browser_ws_endpoint !== ''
@@ -361,6 +382,7 @@ async function main(): Promise<never> {
     job,
     run,
     proxy,
+    storagePartition,
     browserWSEndpoint,
     output: ipcOutput,
     outputWrite: ipcWrite,
