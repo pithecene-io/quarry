@@ -143,3 +143,63 @@ For every run, the runtime must surface:
 - outcome status (success, script error, executor crash, policy failure, version mismatch)
 
 This metadata must be available to storage and logs.
+
+---
+
+## Structured Exit Report (v1.0.0+)
+
+When `--report <path>` is specified, the runtime writes a structured JSON
+report on exit. `--report -` writes to stderr.
+
+The report is written after metrics persistence and adapter notification.
+All data is composed from `RunResult` and `metrics.Snapshot` — no additional
+data fetching occurs.
+
+### Report JSON Structure
+
+```json
+{
+  "run_id": "string",
+  "job_id": "string (omitted if empty)",
+  "attempt": 1,
+  "outcome": "success | script_error | executor_crash | policy_failure | version_mismatch",
+  "message": "string",
+  "exit_code": 0,
+  "duration_ms": 12345,
+  "event_count": 42,
+  "policy": {
+    "name": "strict | buffered | streaming",
+    "events_received": 42,
+    "events_persisted": 42,
+    "events_dropped": 0,
+    "flush_triggers": { "interval": 3, "termination": 1 }
+  },
+  "artifacts": {
+    "total": 5,
+    "committed": 5,
+    "orphaned": 0,
+    "chunks": 10,
+    "bytes": 524288
+  },
+  "metrics": { "/* CONTRACT_METRICS counters */" : "..." },
+  "terminal_summary": { "/* from terminal event payload, if any */" : "..." },
+  "proxy_used": {
+    "protocol": "http",
+    "host": "proxy.example.com",
+    "port": 8080,
+    "username": "user (omitted if none)"
+  },
+  "stderr": "string (omitted if empty)"
+}
+```
+
+### Field Rules
+
+- `run_id`, `attempt`, `outcome`, `message`, `exit_code`, `duration_ms`,
+  `event_count`, `policy`, `artifacts`, `metrics` are always present.
+- `job_id` is omitted when empty.
+- `terminal_summary` is omitted when no terminal event was received.
+- `proxy_used` is omitted when no proxy was configured.
+- `stderr` is omitted when empty.
+- `policy.flush_triggers` is omitted for non-streaming policies.
+- `exit_code` matches the process exit code per §Exit Codes in CONTRACT_CLI.md.

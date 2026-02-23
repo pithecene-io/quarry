@@ -66,6 +66,12 @@
           "required": false,
           "description": "Suppress result output"
         },
+        "report": {
+          "type": "string",
+          "required": false,
+          "description": "Write structured JSON report to path on exit (use - for stderr)",
+          "notes": "Report is written after metrics persistence and adapter notification. Failures are logged as warnings."
+        },
         "source": {
           "type": "string",
           "required": false,
