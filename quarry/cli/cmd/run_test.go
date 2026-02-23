@@ -1596,10 +1596,11 @@ func TestParseAdapterConfig_RedisChannelFromConfig(t *testing.T) {
 // and one for StorageDay — which could straddle a UTC midnight boundary.
 // The fix captures childStartTime once and passes it to both.
 //
-// This test exercises the actual code path from childFactory.Run():
-//   1. Call buildPolicy(..., childStartTime, ...) — the real function
-//   2. Compute StorageDay = lode.DeriveDay(childStartTime) — same expression as RunConfig
-//   3. Verify they produce the same day
+// This test observes buildPolicy's internally-derived day by writing a probe
+// file through the returned FileWriter and inspecting the Hive-partitioned
+// path on disk. The day= partition in the path is what buildPolicy computed
+// from the timestamp; StorageDay is what RunConfig would pass to the executor.
+// If someone reintroduces a second time.Now(), these would diverge.
 func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
 	// Use a timestamp at the UTC midnight boundary where the old bug would
 	// have been most likely to manifest (two time.Now() calls straddling midnight).
@@ -1613,32 +1614,46 @@ func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
 
 	// Call buildPolicy with the captured timestamp — this is exactly what
 	// childFactory.Run() does at run.go:386-389
-	childPol, _, _, err := buildPolicy(pol, storage, "quarry", "src", "cat", "run-001", childStartTime, collector)
+	childPol, _, childFileWriter, err := buildPolicy(pol, storage, "quarry", "src", "cat", "run-001", childStartTime, collector)
 	if err != nil {
 		t.Fatalf("buildPolicy: %v", err)
 	}
 	defer func() { _ = childPol.Close() }()
 
-	// Compute StorageDay the same way childFactory.Run() does at run.go:410
-	storageDay := lode.DeriveDay(childStartTime)
+	// Write a probe file through the FileWriter to observe the day partition
+	// that buildPolicy derived internally. The file lands at:
+	//   datasets/quarry/partitions/source=src/category=cat/day=<DAY>/run_id=run-001/files/probe.txt
+	// where <DAY> is what buildStorageSink computed via lode.DeriveDay(startTime).
+	if err := childFileWriter.PutFile(t.Context(), "probe.txt", "text/plain", []byte("x")); err != nil {
+		t.Fatalf("PutFile: %v", err)
+	}
 
-	// The key invariant: both callsites use the same timestamp, so the day
-	// that buildPolicy internally passes to buildStorageSink (via lode.Config.Day)
-	// must equal the StorageDay that gets passed to the executor via RunConfig.
-	//
-	// We can't inspect buildPolicy's internal lode.Config directly, but we know
-	// buildStorageSink calls lode.DeriveDay(startTime) at run.go:1336.
-	// Since both receive the same childStartTime, both produce the same day.
-	// This test guards the pattern: if someone reintroduces a second time.Now(),
-	// the test structure documents the required single-timestamp invariant.
-	expectedDay := lode.DeriveDay(childStartTime)
-	if storageDay != expectedDay {
-		t.Errorf("StorageDay = %q, buildPolicy day = %q (must match)", storageDay, expectedDay)
+	// Glob for the day= partition directory to extract buildPolicy's derived day
+	dayPattern := filepath.Join(storageDir, "datasets", "quarry", "partitions",
+		"source=src", "category=cat", "day=*")
+	dayDirs, err := filepath.Glob(dayPattern)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(dayDirs) != 1 {
+		t.Fatalf("expected 1 day= dir, found %d: %v", len(dayDirs), dayDirs)
+	}
+	buildPolicyDay := filepath.Base(dayDirs[0]) // "day=2026-02-23"
+
+	// Compute StorageDay the same way childFactory.Run() does at run.go:410
+	storageDay := "day=" + lode.DeriveDay(childStartTime)
+
+	// The key assertion: buildPolicy's internally-derived day (observed via
+	// the filesystem) must equal the StorageDay that RunConfig passes to the
+	// executor. If these diverge, the executor computes storage keys using a
+	// different day than the runtime writes data to.
+	if buildPolicyDay != storageDay {
+		t.Errorf("buildPolicy day = %q, StorageDay = %q (must match)", buildPolicyDay, storageDay)
 	}
 
 	// Verify the boundary: one ms later rolls to the next day
 	nextMs := childStartTime.Add(time.Millisecond)
-	if lode.DeriveDay(nextMs) == storageDay {
+	if lode.DeriveDay(nextMs) == lode.DeriveDay(childStartTime) {
 		t.Error("expected next millisecond to roll to a different day at UTC midnight")
 	}
 }
