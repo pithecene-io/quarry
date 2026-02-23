@@ -9,8 +9,8 @@
  * - No failures
  */
 import { beforeEach, describe, expect, it } from 'vitest'
-import { buildStorageKey, createAPIs } from '../../../src/emit-impl'
 import type { StoragePartitionMeta } from '../../../src/emit'
+import { buildStorageKey, createAPIs } from '../../../src/emit-impl'
 import { createRunMeta, FakeSink } from '../_harness'
 
 const testPartition: StoragePartitionMeta = {

@@ -285,9 +285,7 @@ export function createAPIs(
         assertNotTerminal()
         validateFilename(options.filename)
         await sink.writeFile(options.filename, options.content_type, options.data)
-        const key = storagePartition
-          ? buildStorageKey(storagePartition, options.filename)
-          : ''
+        const key = storagePartition ? buildStorageKey(storagePartition, options.filename) : ''
         return { key }
       })
     }

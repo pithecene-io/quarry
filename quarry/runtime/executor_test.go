@@ -235,8 +235,10 @@ func TestDeriveDay_UTCMidnightBoundary(t *testing.T) {
 	}
 
 	// Deterministic: same input always produces same output
-	if lode.DeriveDay(ts) != lode.DeriveDay(ts) {
-		t.Error("DeriveDay must be deterministic for the same timestamp")
+	day1 := lode.DeriveDay(ts)
+	day2 := lode.DeriveDay(ts)
+	if day1 != day2 {
+		t.Errorf("DeriveDay not deterministic: %q != %q", day1, day2)
 	}
 }
 
