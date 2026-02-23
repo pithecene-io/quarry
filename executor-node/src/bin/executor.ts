@@ -24,12 +24,13 @@
  * @module
  */
 import { unlinkSync } from 'node:fs'
-import type { ProxyEndpoint, StoragePartitionMeta } from '@pithecene-io/quarry-sdk'
+import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
 import { chromiumArgs } from '../browser-args.js'
 import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 import { drainStdout } from '../ipc/sink.js'
 import { installStdoutGuard } from '../ipc/stdout-guard.js'
+import { parseStoragePartition } from '../parse-storage-partition.js'
 
 /**
  * Write an error message to stderr and exit with code 3 (invalid input).
@@ -350,27 +351,9 @@ async function main(): Promise<never> {
   }
 
   // Parse optional storage partition metadata for SDK-side key computation
-  let storagePartition: StoragePartitionMeta | undefined
-  if (inputObj.storage !== null && inputObj.storage !== undefined && typeof inputObj.storage === 'object') {
-    const sp = inputObj.storage as Record<string, unknown>
-    const requiredFields = ['dataset', 'source', 'category', 'day', 'run_id'] as const
-    const missing = requiredFields.filter(
-      (f) => typeof sp[f] !== 'string' || (sp[f] as string) === ''
-    )
-    if (missing.length === 0) {
-      storagePartition = {
-        dataset: sp.dataset as string,
-        source: sp.source as string,
-        category: sp.category as string,
-        day: sp.day as string,
-        run_id: sp.run_id as string
-      }
-    } else {
-      process.stderr.write(
-        `Warning: storage partition metadata present but malformed (missing/empty: ${missing.join(', ')}); storage.put() will return empty key\n`
-      )
-    }
-  }
+  const storagePartition = parseStoragePartition(inputObj, (msg) => {
+    process.stderr.write(`Warning: ${msg}\n`)
+  })
 
   // Parse optional browser WebSocket endpoint
   const browserWSEndpoint =

@@ -2918,6 +2918,37 @@ function installStdoutGuard() {
   };
 }
 
+// src/parse-storage-partition.ts
+function parseStoragePartition(input, onWarning) {
+  if (!("storage" in input) || input.storage === null || input.storage === void 0) {
+    return void 0;
+  }
+  if (typeof input.storage !== "object" || Array.isArray(input.storage)) {
+    onWarning(
+      `storage partition metadata must be an object, got ${Array.isArray(input.storage) ? "array" : typeof input.storage}; storage.put() will return empty key`
+    );
+    return void 0;
+  }
+  const sp = input.storage;
+  const requiredFields = ["dataset", "source", "category", "day", "run_id"];
+  const missing = requiredFields.filter(
+    (f) => typeof sp[f] !== "string" || sp[f] === ""
+  );
+  if (missing.length > 0) {
+    onWarning(
+      `storage partition metadata present but malformed (missing/empty: ${missing.join(", ")}); storage.put() will return empty key`
+    );
+    return void 0;
+  }
+  return {
+    dataset: sp.dataset,
+    source: sp.source,
+    category: sp.category,
+    day: sp.day,
+    run_id: sp.run_id
+  };
+}
+
 // src/bin/executor.ts
 function fatalError(message) {
   process.stderr.write(`Error: ${message}
@@ -3122,28 +3153,10 @@ async function main() {
   } catch (err) {
     fatalError(`parsing proxy: ${errorMessage(err)}`);
   }
-  let storagePartition;
-  if (inputObj.storage !== null && inputObj.storage !== void 0 && typeof inputObj.storage === "object") {
-    const sp = inputObj.storage;
-    const requiredFields = ["dataset", "source", "category", "day", "run_id"];
-    const missing = requiredFields.filter(
-      (f) => typeof sp[f] !== "string" || sp[f] === ""
-    );
-    if (missing.length === 0) {
-      storagePartition = {
-        dataset: sp.dataset,
-        source: sp.source,
-        category: sp.category,
-        day: sp.day,
-        run_id: sp.run_id
-      };
-    } else {
-      process.stderr.write(
-        `Warning: storage partition metadata present but malformed (missing/empty: ${missing.join(", ")}); storage.put() will return empty key
-`
-      );
-    }
-  }
+  const storagePartition = parseStoragePartition(inputObj, (msg) => {
+    process.stderr.write(`Warning: ${msg}
+`);
+  });
   const browserWSEndpoint = typeof inputObj.browser_ws_endpoint === "string" && inputObj.browser_ws_endpoint !== "" ? inputObj.browser_ws_endpoint : void 0;
   const result = await execute({
     scriptPath,

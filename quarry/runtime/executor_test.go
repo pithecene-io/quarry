@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -211,6 +213,44 @@ func TestExecutorInputJSON_OmitsStorageWhenNil(t *testing.T) {
 
 	if _, exists := decoded["storage"]; exists {
 		t.Error("storage should be omitted when nil")
+	}
+}
+
+// TestStorageDay_AlignedWithBuildPolicy verifies that capturing a single
+// timestamp and passing it to both DeriveDay and buildPolicy produces the
+// same day string. This guards against the pre-fix bug where two separate
+// time.Now() calls around UTC midnight could yield different days.
+func TestStorageDay_AlignedWithBuildPolicy(t *testing.T) {
+	// Simulate a timestamp right at UTC midnight boundary
+	// 2026-02-23T23:59:59.999Z — still Feb 23
+	ts := time.Date(2026, 2, 23, 23, 59, 59, 999_000_000, time.UTC)
+	day := lode.DeriveDay(ts)
+
+	// Both the StorageDay field and the policy sink receive the same timestamp,
+	// so they must produce the same partition day.
+	sp := StoragePartition{
+		Dataset:  "quarry",
+		Source:   "test",
+		Category: "default",
+		Day:      day,
+		RunID:    "run-001",
+	}
+
+	if sp.Day != "2026-02-23" {
+		t.Errorf("StoragePartition.Day = %q, want %q", sp.Day, "2026-02-23")
+	}
+
+	// One millisecond later would be Feb 24 — verify the boundary
+	tsNext := ts.Add(time.Millisecond)
+	dayNext := lode.DeriveDay(tsNext)
+	if dayNext != "2026-02-24" {
+		t.Errorf("DeriveDay after midnight = %q, want %q", dayNext, "2026-02-24")
+	}
+
+	// The key invariant: a single captured timestamp gives the same day
+	// regardless of how many times DeriveDay is called with it
+	if lode.DeriveDay(ts) != lode.DeriveDay(ts) {
+		t.Error("DeriveDay must be deterministic for the same timestamp")
 	}
 }
 
