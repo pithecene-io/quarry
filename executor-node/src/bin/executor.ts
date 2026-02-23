@@ -30,6 +30,7 @@ import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
 import { drainStdout } from '../ipc/sink.js'
 import { installStdoutGuard } from '../ipc/stdout-guard.js'
+import { parseStoragePartition } from '../parse-storage-partition.js'
 
 /**
  * Write an error message to stderr and exit with code 3 (invalid input).
@@ -349,6 +350,11 @@ async function main(): Promise<never> {
     fatalError(`parsing proxy: ${errorMessage(err)}`)
   }
 
+  // Parse optional storage partition metadata for SDK-side key computation
+  const storagePartition = parseStoragePartition(inputObj, (msg) => {
+    process.stderr.write(`Warning: ${msg}\n`)
+  })
+
   // Parse optional browser WebSocket endpoint
   const browserWSEndpoint =
     typeof inputObj.browser_ws_endpoint === 'string' && inputObj.browser_ws_endpoint !== ''
@@ -361,6 +367,7 @@ async function main(): Promise<never> {
     job,
     run,
     proxy,
+    storagePartition,
     browserWSEndpoint,
     output: ipcOutput,
     outputWrite: ipcWrite,

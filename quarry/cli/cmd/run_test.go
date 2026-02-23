@@ -9,6 +9,8 @@ import (
 	"time"
 
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
+	"github.com/pithecene-io/quarry/lode"
+	"github.com/pithecene-io/quarry/metrics"
 	"github.com/pithecene-io/quarry/runtime"
 	"github.com/pithecene-io/quarry/types"
 	"github.com/urfave/cli/v2"
@@ -1583,5 +1585,75 @@ func TestParseAdapterConfig_RedisChannelFromConfig(t *testing.T) {
 	}
 	if ac.channel != "custom-channel" {
 		t.Errorf("channel should come from config, got %q", ac.channel)
+	}
+}
+
+// TestChildRun_StorageDayAlignedWithBuildPolicy verifies the invariant that
+// was broken before the day-drift fix: buildPolicy() and the RunConfig's
+// StorageDay must derive the same day from a single captured timestamp.
+//
+// The original bug had two separate time.Now() calls — one for buildPolicy
+// and one for StorageDay — which could straddle a UTC midnight boundary.
+// The fix captures childStartTime once and passes it to both.
+//
+// This test observes buildPolicy's internally-derived day by writing a probe
+// file through the returned FileWriter and inspecting the Hive-partitioned
+// path on disk. The day= partition in the path is what buildPolicy computed
+// from the timestamp; StorageDay is what RunConfig would pass to the executor.
+// If someone reintroduces a second time.Now(), these would diverge.
+func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
+	// Use a timestamp at the UTC midnight boundary where the old bug would
+	// have been most likely to manifest (two time.Now() calls straddling midnight).
+	childStartTime := time.Date(2026, 2, 23, 23, 59, 59, 999_000_000, time.UTC)
+
+	// Set up minimal fs-backend storage in a temp dir so buildPolicy succeeds
+	storageDir := t.TempDir()
+	storage := storageChoice{backend: "fs", path: storageDir}
+	pol := policyChoice{name: "strict", flushMode: "at_least_once"}
+	collector := metrics.NewCollector("strict", "executor.mjs", "fs", "run-001", "")
+
+	// Call buildPolicy with the captured timestamp — this is exactly what
+	// childFactory.Run() does at run.go:386-389
+	childPol, _, childFileWriter, err := buildPolicy(pol, storage, "quarry", "src", "cat", "run-001", childStartTime, collector)
+	if err != nil {
+		t.Fatalf("buildPolicy: %v", err)
+	}
+	defer func() { _ = childPol.Close() }()
+
+	// Write a probe file through the FileWriter to observe the day partition
+	// that buildPolicy derived internally. The file lands at:
+	//   datasets/quarry/partitions/source=src/category=cat/day=<DAY>/run_id=run-001/files/probe.txt
+	// where <DAY> is what buildStorageSink computed via lode.DeriveDay(startTime).
+	if err := childFileWriter.PutFile(t.Context(), "probe.txt", "text/plain", []byte("x")); err != nil {
+		t.Fatalf("PutFile: %v", err)
+	}
+
+	// Glob for the day= partition directory to extract buildPolicy's derived day
+	dayPattern := filepath.Join(storageDir, "datasets", "quarry", "partitions",
+		"source=src", "category=cat", "day=*")
+	dayDirs, err := filepath.Glob(dayPattern)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(dayDirs) != 1 {
+		t.Fatalf("expected 1 day= dir, found %d: %v", len(dayDirs), dayDirs)
+	}
+	buildPolicyDay := filepath.Base(dayDirs[0]) // "day=2026-02-23"
+
+	// Compute StorageDay the same way childFactory.Run() does at run.go:410
+	storageDay := "day=" + lode.DeriveDay(childStartTime)
+
+	// The key assertion: buildPolicy's internally-derived day (observed via
+	// the filesystem) must equal the StorageDay that RunConfig passes to the
+	// executor. If these diverge, the executor computes storage keys using a
+	// different day than the runtime writes data to.
+	if buildPolicyDay != storageDay {
+		t.Errorf("buildPolicy day = %q, StorageDay = %q (must match)", buildPolicyDay, storageDay)
+	}
+
+	// Verify the boundary: one ms later rolls to the next day
+	nextMs := childStartTime.Add(time.Millisecond)
+	if lode.DeriveDay(nextMs) == lode.DeriveDay(childStartTime) {
+		t.Error("expected next millisecond to roll to a different day at UTC midnight")
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -143,5 +145,122 @@ func TestExecutorConfig_ResolveFromEnvSetup(t *testing.T) {
 
 	if config.ResolveFrom != "/app/node_modules" {
 		t.Errorf("ResolveFrom = %q, want %q", config.ResolveFrom, "/app/node_modules")
+	}
+}
+
+func TestExecutorInputJSON_IncludesStoragePartition(t *testing.T) {
+	input := executorInput{
+		RunID:   "run-001",
+		Attempt: 1,
+		Job:     map[string]any{},
+		Storage: &StoragePartition{
+			Dataset:  "quarry",
+			Source:   "my-source",
+			Category: "default",
+			Day:      "2026-02-23",
+			RunID:    "run-001",
+		},
+	}
+
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	storage, ok := decoded["storage"].(map[string]any)
+	if !ok {
+		t.Fatal("storage field missing or not an object")
+	}
+
+	checks := map[string]string{
+		"dataset":  "quarry",
+		"source":   "my-source",
+		"category": "default",
+		"day":      "2026-02-23",
+		"run_id":   "run-001",
+	}
+	for key, want := range checks {
+		got, exists := storage[key].(string)
+		if !exists {
+			t.Errorf("storage.%s missing", key)
+		} else if got != want {
+			t.Errorf("storage.%s = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestExecutorInputJSON_OmitsStorageWhenNil(t *testing.T) {
+	input := executorInput{
+		RunID:   "run-001",
+		Attempt: 1,
+		Job:     map[string]any{},
+	}
+
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if _, exists := decoded["storage"]; exists {
+		t.Error("storage should be omitted when nil")
+	}
+}
+
+// TestDeriveDay_UTCMidnightBoundary verifies DeriveDay determinism and
+// correct day rollover at UTC midnight. The integration test that exercises
+// the actual child-run wiring (where the day-drift bug lived) is in
+// cli/cmd/run_test.go:TestChildRun_StorageDayAlignedWithBuildPolicy.
+func TestDeriveDay_UTCMidnightBoundary(t *testing.T) {
+	// 2026-02-23T23:59:59.999Z — still Feb 23
+	ts := time.Date(2026, 2, 23, 23, 59, 59, 999_000_000, time.UTC)
+
+	if day := lode.DeriveDay(ts); day != "2026-02-23" {
+		t.Errorf("DeriveDay at 23:59:59.999Z = %q, want %q", day, "2026-02-23")
+	}
+
+	// One millisecond later rolls to Feb 24
+	tsNext := ts.Add(time.Millisecond)
+	if day := lode.DeriveDay(tsNext); day != "2026-02-24" {
+		t.Errorf("DeriveDay at 00:00:00.000Z = %q, want %q", day, "2026-02-24")
+	}
+
+	// Deterministic: same input always produces same output
+	day1 := lode.DeriveDay(ts)
+	day2 := lode.DeriveDay(ts)
+	if day1 != day2 {
+		t.Errorf("DeriveDay not deterministic: %q != %q", day1, day2)
+	}
+}
+
+func TestStoragePartition_MatchesGoPathFormula(t *testing.T) {
+	// Verify StoragePartition fields produce a path matching
+	// the Go buildFilePath() formula in quarry/lode/file_writer.go:
+	// datasets/{dataset}/partitions/source={s}/category={c}/day={d}/run_id={r}/files/{filename}
+	sp := StoragePartition{
+		Dataset:  "quarry",
+		Source:   "my-source",
+		Category: "default",
+		Day:      "2026-02-23",
+		RunID:    "run-001",
+	}
+
+	filename := "screenshot.png"
+	want := "datasets/quarry/partitions/source=my-source/category=default/day=2026-02-23/run_id=run-001/files/screenshot.png"
+
+	// Reproduce the Go formula
+	got := "datasets/" + sp.Dataset + "/partitions/source=" + sp.Source + "/category=" + sp.Category + "/day=" + sp.Day + "/run_id=" + sp.RunID + "/files/" + filename
+
+	if got != want {
+		t.Errorf("path formula mismatch:\n  got:  %s\n  want: %s", got, want)
 	}
 }

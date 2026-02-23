@@ -29,6 +29,7 @@ import {
   type ProxyEndpoint,
   type RunId,
   type RunMeta,
+  type StoragePartitionMeta,
   TerminalEventError,
   type TerminalSignal
 } from '@pithecene-io/quarry-sdk'
@@ -228,6 +229,8 @@ export interface ExecutorConfig<Job = unknown> {
   readonly adblocker?: boolean
   /** Optional WebSocket URL of an externally managed browser. When set, executor connects instead of launching. */
   readonly browserWSEndpoint?: string
+  /** Optional storage partition metadata for SDK-side key computation. */
+  readonly storagePartition?: StoragePartitionMeta
 }
 
 /**
@@ -550,7 +553,7 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
 
       if (prepareResult.action === 'skip') {
         // Emit run_complete with skipped summary, no browser launched
-        const { emit } = createAPIs(config.run, sink)
+        const { emit } = createAPIs(config.run, sink, config.storagePartition)
         const summary: Record<string, unknown> = { skipped: true }
         if (prepareResult.reason !== undefined) {
           summary.reason = prepareResult.reason
@@ -614,7 +617,8 @@ export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promi
       page,
       browser,
       browserContext,
-      sink
+      sink,
+      storagePartition: config.storagePartition
     })
 
     // 5. Execute with lifecycle hooks

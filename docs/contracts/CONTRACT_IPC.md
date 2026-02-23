@@ -60,8 +60,20 @@ These payloads must:
 - Never include proxy passwords in any result/summary payload.
 
 ### Run Request (Runtime → Executor)
-If present, the run request includes an optional `proxy` field:
+If present, the run request includes optional fields:
 - `proxy` (optional): `ProxyEndpoint`
+- `storage` (optional, v1.0.0+): `StoragePartition` — Hive partition metadata
+  for SDK-side key computation. When present, `storage.put()` returns the
+  resolved storage key without a bidirectional IPC round-trip.
+
+```
+StoragePartition:
+  dataset: string    # Lode dataset ID (e.g. "quarry")
+  source: string     # partition key for origin system
+  category: string   # partition key for data type
+  day: string        # partition day (YYYY-MM-DD UTC)
+  run_id: string     # run identifier
+```
 
 ### Run Result (Executor → Runtime)
 If present, the run result may include `proxy_used` metadata:

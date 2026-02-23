@@ -19,10 +19,18 @@ export type {
   EmitRunErrorOptions,
   EmitSink,
   StorageAPI,
-  StoragePutOptions
+  StoragePartitionMeta,
+  StoragePutOptions,
+  StoragePutResult
 } from './emit'
 // Errors (public — useful for user scripts to catch)
-export { createAPIs, createEmitAPI, StorageFilenameError, TerminalEventError } from './emit-impl'
+export {
+  buildStorageKey,
+  createAPIs,
+  createEmitAPI,
+  StorageFilenameError,
+  TerminalEventError
+} from './emit-impl'
 // Hook types
 export type {
   AfterRunHook,

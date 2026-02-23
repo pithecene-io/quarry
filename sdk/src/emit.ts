@@ -172,6 +172,15 @@ export interface StoragePutOptions {
 }
 
 /**
+ * Result of a storage put operation.
+ * Contains the resolved Hive-partitioned storage key.
+ */
+export interface StoragePutResult {
+  /** The resolved Hive-partitioned storage key (e.g. "datasets/.../files/filename") */
+  readonly key: string
+}
+
+/**
  * Storage API for sidecar file uploads via Lode Store.
  * Files land at Hive-partitioned paths under files/, bypassing
  * Dataset segment/manifest machinery entirely.
@@ -180,8 +189,24 @@ export interface StorageAPI {
   /**
    * Write a file to Hive-partitioned storage.
    * Shares the emit serialization chain for ordering and fail-fast.
+   * Returns the resolved storage key for downstream correlation.
    */
-  readonly put: (options: StoragePutOptions) => Promise<void>
+  readonly put: (options: StoragePutOptions) => Promise<StoragePutResult>
+}
+
+/**
+ * Storage partition metadata passed from the runtime via executor stdin.
+ * Used by the SDK to compute deterministic storage keys without
+ * a bidirectional IPC round-trip.
+ *
+ * @internal
+ */
+export interface StoragePartitionMeta {
+  readonly dataset: string
+  readonly source: string
+  readonly category: string
+  readonly day: string
+  readonly run_id: string
 }
 
 /**
