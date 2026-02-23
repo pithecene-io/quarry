@@ -86,10 +86,7 @@ describe('parseStoragePartition()', () => {
 
   it('warns when a required field is empty string', () => {
     const warn = vi.fn()
-    const result = parseStoragePartition(
-      { storage: { ...validStorage, day: '' } },
-      warn
-    )
+    const result = parseStoragePartition({ storage: { ...validStorage, day: '' } }, warn)
 
     expect(result).toBeUndefined()
     expect(warn).toHaveBeenCalledOnce()
@@ -98,10 +95,7 @@ describe('parseStoragePartition()', () => {
 
   it('warns when a required field is non-string type', () => {
     const warn = vi.fn()
-    const result = parseStoragePartition(
-      { storage: { ...validStorage, source: 123 } },
-      warn
-    )
+    const result = parseStoragePartition({ storage: { ...validStorage, source: 123 } }, warn)
 
     expect(result).toBeUndefined()
     expect(warn).toHaveBeenCalledOnce()
