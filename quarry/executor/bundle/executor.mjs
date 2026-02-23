@@ -3125,7 +3125,11 @@ async function main() {
   let storagePartition;
   if (inputObj.storage !== null && inputObj.storage !== void 0 && typeof inputObj.storage === "object") {
     const sp = inputObj.storage;
-    if (typeof sp.dataset === "string" && sp.dataset !== "" && typeof sp.source === "string" && sp.source !== "" && typeof sp.category === "string" && sp.category !== "" && typeof sp.day === "string" && sp.day !== "" && typeof sp.run_id === "string" && sp.run_id !== "") {
+    const requiredFields = ["dataset", "source", "category", "day", "run_id"];
+    const missing = requiredFields.filter(
+      (f) => typeof sp[f] !== "string" || sp[f] === ""
+    );
+    if (missing.length === 0) {
       storagePartition = {
         dataset: sp.dataset,
         source: sp.source,
@@ -3133,6 +3137,11 @@ async function main() {
         day: sp.day,
         run_id: sp.run_id
       };
+    } else {
+      process.stderr.write(
+        `Warning: storage partition metadata present but malformed (missing/empty: ${missing.join(", ")}); storage.put() will return empty key
+`
+      );
     }
   }
   const browserWSEndpoint = typeof inputObj.browser_ws_endpoint === "string" && inputObj.browser_ws_endpoint !== "" ? inputObj.browser_ws_endpoint : void 0;

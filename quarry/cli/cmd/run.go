@@ -382,10 +382,11 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		"",
 	)
 
+	childStartTime := time.Now()
 	childPol, childLodeClient, childFileWriter, err := buildPolicy(
 		cf.policyChoice, cf.storage, cf.storageDataset,
 		childSource, childCategory, item.RunID,
-		time.Now(), childCollector,
+		childStartTime, childCollector,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child policy: %w", err)
@@ -406,7 +407,7 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 		Source:            childSource,
 		Category:          childCategory,
 		StorageDataset:    cf.storageDataset,
-		StorageDay:        lode.DeriveDay(time.Now()),
+		StorageDay:        lode.DeriveDay(childStartTime),
 		Collector:         childCollector,
 	}
 

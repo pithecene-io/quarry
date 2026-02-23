@@ -353,20 +353,22 @@ async function main(): Promise<never> {
   let storagePartition: StoragePartitionMeta | undefined
   if (inputObj.storage !== null && inputObj.storage !== undefined && typeof inputObj.storage === 'object') {
     const sp = inputObj.storage as Record<string, unknown>
-    if (
-      typeof sp.dataset === 'string' && sp.dataset !== '' &&
-      typeof sp.source === 'string' && sp.source !== '' &&
-      typeof sp.category === 'string' && sp.category !== '' &&
-      typeof sp.day === 'string' && sp.day !== '' &&
-      typeof sp.run_id === 'string' && sp.run_id !== ''
-    ) {
+    const requiredFields = ['dataset', 'source', 'category', 'day', 'run_id'] as const
+    const missing = requiredFields.filter(
+      (f) => typeof sp[f] !== 'string' || (sp[f] as string) === ''
+    )
+    if (missing.length === 0) {
       storagePartition = {
-        dataset: sp.dataset,
-        source: sp.source,
-        category: sp.category,
-        day: sp.day,
-        run_id: sp.run_id
+        dataset: sp.dataset as string,
+        source: sp.source as string,
+        category: sp.category as string,
+        day: sp.day as string,
+        run_id: sp.run_id as string
       }
+    } else {
+      process.stderr.write(
+        `Warning: storage partition metadata present but malformed (missing/empty: ${missing.join(', ')}); storage.put() will return empty key\n`
+      )
     }
   }
 
