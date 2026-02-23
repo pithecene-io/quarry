@@ -411,8 +411,12 @@ func (r *RunOrchestrator) buildResult(
 
 	if ingestion != nil {
 		result.EventCount = ingestion.CurrentSeq()
-		if termEvent, hasTerm := ingestion.GetTerminalEvent(); hasTerm && termEvent.Payload != nil {
-			result.TerminalSummary = termEvent.Payload
+		if termEvent, hasTerm := ingestion.GetTerminalEvent(); hasTerm {
+			if termEvent.Payload != nil {
+				result.TerminalSummary = termEvent.Payload
+			} else {
+				result.TerminalSummary = map[string]any{}
+			}
 		}
 	}
 

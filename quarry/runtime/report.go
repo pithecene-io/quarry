@@ -27,7 +27,7 @@ type RunReport struct {
 	Artifacts *ReportArtifacts `json:"artifacts"`
 	Metrics  *metrics.Snapshot `json:"metrics"`
 
-	TerminalSummary map[string]any              `json:"terminal_summary,omitempty"`
+	TerminalSummary *map[string]any              `json:"terminal_summary,omitempty"`
 	ProxyUsed       *types.ProxyEndpointRedacted `json:"proxy_used,omitempty"`
 	Stderr          string                       `json:"stderr,omitempty"`
 }
@@ -76,14 +76,20 @@ func BuildRunReport(result *RunResult, snap metrics.Snapshot, policyName string,
 			Chunks:    result.ArtifactStats.TotalChunks,
 			Bytes:     result.ArtifactStats.TotalBytes,
 		},
-		Metrics:         &snap,
-		TerminalSummary: result.TerminalSummary,
-		ProxyUsed:       result.ProxyUsed,
+		Metrics:   &snap,
+		ProxyUsed: result.ProxyUsed,
 		Stderr:          result.StderrOutput,
 	}
 
 	if result.RunMeta.JobID != nil {
 		report.JobID = *result.RunMeta.JobID
+	}
+
+	// Pointer indirection: nil = no terminal event (omitted via omitempty),
+	// non-nil pointer to empty map = terminal event with empty payload (serialized as {}).
+	if result.TerminalSummary != nil {
+		ts := result.TerminalSummary
+		report.TerminalSummary = &ts
 	}
 
 	return report
