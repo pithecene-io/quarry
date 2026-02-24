@@ -895,7 +895,7 @@ func runDryRun(ctx context.Context, executorPath, scriptPath, resolveFrom string
 	result, err := runtime.ValidateScript(ctx, executorPath, scriptPath, resolveFrom)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "  ✗ Executor failed: %v\n\nValidation failed.\n", err)
-		return cli.Exit("", exitScriptError)
+		return cli.Exit("", exitExecutorCrash)
 	}
 
 	if !result.Valid {
