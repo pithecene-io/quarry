@@ -12,6 +12,7 @@ package ipc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/pithecene-io/quarry/types"
 )
@@ -86,8 +88,9 @@ type runInput struct {
 }
 
 // spawnExecutor spawns the Node executor with the given script and input.
+// The context controls the lifetime of the spawned process.
 // Returns stdout bytes and any error.
-func spawnExecutor(t *testing.T, paths testPaths, scriptPath string, input runInput) ([]byte, error) {
+func spawnExecutor(t *testing.T, ctx context.Context, paths testPaths, scriptPath string, input runInput) ([]byte, error) {
 	t.Helper()
 
 	inputJSON, err := json.Marshal(input)
@@ -95,7 +98,7 @@ func spawnExecutor(t *testing.T, paths testPaths, scriptPath string, input runIn
 		t.Fatalf("failed to marshal input: %v", err)
 	}
 
-	cmd := exec.Command("node", paths.executorBin, scriptPath)
+	cmd := exec.CommandContext(ctx, "node", paths.executorBin, scriptPath)
 	cmd.Stdin = bytes.NewReader(inputJSON)
 	cmd.Env = append(os.Environ(), "QUARRY_NO_SANDBOX=1")
 
@@ -118,6 +121,9 @@ func TestE2E_WireHarness(t *testing.T) {
 		t.Skip("QUARRY_E2E=1 not set, skipping live E2E test")
 	}
 
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
 	paths := resolveTestPaths(t)
 	checkNodeAvailable(t)
 	checkExecutorBuilt(t, paths)
@@ -133,7 +139,7 @@ func TestE2E_WireHarness(t *testing.T) {
 		Job:     map[string]string{"test": "wire_harness"},
 	}
 
-	stdout, err := spawnExecutor(t, paths, scriptPath, input)
+	stdout, err := spawnExecutor(t, ctx, paths, scriptPath, input)
 	if err != nil {
 		// Exit code 1 is ok (run_error), 2+ is crash
 		exitErr := &exec.ExitError{}
@@ -178,6 +184,9 @@ func TestE2E_LiveDecode(t *testing.T) {
 		t.Skip("QUARRY_E2E=1 not set, skipping live E2E test")
 	}
 
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
 	paths := resolveTestPaths(t)
 	checkNodeAvailable(t)
 	checkExecutorBuilt(t, paths)
@@ -193,7 +202,7 @@ func TestE2E_LiveDecode(t *testing.T) {
 		Job:     map[string]string{"test": "live_decode"},
 	}
 
-	stdout, err := spawnExecutor(t, paths, scriptPath, input)
+	stdout, err := spawnExecutor(t, ctx, paths, scriptPath, input)
 	if err != nil {
 		exitErr := &exec.ExitError{}
 		if errors.As(err, &exitErr) {
@@ -277,6 +286,9 @@ func TestE2E_FixtureDrift(t *testing.T) {
 		t.Skip("QUARRY_REGEN_FIXTURES=1 not set, skipping drift check")
 	}
 
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
 	paths := resolveTestPaths(t)
 	checkNodeAvailable(t)
 	checkExecutorBuilt(t, paths)
@@ -303,7 +315,7 @@ func TestE2E_FixtureDrift(t *testing.T) {
 		},
 	}
 
-	newFixture, err := spawnExecutor(t, paths, scriptPath, input)
+	newFixture, err := spawnExecutor(t, ctx, paths, scriptPath, input)
 	if err != nil {
 		exitErr := &exec.ExitError{}
 		if errors.As(err, &exitErr) {
