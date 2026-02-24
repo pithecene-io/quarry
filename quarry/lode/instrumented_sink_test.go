@@ -55,7 +55,7 @@ func TestInstrumentedSink_WriteEventsSuccess(t *testing.T) {
 	collector := metrics.NewCollector("strict", "node", "fs", "run-001", "")
 	sink := NewInstrumentedSink(inner, collector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events := []*types.EventEnvelope{{Type: types.EventTypeItem, Seq: 1}}
 
 	if err := sink.WriteEvents(ctx, events); err != nil {
@@ -80,7 +80,7 @@ func TestInstrumentedSink_WriteEventsFailure(t *testing.T) {
 	collector := metrics.NewCollector("strict", "node", "fs", "run-001", "")
 	sink := NewInstrumentedSink(inner, collector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events := []*types.EventEnvelope{{Type: types.EventTypeItem, Seq: 1}}
 
 	err := sink.WriteEvents(ctx, events)
@@ -102,7 +102,7 @@ func TestInstrumentedSink_WriteChunksSuccess(t *testing.T) {
 	collector := metrics.NewCollector("strict", "node", "fs", "run-001", "")
 	sink := NewInstrumentedSink(inner, collector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	chunks := []*types.ArtifactChunk{{ArtifactID: "art-1", Seq: 1, Data: []byte("data")}}
 
 	if err := sink.WriteChunks(ctx, chunks); err != nil {
@@ -127,7 +127,7 @@ func TestInstrumentedSink_WriteChunksFailure(t *testing.T) {
 	collector := metrics.NewCollector("strict", "node", "fs", "run-001", "")
 	sink := NewInstrumentedSink(inner, collector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	chunks := []*types.ArtifactChunk{{ArtifactID: "art-1", Seq: 1, Data: []byte("data")}}
 
 	err := sink.WriteChunks(ctx, chunks)
@@ -162,7 +162,7 @@ func TestInstrumentedSink_MultipleCalls(t *testing.T) {
 	collector := metrics.NewCollector("strict", "node", "fs", "run-001", "")
 	sink := NewInstrumentedSink(inner, collector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 3 successful event writes + 2 successful chunk writes
 	for range 3 {

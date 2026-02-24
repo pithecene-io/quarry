@@ -93,7 +93,7 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 			_ = os.Remove(discoveryPath)
 		default:
 			if err := healthCheck(disc.WSEndpoint); err == nil {
-				age := time.Since(mustParseTime(disc.StartedAt))
+				age := time.Since(parseTimeOrZero(disc.StartedAt))
 				fmt.Fprintf(os.Stderr, "Reusing browser server (pid=%d, age=%s)\n", disc.PID, age.Round(time.Second))
 				return disc.WSEndpoint, nil
 			}
@@ -364,8 +364,8 @@ func writeDiscovery(path string, disc *BrowserDiscovery) error {
 	return os.Rename(tmp, path)
 }
 
-// mustParseTime parses an RFC3339 time string, returning zero time on error.
-func mustParseTime(s string) time.Time {
+// parseTimeOrZero parses an RFC3339 time string, returning zero time on error.
+func parseTimeOrZero(s string) time.Time {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
 		return time.Time{}

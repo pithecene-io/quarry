@@ -340,7 +340,7 @@ func validateFanOutConfig(choice fanOutChoice) error {
 		return fmt.Errorf("--depth must be >= 0, got %d", choice.depth)
 	}
 	if choice.depth > 0 && choice.maxRuns == 0 {
-		return fmt.Errorf("--max-runs is required when --depth > 0 (safety rail to prevent unbounded fan-out)")
+		return errors.New("--max-runs is required when --depth > 0 (safety rail to prevent unbounded fan-out)")
 	}
 	if choice.maxRuns < 0 {
 		return fmt.Errorf("--max-runs must be >= 0, got %d", choice.maxRuns)
@@ -1032,11 +1032,11 @@ func parseAdapterConfigWithPrecedence(c *cli.Context, cfg *quarryconfig.Config, 
 	switch ac.adapterType {
 	case "webhook":
 		if ac.url == "" {
-			return ac, fmt.Errorf("--adapter-url is required when --adapter=webhook")
+			return ac, errors.New("--adapter-url is required when --adapter=webhook")
 		}
 	case "redis":
 		if ac.url == "" {
-			return ac, fmt.Errorf("--adapter-url is required when --adapter=redis")
+			return ac, errors.New("--adapter-url is required when --adapter=redis")
 		}
 		ac.channel = resolveString(c, "adapter-channel", configVal(cfg, func(c *quarryconfig.Config) string { return c.Adapter.Channel }))
 	default:

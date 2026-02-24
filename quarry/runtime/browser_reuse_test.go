@@ -301,14 +301,14 @@ func TestCleanupStaleProcess_SkipsNonOwned(t *testing.T) {
 	_ = cmd.Wait()
 }
 
-func TestMustParseTime(t *testing.T) {
+func TestParseTimeOrZero(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		if mustParseTime("2026-02-10T12:00:00Z").IsZero() {
+		if parseTimeOrZero("2026-02-10T12:00:00Z").IsZero() {
 			t.Error("expected non-zero time")
 		}
 	})
 	t.Run("invalid", func(t *testing.T) {
-		if !mustParseTime("not-a-time").IsZero() {
+		if !parseTimeOrZero("not-a-time").IsZero() {
 			t.Error("expected zero time")
 		}
 	})
