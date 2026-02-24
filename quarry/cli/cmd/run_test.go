@@ -1656,6 +1656,37 @@ func TestRunAction_DryRun_ExecutorMissing_ExitCode2(t *testing.T) {
 	}
 }
 
+// TestRunAction_DryRun_ExecutorSpawnFailure_ExitCode2 validates the contract
+// path: executor file exists (resolveExecutor passes) but the process fails to
+// execute (runtime.ValidateScript returns an error) → exit 2 (exitExecutorCrash).
+func TestRunAction_DryRun_ExecutorSpawnFailure_ExitCode2(t *testing.T) {
+	// Create a temp file that exists on disk (passes os.Stat in resolveExecutor)
+	// but is not a valid executable, so exec.CommandContext will fail.
+	badExecutor := filepath.Join(t.TempDir(), "bad-executor")
+	if err := os.WriteFile(badExecutor, []byte("not a valid executable"), 0o644); err != nil {
+		t.Fatalf("writing bad executor: %v", err)
+	}
+
+	app := newTestApp()
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--dry-run",
+		"--executor", badExecutor,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-executable executor")
+	}
+	exitErr, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder, got %T: %v", err, err)
+	}
+	if exitErr.ExitCode() != exitExecutorCrash {
+		t.Errorf("exit code = %d, want %d (exitExecutorCrash)", exitErr.ExitCode(), exitExecutorCrash)
+	}
+}
+
 // TestRunDryRun_ExitCodes validates the exit code mapping for runDryRun.
 func TestRunDryRun_ExitCodes(t *testing.T) {
 	t.Run("valid result exits 0", func(t *testing.T) {
