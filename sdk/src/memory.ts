@@ -66,6 +66,27 @@ const DEFAULT_THRESHOLDS: Required<MemoryThresholds> = {
 }
 
 /**
+ * Validate that thresholds are in (0, 1] and strictly monotonic.
+ */
+function validateThresholds(t: Required<MemoryThresholds>): void {
+  for (const [name, value] of Object.entries(t) as Array<[string, number]>) {
+    if (value <= 0 || value > 1) {
+      throw new RangeError(`MemoryThreshold "${name}" must be in (0, 1], got ${value}`)
+    }
+  }
+  if (t.moderate >= t.high) {
+    throw new RangeError(
+      `MemoryThresholds must be monotonic: moderate (${t.moderate}) must be < high (${t.high})`
+    )
+  }
+  if (t.high >= t.critical) {
+    throw new RangeError(
+      `MemoryThresholds must be monotonic: high (${t.high}) must be < critical (${t.critical})`
+    )
+  }
+}
+
+/**
  * Classify a ratio into a pressure level.
  */
 function classifyPressure(
@@ -182,6 +203,7 @@ export function createMemoryAPI(options: CreateMemoryAPIOptions): MemoryAPI {
     ...DEFAULT_THRESHOLDS,
     ...options.thresholds
   }
+  validateThresholds(thresholds)
 
   const readNode = options._readNode ?? readNodeUsage
   const readBrowser = options._readBrowser ?? readBrowserUsage

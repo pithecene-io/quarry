@@ -310,6 +310,31 @@ describe('createStorageBatcher', () => {
       await expect(p2.result).rejects.toThrow('boom')
     })
 
+    it('flush waits for all in-flight writes to settle before rejecting (concurrency > 1)', async () => {
+      const { storage } = createMockStorage({
+        delayMs: 20,
+        failOnCall: 1,
+        failureError: new Error('first fails')
+      })
+      const batcher = createStorageBatcher(storage, { concurrency: 4 })
+
+      // Dispatch 4 concurrent writes; first will fail, other 3 are in-flight
+      for (let i = 0; i < 4; i++) {
+        const p = batcher.add({
+          filename: `file-${i}.png`,
+          content_type: 'image/png',
+          data: Buffer.from(`${i}`)
+        })
+        p.result.catch(() => {})
+      }
+
+      // flush() must wait for ALL in-flight writes to settle, then reject
+      await expect(batcher.flush()).rejects.toThrow('first fails')
+
+      // After flush rejection, pending must be 0 — all writes settled
+      expect(batcher.pending).toBe(0)
+    })
+
     it('pending settles to 0 after failure with queued items', async () => {
       const { storage } = createMockStorage({
         delayMs: 5,

@@ -45,16 +45,14 @@ export type {
   QuarryScriptModule,
   TerminalSignal
 } from './hooks'
-// Memory pressure API (public — proactive memory management)
+// Memory pressure API (public — types for ctx.memory)
 export type {
-  CreateMemoryAPIOptions,
   MemoryAPI,
   MemoryPressureLevel,
   MemorySnapshot,
   MemoryThresholds,
   MemoryUsage
 } from './memory'
-export { createMemoryAPI } from './memory'
 // Proxy validation (from sdk/src/proxy.ts)
 export type { ProxyValidationError, ProxyValidationResult, ProxyValidationWarning } from './proxy'
 export { redactProxyEndpoint, validateProxyEndpoint, validateProxyPool } from './proxy'

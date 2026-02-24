@@ -113,15 +113,13 @@ export function createStorageBatcher(
     },
 
     async flush(): Promise<void> {
-      if (failed !== null) {
-        throw failed
-      }
-      // Wait until all added items have completed
+      // Wait until all added items have settled (completed or rejected),
+      // even after failure. Callers treat flush rejection as a full drain.
       while (completed < totalAdded) {
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
-        if (failed !== null) {
-          throw failed
-        }
+      }
+      if (failed !== null) {
+        throw failed
       }
     },
 

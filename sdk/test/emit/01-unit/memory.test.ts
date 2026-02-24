@@ -250,6 +250,40 @@ describe('createMemoryAPI', () => {
 
       expect(snap.pressure).toBe('critical')
     })
+
+    it('non-monotonic thresholds throw RangeError', () => {
+      expect(() =>
+        createMemoryAPI({
+          page: null,
+          thresholds: { moderate: 0.9, high: 0.5, critical: 0.95 }
+        })
+      ).toThrow(RangeError)
+    })
+
+    it('high >= critical throws RangeError', () => {
+      expect(() =>
+        createMemoryAPI({
+          page: null,
+          thresholds: { moderate: 0.3, high: 0.8, critical: 0.8 }
+        })
+      ).toThrow(RangeError)
+    })
+
+    it('threshold out of range throws RangeError', () => {
+      expect(() =>
+        createMemoryAPI({
+          page: null,
+          thresholds: { moderate: 0 }
+        })
+      ).toThrow(RangeError)
+
+      expect(() =>
+        createMemoryAPI({
+          page: null,
+          thresholds: { critical: 1.5 }
+        })
+      ).toThrow(RangeError)
+    })
   })
 
   // ── isAbove() ───────────────────────────────────────────────────
