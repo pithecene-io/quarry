@@ -28,8 +28,9 @@ Non-goals:
 
 The stream is a sequence of frames. Each frame is one of:
 - an **event frame** (encoded event envelope),
-- an **artifact chunk frame** (binary chunk), or
-- a **file write frame** (sidecar file upload)
+- an **artifact chunk frame** (binary chunk),
+- a **file write frame** (sidecar file upload), or
+- a **file write acknowledgement frame** (runtime → executor, via stdin)
 
 ---
 
@@ -213,6 +214,7 @@ at Hive-partitioned paths.
 
 File write frame payload layout (msgpack-encoded):
 - `type` = `file_write`
+- `write_id` (uint32) — monotonic correlation ID, starts at 1. Zero means no ack expected (legacy).
 - `filename` (string) — flat filename, no path separators or `..`
 - `content_type` (string) — MIME type
 - `data` (bytes) — file contents
@@ -224,6 +226,64 @@ Constraints:
   are ignored by the runtime.
 - **Not events**: file write frames do not affect event sequence ordering
   and are not counted in `seq`.
+
+---
+
+## File Write Acknowledgement (Runtime → Executor)
+
+After processing a `file_write` frame, the runtime sends a `file_write_ack`
+frame back to the executor via stdin. This is the only bidirectional IPC
+in Quarry; all other frames flow executor→runtime via stdout.
+
+### Two-Phase Stdin
+
+Go's `json.NewEncoder` appends a newline after the initial JSON metadata.
+After the executor reads metadata (phase 1), stdin remains open for ack
+frames (phase 2). The executor's `AckReader` reads length-prefixed msgpack
+frames from stdin and matches them to pending `storage.put()` promises
+via `write_id`.
+
+### Ack Frame Layout
+
+File write ack frame payload (msgpack-encoded):
+- `type` = `file_write_ack`
+- `write_id` (uint32) — correlation ID from the `file_write` frame
+- `ok` (bool) — `true` if the backend write succeeded
+- `error` (string | null) — error message when `ok` is `false`
+
+Same wire format as all IPC frames: 4-byte big-endian length prefix + msgpack payload.
+
+### Error Model: Recoverable
+
+On storage backend failure (`PutFile()` error), the runtime:
+1. Sends `file_write_ack { ok: false, error: "..." }` to executor stdin.
+2. Does **NOT** return a stream error — the ingestion loop continues.
+3. Increments the `lode_write_failure` metric.
+4. Logs the error.
+
+The SDK's `storage.put()` promise rejects. The script can catch and continue:
+```typescript
+try {
+  await ctx.storage.put({ filename: 'img.png', ... })
+} catch (e) {
+  ctx.emit.log({ level: 'warn', message: `storage failed: ${e.message}` })
+}
+```
+
+### Backward Compatibility
+
+- **Old runtime + new executor**: Runtime closes stdin after metadata. AckReader
+  gets EOF immediately with 0 pending acks — detected as "no ack support".
+  StdioSink falls back to fire-and-forget.
+- **New runtime + old executor**: Old executor must be updated to use two-phase
+  stdin reading. The runtime sends acks which old executors would ignore.
+
+### No Per-Ack Timeout
+
+Ack latency is bounded by storage backend I/O latency. Terminal conditions:
+- **stdin EOF**: runtime closed pipe → reject all pending promises.
+- **Process exit**: stdin stream ends → same as EOF.
+- **Malformed frame**: ignored (future frame types may appear).
 
 ---
 

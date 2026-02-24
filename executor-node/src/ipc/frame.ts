@@ -21,7 +21,7 @@
  * @remarks Node.js only. Uses Buffer for transport efficiency.
  */
 
-import { encode as msgpackEncode } from '@msgpack/msgpack'
+import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack'
 import type { ArtifactId, EventEnvelope } from '@pithecene-io/quarry-sdk'
 
 /**
@@ -128,6 +128,8 @@ export type RunResultFrame = {
  */
 export type FileWriteFrame = {
   readonly type: 'file_write'
+  /** Monotonic correlation ID, starts at 1. Zero means no ack expected (legacy). */
+  readonly write_id: number
   /** Target filename (no path separators, no "..") */
   readonly filename: string
   /** MIME content type */
@@ -137,14 +139,34 @@ export type FileWriteFrame = {
 }
 
 /**
+ * File write acknowledgement frame sent by runtime to executor via stdin.
+ * Correlates to a file_write frame via write_id.
+ */
+export type FileWriteAckFrame = {
+  readonly type: 'file_write_ack'
+  /** Correlation ID from the file_write frame */
+  readonly write_id: number
+  /** True if the write succeeded */
+  readonly ok: boolean
+  /** Error message when ok is false */
+  readonly error?: string
+}
+
+/**
  * Union of all frame payload types for decoding.
  * Discriminate using type field:
  * - 'artifact_chunk' → ArtifactChunkFrame
  * - 'file_write' → FileWriteFrame (sidecar file upload)
+ * - 'file_write_ack' → FileWriteAckFrame (runtime→executor ack)
  * - 'run_result' → RunResultFrame (control, not counted in seq)
  * - other (item, log, etc.) → EventEnvelope
  */
-export type Frame = EventEnvelope | ArtifactChunkFrame | RunResultFrame | FileWriteFrame
+export type Frame =
+  | EventEnvelope
+  | ArtifactChunkFrame
+  | RunResultFrame
+  | FileWriteFrame
+  | FileWriteAckFrame
 
 /**
  * Error thrown when a frame exceeds the maximum size.
@@ -341,6 +363,7 @@ export function encodeRunResultFrame(
  * @param filename - Target filename (no path separators, no "..")
  * @param contentType - MIME content type
  * @param data - Raw binary data
+ * @param writeId - Monotonic correlation ID for ack matching (0 = no ack expected)
  * @returns Buffer containing length prefix + msgpack-encoded frame
  * @throws ChunkValidationError if data exceeds MAX_CHUNK_SIZE
  * @throws FrameSizeError if encoded payload exceeds MAX_PAYLOAD_SIZE
@@ -348,7 +371,8 @@ export function encodeRunResultFrame(
 export function encodeFileWriteFrame(
   filename: string,
   contentType: string,
-  data: Buffer | Uint8Array
+  data: Buffer | Uint8Array,
+  writeId = 0
 ): Buffer {
   if (data.length > MAX_CHUNK_SIZE) {
     throw new ChunkValidationError(
@@ -358,10 +382,31 @@ export function encodeFileWriteFrame(
 
   const frame: FileWriteFrame = {
     type: 'file_write',
+    write_id: writeId,
     filename,
     content_type: contentType,
     data
   }
   const payload = msgpackEncode(frame)
   return encodeFrame(payload)
+}
+
+/**
+ * Decode a file write acknowledgement frame from a msgpack payload.
+ *
+ * @param payload - Raw msgpack payload (without length prefix)
+ * @returns Decoded FileWriteAckFrame
+ * @throws Error if payload is not a valid file_write_ack frame
+ */
+export function decodeFileWriteAck(payload: Uint8Array): FileWriteAckFrame {
+  const decoded = msgpackDecode(payload) as Record<string, unknown>
+  if (decoded.type !== 'file_write_ack') {
+    throw new Error(`Expected file_write_ack frame, got type: ${String(decoded.type)}`)
+  }
+  return {
+    type: 'file_write_ack',
+    write_id: decoded.write_id as number,
+    ok: decoded.ok as boolean,
+    ...(decoded.error != null && { error: decoded.error as string })
+  }
 }

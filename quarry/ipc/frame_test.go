@@ -625,6 +625,206 @@ func TestFrameError_Unwrap(t *testing.T) {
 	}
 }
 
+// encodeFileWriteFrame encodes a file write frame as a framed msgpack payload.
+func encodeFileWriteFrame(fw *types.FileWriteFrame) ([]byte, error) {
+	payload, err := msgpack.Marshal(fw)
+	if err != nil {
+		return nil, err
+	}
+	return encodeFrame(payload), nil
+}
+
+// TestDecodeFrame_FileWrite validates file_write frame decoding with write_id.
+func TestDecodeFrame_FileWrite(t *testing.T) {
+	fw := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     42,
+		Filename:    "image.png",
+		ContentType: "image/png",
+		Data:        []byte("fake png data"),
+	}
+
+	frame, err := encodeFileWriteFrame(fw)
+	if err != nil {
+		t.Fatalf("encodeFileWriteFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	result, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	decoded, ok := result.(*types.FileWriteFrame)
+	if !ok {
+		t.Fatalf("DecodeFrame returned %T, want *types.FileWriteFrame", result)
+	}
+
+	if decoded.WriteID != 42 {
+		t.Errorf("WriteID = %d, want 42", decoded.WriteID)
+	}
+	if decoded.Filename != "image.png" {
+		t.Errorf("Filename = %q, want %q", decoded.Filename, "image.png")
+	}
+	if decoded.ContentType != "image/png" {
+		t.Errorf("ContentType = %q, want %q", decoded.ContentType, "image/png")
+	}
+	if !bytes.Equal(decoded.Data, fw.Data) {
+		t.Errorf("Data = %q, want %q", decoded.Data, fw.Data)
+	}
+}
+
+// TestDecodeFrame_FileWrite_ZeroWriteID validates backward compat with write_id=0.
+func TestDecodeFrame_FileWrite_ZeroWriteID(t *testing.T) {
+	fw := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     0,
+		Filename:    "data.csv",
+		ContentType: "text/csv",
+		Data:        []byte("a,b,c"),
+	}
+
+	frame, err := encodeFileWriteFrame(fw)
+	if err != nil {
+		t.Fatalf("encodeFileWriteFrame failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFileWrite(payload)
+	if err != nil {
+		t.Fatalf("DecodeFileWrite failed: %v", err)
+	}
+
+	if decoded.WriteID != 0 {
+		t.Errorf("WriteID = %d, want 0", decoded.WriteID)
+	}
+}
+
+// TestEncodeDecodeFileWriteAck_Success validates roundtrip for success ack.
+func TestEncodeDecodeFileWriteAck_Success(t *testing.T) {
+	ack := &types.FileWriteAckFrame{
+		Type:    "file_write_ack",
+		WriteID: 7,
+		OK:      true,
+	}
+
+	frame, err := EncodeFileWriteAck(ack)
+	if err != nil {
+		t.Fatalf("EncodeFileWriteAck failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFileWriteAck(payload)
+	if err != nil {
+		t.Fatalf("DecodeFileWriteAck failed: %v", err)
+	}
+
+	if decoded.Type != "file_write_ack" {
+		t.Errorf("Type = %q, want %q", decoded.Type, "file_write_ack")
+	}
+	if decoded.WriteID != 7 {
+		t.Errorf("WriteID = %d, want 7", decoded.WriteID)
+	}
+	if !decoded.OK {
+		t.Error("OK = false, want true")
+	}
+	if decoded.Error != nil {
+		t.Errorf("Error = %v, want nil", decoded.Error)
+	}
+}
+
+// TestEncodeDecodeFileWriteAck_Error validates roundtrip for error ack.
+func TestEncodeDecodeFileWriteAck_Error(t *testing.T) {
+	errMsg := "S3 PutObject failed: 500 Internal Server Error"
+	ack := &types.FileWriteAckFrame{
+		Type:    "file_write_ack",
+		WriteID: 3,
+		OK:      false,
+		Error:   &errMsg,
+	}
+
+	frame, err := EncodeFileWriteAck(ack)
+	if err != nil {
+		t.Fatalf("EncodeFileWriteAck failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	decoded, err := DecodeFileWriteAck(payload)
+	if err != nil {
+		t.Fatalf("DecodeFileWriteAck failed: %v", err)
+	}
+
+	if decoded.OK {
+		t.Error("OK = true, want false")
+	}
+	if decoded.WriteID != 3 {
+		t.Errorf("WriteID = %d, want 3", decoded.WriteID)
+	}
+	if decoded.Error == nil {
+		t.Fatal("Error = nil, want error message")
+	}
+	if *decoded.Error != errMsg {
+		t.Errorf("Error = %q, want %q", *decoded.Error, errMsg)
+	}
+}
+
+// TestDecodeFrame_FileWriteAck validates DecodeFrame routes file_write_ack correctly.
+func TestDecodeFrame_FileWriteAck(t *testing.T) {
+	ack := &types.FileWriteAckFrame{
+		Type:    "file_write_ack",
+		WriteID: 1,
+		OK:      true,
+	}
+
+	frame, err := EncodeFileWriteAck(ack)
+	if err != nil {
+		t.Fatalf("EncodeFileWriteAck failed: %v", err)
+	}
+
+	decoder := NewFrameDecoder(bytes.NewReader(frame))
+	payload, err := decoder.ReadFrame()
+	if err != nil {
+		t.Fatalf("ReadFrame failed: %v", err)
+	}
+
+	result, err := DecodeFrame(payload)
+	if err != nil {
+		t.Fatalf("DecodeFrame failed: %v", err)
+	}
+
+	decoded, ok := result.(*types.FileWriteAckFrame)
+	if !ok {
+		t.Fatalf("DecodeFrame returned %T, want *types.FileWriteAckFrame", result)
+	}
+
+	if decoded.WriteID != 1 {
+		t.Errorf("WriteID = %d, want 1", decoded.WriteID)
+	}
+	if !decoded.OK {
+		t.Error("OK = false, want true")
+	}
+}
+
 // TestIsFatalFrameError_NonFrameError validates IsFatalFrameError with non-FrameError.
 func TestIsFatalFrameError_NonFrameError(t *testing.T) {
 	regularErr := errors.New("regular error")

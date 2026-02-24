@@ -28,6 +28,7 @@ import type { ProxyEndpoint } from '@pithecene-io/quarry-sdk'
 import { chromiumArgs } from '../browser-args.js'
 import { evaluateIdlePoll, type IdlePollState } from '../browser-idle.js'
 import { errorMessage, execute, parseRunMeta } from '../executor.js'
+import { AckReader } from '../ipc/ack-reader.js'
 import { drainStdout } from '../ipc/sink.js'
 import { installStdoutGuard } from '../ipc/stdout-guard.js'
 import { type LoadedScript, loadScript, ScriptLoadError } from '../loader.js'
@@ -148,16 +149,62 @@ function parseProxy(input: Record<string, unknown>): ProxyEndpoint | undefined {
 }
 
 /**
- * Read all data from stdin.
+ * Read JSON metadata from stdin (phase 1 of two-phase stdin).
+ *
+ * Go's json.NewEncoder appends a newline after the JSON object.
+ * We read bytes until the first newline, parse JSON, and leave stdin
+ * open for phase 2 (ack frames via AckReader).
+ *
+ * @returns Parsed JSON metadata object
  */
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = []
+async function readStdinMetadata(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = []
 
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk)
-  }
+    function onReadable(): void {
+      let chunk: Buffer | null
+      while ((chunk = process.stdin.read() as Buffer | null) !== null) {
+        // Scan for newline in this chunk
+        const nlIndex = chunk.indexOf(0x0a) // '\n'
+        if (nlIndex !== -1) {
+          // Take everything up to (not including) the newline
+          chunks.push(chunk.subarray(0, nlIndex))
 
-  return Buffer.concat(chunks).toString('utf-8')
+          // Unshift remaining bytes back to stdin for phase 2 (ack reader)
+          const remaining = chunk.subarray(nlIndex + 1)
+          if (remaining.length > 0) {
+            process.stdin.unshift(remaining)
+          }
+
+          cleanup()
+          resolve(Buffer.concat(chunks).toString('utf-8'))
+          return
+        }
+        chunks.push(chunk)
+      }
+    }
+
+    function onEnd(): void {
+      // stdin closed before newline — use whatever we have
+      cleanup()
+      resolve(Buffer.concat(chunks).toString('utf-8'))
+    }
+
+    function onError(err: Error): void {
+      cleanup()
+      reject(err)
+    }
+
+    function cleanup(): void {
+      process.stdin.removeListener('readable', onReadable)
+      process.stdin.removeListener('end', onEnd)
+      process.stdin.removeListener('error', onError)
+    }
+
+    process.stdin.on('readable', onReadable)
+    process.stdin.on('end', onEnd)
+    process.stdin.on('error', onError)
+  })
 }
 
 /**
@@ -378,10 +425,11 @@ async function main(): Promise<never> {
 
   const scriptPath = args[0]
 
-  // Read and parse stdin
+  // Read metadata from stdin (phase 1 of two-phase stdin).
+  // stdin remains open for ack frames (phase 2).
   let input: unknown
   try {
-    const stdinData = await readStdin()
+    const stdinData = await readStdinMetadata()
     if (stdinData.trim() === '') {
       fatalError('stdin is empty, expected JSON input')
     }
@@ -429,6 +477,11 @@ async function main(): Promise<never> {
       ? inputObj.browser_ws_endpoint
       : undefined
 
+  // Start AckReader on stdin (phase 2 of two-phase stdin).
+  // stdin remains open after metadata read for runtime→executor ack frames.
+  const ackReader = new AckReader(process.stdin)
+  ackReader.start()
+
   // Execute
   const result = await execute({
     scriptPath,
@@ -437,6 +490,7 @@ async function main(): Promise<never> {
     proxy,
     storagePartition,
     browserWSEndpoint,
+    ackReader,
     output: ipcOutput,
     outputWrite: ipcWrite,
     puppeteerOptions: {
@@ -448,6 +502,9 @@ async function main(): Promise<never> {
     // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
     adblocker: process.env.QUARRY_ADBLOCKER === '1'
   })
+
+  // Stop AckReader after execution completes
+  ackReader.stop()
 
   // Flush stdout so the runtime sees the terminal event before EOF
   await drainStdout()

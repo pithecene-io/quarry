@@ -169,6 +169,24 @@ the event envelope, sequence numbering, and policy pipeline entirely.
   not counted in `seq`.
 - Files are transported as `file_write` IPC frames (see CONTRACT_IPC.md).
 
+### Error Propagation (v0.12.0+)
+
+`storage.put()` reflects the backend write result. If the storage backend
+(e.g. S3, local filesystem) fails, the returned promise **rejects** with
+the error message from the runtime.
+
+This is implemented via `file_write_ack` frames (see CONTRACT_IPC.md §File
+Write Acknowledgement). The error is **recoverable**: the run continues and
+the script decides how to handle the failure:
+
+```typescript
+try {
+  await ctx.storage.put({ filename: 'img.png', contentType: 'image/png', data })
+} catch (e) {
+  ctx.emit.log({ level: 'warn', message: `storage failed: ${e.message}` })
+}
+```
+
 ### Return Value (v0.11.0+)
 
 `storage.put()` returns `Promise<StoragePutResult>`:

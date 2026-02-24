@@ -66,6 +66,16 @@ func (m *mockExecutor) Stdout() io.Reader {
 	return m.stdout
 }
 
+func (m *mockExecutor) Stdin() io.WriteCloser {
+	return &nopWriteCloser{}
+}
+
+// nopWriteCloser is an io.WriteCloser that discards all writes.
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
 func (m *mockExecutor) Wait() (*ExecutorResult, error) {
 	if m.blockOnWait {
 		// Block until killed or released

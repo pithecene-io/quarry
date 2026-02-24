@@ -1,8 +1,14 @@
 import { PassThrough, Writable } from 'node:stream'
-import { decode as msgpackDecode } from '@msgpack/msgpack'
+import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack'
 import type { ArtifactId, EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { type ArtifactChunkFrame, LENGTH_PREFIX_SIZE } from '../../src/ipc/frame.js'
+import { AckReader } from '../../src/ipc/ack-reader.js'
+import {
+  type ArtifactChunkFrame,
+  encodeFrame,
+  type FileWriteFrame,
+  LENGTH_PREFIX_SIZE
+} from '../../src/ipc/frame.js'
 import { StdioSink, StreamClosedError } from '../../src/ipc/sink.js'
 
 /**
@@ -317,5 +323,115 @@ describe('StdioSink', () => {
       expect(stream.listenerCount('finish')).toBe(0)
       expect(stream.listenerCount('drain')).toBe(0)
     })
+  })
+})
+
+/** Encode a file_write_ack payload as a length-prefixed msgpack frame. */
+function encodeAckFrame(writeId: number, ok: boolean, error?: string): Buffer {
+  const payload = msgpackEncode({
+    type: 'file_write_ack',
+    write_id: writeId,
+    ok,
+    ...(error != null && { error })
+  })
+  return Buffer.from(encodeFrame(payload))
+}
+
+describe('StdioSink writeFile with AckReader', () => {
+  it('blocks on ack and resolves on success', async () => {
+    const output = new PassThrough()
+    const ackStream = new PassThrough()
+    const ackReader = new AckReader(ackStream)
+    ackReader.start()
+    const sink = new StdioSink(output, undefined, ackReader)
+
+    // Capture written frames
+    const chunks: Buffer[] = []
+    output.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+    // Start writeFile — it will block waiting for ack
+    const writePromise = sink.writeFile('test.png', 'image/png', Buffer.from('data'))
+
+    // Let the frame be written
+    await new Promise((r) => setTimeout(r, 10))
+
+    // Verify frame was sent with write_id
+    const buf = Buffer.concat(chunks)
+    const payloadLen = buf.readUInt32BE(0)
+    const decoded = msgpackDecode(buf.subarray(4, 4 + payloadLen)) as FileWriteFrame
+    expect(decoded.write_id).toBe(1)
+
+    // Send success ack
+    ackStream.write(encodeAckFrame(1, true))
+
+    await expect(writePromise).resolves.toBeUndefined()
+    ackReader.stop()
+  })
+
+  it('rejects on error ack', async () => {
+    const output = new PassThrough()
+    const ackStream = new PassThrough()
+    const ackReader = new AckReader(ackStream)
+    ackReader.start()
+    const sink = new StdioSink(output, undefined, ackReader)
+
+    const writePromise = sink.writeFile('test.png', 'image/png', Buffer.from('data'))
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    ackStream.write(encodeAckFrame(1, false, 'S3 PutObject failed'))
+
+    await expect(writePromise).rejects.toThrow('S3 PutObject failed')
+    ackReader.stop()
+  })
+
+  it('fire-and-forget without ack reader', async () => {
+    const collector = new BufferCollector()
+    const sink = new StdioSink(collector)
+
+    // No ack reader — should resolve immediately after write
+    await sink.writeFile('test.png', 'image/png', Buffer.from('data'))
+
+    // Verify frame was sent with write_id 0 (default)
+    const frames = collector.frames as FileWriteFrame[]
+    expect(frames).toHaveLength(1)
+    expect(frames[0].write_id).toBe(0)
+  })
+
+  it('increments write_id for each call', async () => {
+    const output = new PassThrough()
+    const ackStream = new PassThrough()
+    const ackReader = new AckReader(ackStream)
+    ackReader.start()
+    const sink = new StdioSink(output, undefined, ackReader)
+
+    const chunks: Buffer[] = []
+    output.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+    // Start two writes
+    const p1 = sink.writeFile('a.png', 'image/png', Buffer.from('a'))
+    await new Promise((r) => setTimeout(r, 10))
+    ackStream.write(encodeAckFrame(1, true))
+    await p1
+
+    const p2 = sink.writeFile('b.png', 'image/png', Buffer.from('b'))
+    await new Promise((r) => setTimeout(r, 10))
+    ackStream.write(encodeAckFrame(2, true))
+    await p2
+
+    // Verify write_ids
+    const buf = Buffer.concat(chunks)
+    let offset = 0
+
+    const len1 = buf.readUInt32BE(offset)
+    const frame1 = msgpackDecode(buf.subarray(offset + 4, offset + 4 + len1)) as FileWriteFrame
+    expect(frame1.write_id).toBe(1)
+
+    offset += 4 + len1
+    const len2 = buf.readUInt32BE(offset)
+    const frame2 = msgpackDecode(buf.subarray(offset + 4, offset + 4 + len2)) as FileWriteFrame
+    expect(frame2.write_id).toBe(2)
+
+    ackReader.stop()
   })
 })

@@ -2260,7 +2260,7 @@ function encodeRunResultFrame(outcome, proxyUsed) {
   const payload = (0, import_msgpack.encode)(frame);
   return encodeFrame(payload);
 }
-function encodeFileWriteFrame(filename, contentType, data) {
+function encodeFileWriteFrame(filename, contentType, data, writeId = 0) {
   if (data.length > MAX_CHUNK_SIZE) {
     throw new ChunkValidationError(
       `file data size ${data.length} exceeds MAX_CHUNK_SIZE ${MAX_CHUNK_SIZE}`
@@ -2268,12 +2268,25 @@ function encodeFileWriteFrame(filename, contentType, data) {
   }
   const frame = {
     type: "file_write",
+    write_id: writeId,
     filename,
     content_type: contentType,
     data
   };
   const payload = (0, import_msgpack.encode)(frame);
   return encodeFrame(payload);
+}
+function decodeFileWriteAck(payload) {
+  const decoded = (0, import_msgpack.decode)(payload);
+  if (decoded.type !== "file_write_ack") {
+    throw new Error(`Expected file_write_ack frame, got type: ${String(decoded.type)}`);
+  }
+  return {
+    type: "file_write_ack",
+    write_id: decoded.write_id,
+    ok: decoded.ok,
+    ...decoded.error != null && { error: decoded.error }
+  };
 }
 var import_msgpack, MAX_FRAME_SIZE, MAX_PAYLOAD_SIZE, MAX_CHUNK_SIZE, LENGTH_PREFIX_SIZE, FrameSizeError, ChunkValidationError;
 var init_frame = __esm({
@@ -2385,12 +2398,18 @@ var init_sink = __esm({
        *   `output.write()`. When provided, allows the caller to bypass a patched
        *   `output.write` (e.g. the stdout guard) while still using `output` for
        *   backpressure events and stream state.
+       * @param ackReader - Optional AckReader for file_write_ack correlation.
+       *   When provided, writeFile blocks until the runtime sends an ack.
+       *   When omitted, writeFile is fire-and-forget (backward compat).
        */
-      constructor(output, writeFn) {
+      constructor(output, writeFn, ackReader) {
         this.output = output;
         this.writeFn = writeFn ?? ((data) => output.write(data));
+        this.ackReader = ackReader;
       }
       writeFn;
+      ackReader;
+      writeIdCounter = 0;
       /**
        * Write an event envelope as a framed message.
        * Blocks on backpressure per CONTRACT_IPC.md.
@@ -2426,13 +2445,25 @@ var init_sink = __esm({
        * Bypasses seq numbering and the policy pipeline.
        * Blocks on backpressure per CONTRACT_IPC.md.
        *
+       * When an AckReader is configured, this method blocks until the runtime
+       * sends a file_write_ack. On error ack, the returned promise rejects.
+       * Without an AckReader, this is fire-and-forget (backward compat).
+       *
        * @param filename - Target filename (no path separators, no "..")
        * @param contentType - MIME content type
        * @param data - Raw binary data (max 8 MiB)
        */
       async writeFile(filename, contentType, data) {
-        const frame = encodeFileWriteFrame(filename, contentType, data);
-        await writeWithBackpressure(this.output, frame, this.writeFn);
+        if (this.ackReader) {
+          const writeId = ++this.writeIdCounter;
+          const ackPromise = this.ackReader.waitForAck(writeId);
+          const frame = encodeFileWriteFrame(filename, contentType, data, writeId);
+          await writeWithBackpressure(this.output, frame, this.writeFn);
+          await ackPromise;
+        } else {
+          const frame = encodeFileWriteFrame(filename, contentType, data);
+          await writeWithBackpressure(this.output, frame, this.writeFn);
+        }
       }
     };
   }
@@ -2686,7 +2717,7 @@ function redactProxy(proxy) {
 }
 async function execute(config) {
   const output = config.output ?? process.stdout;
-  const stdioSink = new StdioSink(output, config.outputWrite);
+  const stdioSink = new StdioSink(output, config.outputWrite, config.ackReader);
   const sink = new ObservingSink(stdioSink);
   let browser = null;
   let browserContext = null;
@@ -3016,6 +3047,110 @@ function evaluateIdlePoll(fetchResult, state, config, now = Date.now()) {
 
 // src/bin/executor.ts
 init_executor();
+
+// src/ipc/ack-reader.ts
+init_frame();
+var LENGTH_PREFIX_SIZE2 = 4;
+var AckReader = class {
+  pending = /* @__PURE__ */ new Map();
+  buffer = Buffer.alloc(0);
+  stopped = false;
+  stream;
+  constructor(stream) {
+    this.stream = stream;
+  }
+  /**
+   * Register a pending ack for the given writeId.
+   * Returns a promise that resolves on success ack or rejects on error ack/EOF.
+   */
+  waitForAck(writeId) {
+    if (this.stopped) {
+      return Promise.reject(new Error("AckReader is stopped"));
+    }
+    return new Promise((resolve3, reject) => {
+      this.pending.set(writeId, { resolve: resolve3, reject });
+    });
+  }
+  /**
+   * Start reading frames from the stream.
+   * Attaches data/end/error listeners.
+   */
+  start() {
+    this.stream.on("data", this.onData);
+    this.stream.on("end", this.onEnd);
+    this.stream.on("error", this.onError);
+  }
+  /**
+   * Stop the reader and reject all pending promises.
+   */
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.stream.removeListener("data", this.onData);
+    this.stream.removeListener("end", this.onEnd);
+    this.stream.removeListener("error", this.onError);
+    this.rejectAll(new Error("AckReader stopped"));
+  }
+  /**
+   * Returns true if there are no pending ack promises.
+   */
+  get idle() {
+    return this.pending.size === 0;
+  }
+  onData = (chunk) => {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+    this.drainBuffer();
+  };
+  onEnd = () => {
+    this.stopped = true;
+    this.rejectAll(new Error("stdin closed (EOF)"));
+  };
+  onError = (err) => {
+    this.stopped = true;
+    this.rejectAll(new Error(`stdin error: ${err.message}`));
+  };
+  /** Consume complete frames from the internal buffer. */
+  drainBuffer() {
+    while (this.buffer.length >= LENGTH_PREFIX_SIZE2) {
+      const payloadLen = this.buffer.readUInt32BE(0);
+      const totalLen = LENGTH_PREFIX_SIZE2 + payloadLen;
+      if (this.buffer.length < totalLen) {
+        return;
+      }
+      const payload = this.buffer.subarray(LENGTH_PREFIX_SIZE2, totalLen);
+      this.buffer = this.buffer.subarray(totalLen);
+      this.processPayload(payload);
+    }
+  }
+  /** Decode and dispatch a single ack frame. */
+  processPayload(payload) {
+    let ack;
+    try {
+      ack = decodeFileWriteAck(payload);
+    } catch {
+      return;
+    }
+    const entry = this.pending.get(ack.write_id);
+    if (!entry) {
+      return;
+    }
+    this.pending.delete(ack.write_id);
+    if (ack.ok) {
+      entry.resolve();
+    } else {
+      entry.reject(new Error(ack.error ?? "file write failed"));
+    }
+  }
+  /** Reject all pending promises with the given error. */
+  rejectAll(err) {
+    for (const [, entry] of this.pending) {
+      entry.reject(err);
+    }
+    this.pending.clear();
+  }
+};
+
+// src/bin/executor.ts
 init_sink();
 
 // src/ipc/stdout-guard.ts
@@ -3154,12 +3289,43 @@ function parseProxy(input) {
     ...hasPassword && { password: proxy.password }
   };
 }
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf-8");
+async function readStdinMetadata() {
+  return new Promise((resolve3, reject) => {
+    const chunks = [];
+    function onReadable() {
+      let chunk;
+      while ((chunk = process.stdin.read()) !== null) {
+        const nlIndex = chunk.indexOf(10);
+        if (nlIndex !== -1) {
+          chunks.push(chunk.subarray(0, nlIndex));
+          const remaining = chunk.subarray(nlIndex + 1);
+          if (remaining.length > 0) {
+            process.stdin.unshift(remaining);
+          }
+          cleanup();
+          resolve3(Buffer.concat(chunks).toString("utf-8"));
+          return;
+        }
+        chunks.push(chunk);
+      }
+    }
+    function onEnd() {
+      cleanup();
+      resolve3(Buffer.concat(chunks).toString("utf-8"));
+    }
+    function onError(err) {
+      cleanup();
+      reject(err);
+    }
+    function cleanup() {
+      process.stdin.removeListener("readable", onReadable);
+      process.stdin.removeListener("end", onEnd);
+      process.stdin.removeListener("error", onError);
+    }
+    process.stdin.on("readable", onReadable);
+    process.stdin.on("end", onEnd);
+    process.stdin.on("error", onError);
+  });
 }
 async function browserServer(scriptPath) {
   const { getPuppeteer: getBrowserPuppeteer } = await Promise.resolve().then(() => (init_executor(), executor_exports));
@@ -3301,7 +3467,7 @@ async function main() {
   const scriptPath = args[0];
   let input;
   try {
-    const stdinData = await readStdin();
+    const stdinData = await readStdinMetadata();
     if (stdinData.trim() === "") {
       fatalError("stdin is empty, expected JSON input");
     }
@@ -3334,6 +3500,8 @@ async function main() {
 `);
   });
   const browserWSEndpoint = typeof inputObj.browser_ws_endpoint === "string" && inputObj.browser_ws_endpoint !== "" ? inputObj.browser_ws_endpoint : void 0;
+  const ackReader = new AckReader(process.stdin);
+  ackReader.start();
   const result = await execute({
     scriptPath,
     job,
@@ -3341,6 +3509,7 @@ async function main() {
     proxy,
     storagePartition,
     browserWSEndpoint,
+    ackReader,
     output: ipcOutput,
     outputWrite: ipcWrite,
     puppeteerOptions: {
@@ -3352,6 +3521,7 @@ async function main() {
     // Adblocker off by default; enable with QUARRY_ADBLOCKER=1
     adblocker: process.env.QUARRY_ADBLOCKER === "1"
   });
+  ackReader.stop();
   await drainStdout();
   switch (result.outcome.status) {
     case "completed":

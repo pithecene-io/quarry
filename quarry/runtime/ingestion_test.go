@@ -9,6 +9,7 @@ import (
 
 	"github.com/vmihailenco/msgpack/v5"
 
+	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/log"
 	"github.com/pithecene-io/quarry/policy"
 	"github.com/pithecene-io/quarry/types"
@@ -49,7 +50,7 @@ func TestIngestionEngine_EnvelopeValidation_ContractVersionMismatch(t *testing.T
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -87,7 +88,7 @@ func TestIngestionEngine_EnvelopeValidation_RunIDMismatch(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -119,7 +120,7 @@ func TestIngestionEngine_EnvelopeValidation_AttemptMismatch(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -163,7 +164,7 @@ func TestIngestionEngine_SequenceViolation(t *testing.T) {
 	buf.Write(encodeEventFrame(envelope2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -185,7 +186,7 @@ func TestIngestionEngine_FrameDecodeError(t *testing.T) {
 	data := encodeFrame(invalidPayload)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(bytes.NewReader(data), policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(bytes.NewReader(data), policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -268,7 +269,7 @@ func TestIngestionEngine_PolicyFailure(t *testing.T) {
 	}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, failPolicy, NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, failPolicy, NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -300,7 +301,7 @@ func TestIngestionEngine_ValidEvent(t *testing.T) {
 	reader := bytes.NewReader(data)
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -356,7 +357,7 @@ func TestIngestionEngine_RunResult_Completed(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -419,7 +420,7 @@ func TestIngestionEngine_RunResult_WithProxy(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -485,7 +486,7 @@ func TestIngestionEngine_RunResult_DuplicateIgnored(t *testing.T) {
 	buf.Write(encodeRunResultFrame(runResult2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -549,7 +550,7 @@ func TestIngestionEngine_RunResult_NotCountedInSeq(t *testing.T) {
 	buf.Write(encodeEventFrame(envelope2))
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err != nil {
@@ -604,7 +605,7 @@ func TestIngestionEngine_FileWrite_NoFileWriter_FailsFast(t *testing.T) {
 
 	logger := log.NewLogger(runMeta)
 	// nil FileWriter — this should now fail fast
-	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 	if err == nil {
@@ -672,7 +673,7 @@ func TestIngestionEngine_PipeCloseAfterTerminal(t *testing.T) {
 	reader := &pipeCloseReader{data: data}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 
@@ -688,6 +689,297 @@ func TestIngestionEngine_PipeCloseAfterTerminal(t *testing.T) {
 	}
 	if terminal.Type != types.EventTypeRunComplete {
 		t.Errorf("expected run_complete, got %s", terminal.Type)
+	}
+}
+
+// failingFileWriter is a FileWriter that always fails PutFile.
+type failingFileWriter struct {
+	err error
+}
+
+func (w *failingFileWriter) PutFile(_ context.Context, _, _ string, _ []byte) error {
+	return w.err
+}
+
+func TestIngestionEngine_FileWrite_SuccessAck(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	// A valid event so ingestion is underway
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(envelope))
+
+	// File write with write_id
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     1,
+		Filename:    "screenshot.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	// Terminal event
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           "run-123",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	var ackBuf bytes.Buffer
+	logger := log.NewLogger(runMeta)
+	fw := lode.NewStubFileWriter()
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, &ackBuf)
+
+	err := engine.Run(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify success ack was written
+	if ackBuf.Len() == 0 {
+		t.Fatal("expected ack frame to be written")
+	}
+
+	// Decode the ack: 4-byte length prefix + payload
+	ackData := ackBuf.Bytes()
+	if len(ackData) < 4 {
+		t.Fatalf("ack data too short: %d bytes", len(ackData))
+	}
+	payloadLen := binary.BigEndian.Uint32(ackData[:4])
+	payload := ackData[4 : 4+payloadLen]
+
+	var ack types.FileWriteAckFrame
+	if err := msgpack.Unmarshal(payload, &ack); err != nil {
+		t.Fatalf("failed to decode ack: %v", err)
+	}
+
+	if ack.WriteID != 1 {
+		t.Errorf("WriteID = %d, want 1", ack.WriteID)
+	}
+	if !ack.OK {
+		t.Error("OK = false, want true")
+	}
+	if ack.Error != nil {
+		t.Errorf("Error = %v, want nil", ack.Error)
+	}
+}
+
+func TestIngestionEngine_FileWrite_ErrorAck_NoStreamError(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	// A valid event
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(envelope))
+
+	// File write with write_id
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     5,
+		Filename:    "screenshot.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	// Terminal event — should still be processed (ingestion continues)
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           "run-123",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	var ackBuf bytes.Buffer
+	logger := log.NewLogger(runMeta)
+	fw := &failingFileWriter{err: errors.New("S3 PutObject failed: 500")}
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, &ackBuf)
+
+	err := engine.Run(t.Context())
+	// PutFile failure is recoverable — no stream error
+	if err != nil {
+		t.Fatalf("expected nil error (recoverable), got: %v", err)
+	}
+
+	// Terminal event should have been processed
+	if !engine.HasTerminal() {
+		t.Error("expected terminal event to be recorded")
+	}
+
+	// Verify error ack was written
+	if ackBuf.Len() == 0 {
+		t.Fatal("expected ack frame to be written")
+	}
+
+	ackData := ackBuf.Bytes()
+	payloadLen := binary.BigEndian.Uint32(ackData[:4])
+	payload := ackData[4 : 4+payloadLen]
+
+	var ack types.FileWriteAckFrame
+	if err := msgpack.Unmarshal(payload, &ack); err != nil {
+		t.Fatalf("failed to decode ack: %v", err)
+	}
+
+	if ack.WriteID != 5 {
+		t.Errorf("WriteID = %d, want 5", ack.WriteID)
+	}
+	if ack.OK {
+		t.Error("OK = true, want false")
+	}
+	if ack.Error == nil {
+		t.Fatal("Error = nil, want error message")
+	}
+	if *ack.Error != "S3 PutObject failed: 500" {
+		t.Errorf("Error = %q, want %q", *ack.Error, "S3 PutObject failed: 500")
+	}
+}
+
+func TestIngestionEngine_FileWrite_NilAckWriter_BackwardCompat(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(envelope))
+
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     1,
+		Filename:    "screenshot.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           "run-123",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	logger := log.NewLogger(runMeta)
+	fw := lode.NewStubFileWriter()
+	// nil ackWriter — backward compat, no panic
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, nil)
+
+	err := engine.Run(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// epipeWriter simulates a broken pipe (EPIPE).
+type epipeWriter struct{}
+
+func (epipeWriter) Write(_ []byte) (int, error) {
+	return 0, errors.New("write |1: broken pipe")
+}
+
+func TestIngestionEngine_FileWrite_AckWriteEPIPE_NonFatal(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	envelope := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{"item_type": "test", "data": map[string]any{}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(envelope))
+
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     1,
+		Filename:    "screenshot.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           "run-123",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	logger := log.NewLogger(runMeta)
+	fw := lode.NewStubFileWriter()
+	// EPIPE ack writer — should not cause stream error
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, &epipeWriter{})
+
+	err := engine.Run(t.Context())
+	if err != nil {
+		t.Fatalf("expected nil error (EPIPE non-fatal), got: %v", err)
 	}
 }
 
@@ -717,7 +1009,7 @@ func TestIngestionEngine_PipeCloseBeforeTerminal(t *testing.T) {
 	reader := &pipeCloseReader{data: data}
 
 	logger := log.NewLogger(runMeta)
-	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil)
+	engine := NewIngestionEngine(reader, policy.NewNoopPolicy(), NewArtifactManager(), nil, logger, runMeta, nil, nil, nil)
 
 	err := engine.Run(t.Context())
 

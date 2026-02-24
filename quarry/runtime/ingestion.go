@@ -109,6 +109,7 @@ type IngestionEngine struct {
 	runMeta          *types.RunMeta // for envelope validation
 	collector        *metrics.Collector
 	enqueueObserver  EnqueueObserver // optional fan-out observer, may be nil
+	ackWriter        io.Writer       // stdin pipe for file_write_ack frames, may be nil
 	currentSeq       int64
 	terminalSeen     bool
 	terminalEvent    *types.EventEnvelope
@@ -118,6 +119,7 @@ type IngestionEngine struct {
 // NewIngestionEngine creates a new ingestion engine.
 // The fileWriter parameter may be nil if sidecar file writes are not supported.
 // The observer parameter may be nil if fan-out is not enabled.
+// The ackWriter parameter may be nil for backward compatibility (no ack frames sent).
 func NewIngestionEngine(
 	reader io.Reader,
 	pol policy.Policy,
@@ -127,6 +129,7 @@ func NewIngestionEngine(
 	runMeta *types.RunMeta,
 	collector *metrics.Collector,
 	observer EnqueueObserver,
+	ackWriter io.Writer,
 ) *IngestionEngine {
 	return &IngestionEngine{
 		decoder:         ipc.NewFrameDecoder(reader),
@@ -137,6 +140,7 @@ func NewIngestionEngine(
 		runMeta:         runMeta,
 		collector:       collector,
 		enqueueObserver: observer,
+		ackWriter:       ackWriter,
 		currentSeq:      0,
 	}
 }
@@ -504,7 +508,11 @@ func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
 
 // processFileWrite processes a file_write frame.
 // File writes bypass seq numbering and the policy pipeline.
-// File write errors are stream errors (same category as artifact chunk errors).
+//
+// Error model: PutFile failures send an error ack but do NOT terminate the
+// ingestion loop. The executor's storage.put() promise rejects, and the
+// script decides how to handle it. Validation errors (empty filename, path
+// traversal) remain fatal stream errors.
 func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.FileWriteFrame) error {
 	// Reject file writes after terminal event
 	if e.terminalSeen {
@@ -553,20 +561,60 @@ func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.Fil
 		e.logger.Error("file_write failed", map[string]any{
 			"filename": frame.Filename,
 			"error":    err.Error(),
+			"write_id": frame.WriteID,
 		})
-		return &IngestionError{
-			Kind: IngestionErrorStream,
-			Err:  fmt.Errorf("file_write failed: %w", err),
-		}
+		e.collector.IncLodeWriteFailure()
+
+		// Send error ack — recoverable, ingestion continues
+		e.sendFileWriteAck(frame.WriteID, false, err.Error())
+		return nil
 	}
 
 	e.logger.Debug("file written", map[string]any{
 		"filename":     frame.Filename,
 		"content_type": frame.ContentType,
 		"size_bytes":   len(frame.Data),
+		"write_id":     frame.WriteID,
 	})
 
+	// Send success ack
+	e.sendFileWriteAck(frame.WriteID, true, "")
 	return nil
+}
+
+// sendFileWriteAck writes a file_write_ack frame to the executor's stdin.
+// No-op if ackWriter is nil (backward compat) or writeId is 0 (legacy frame).
+// Ack write failures are logged but non-fatal (executor may have exited).
+func (e *IngestionEngine) sendFileWriteAck(writeID uint32, ok bool, errMsg string) {
+	if e.ackWriter == nil || writeID == 0 {
+		return
+	}
+
+	ack := &types.FileWriteAckFrame{
+		Type:    ipc.FileWriteAckType,
+		WriteID: writeID,
+		OK:      ok,
+	}
+	if errMsg != "" {
+		ack.Error = &errMsg
+	}
+
+	frame, err := ipc.EncodeFileWriteAck(ack)
+	if err != nil {
+		e.logger.Warn("failed to encode file_write_ack", map[string]any{
+			"write_id": writeID,
+			"error":    err.Error(),
+		})
+		return
+	}
+
+	if _, err := e.ackWriter.Write(frame); err != nil {
+		// EPIPE or similar — executor may have exited. Non-fatal.
+		e.logger.Warn("failed to write file_write_ack (executor may have exited)", map[string]any{
+			"write_id": writeID,
+			"error":    err.Error(),
+		})
+	}
 }
 
 // GetRunResult returns the run result frame if received.
