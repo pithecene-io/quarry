@@ -247,16 +247,16 @@ async function readBrowserUsage(page) {
     return null;
   }
 }
-function readCgroupUsage() {
-  const v2Current = readCgroupFile("/sys/fs/cgroup/memory.current");
-  const v2Max = readCgroupFile("/sys/fs/cgroup/memory.max");
+function readCgroupUsage(readFile = readCgroupFile) {
+  const v2Current = readFile("/sys/fs/cgroup/memory.current");
+  const v2Max = readFile("/sys/fs/cgroup/memory.max");
   if (v2Current !== null && v2Max !== null) return {
     used: v2Current,
     limit: v2Max,
     ratio: v2Max > 0 ? v2Current / v2Max : 0
   };
-  const v1Usage = readCgroupFile("/sys/fs/cgroup/memory/memory.usage_in_bytes");
-  const v1Limit = readCgroupFile("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+  const v1Usage = readFile("/sys/fs/cgroup/memory/memory.usage_in_bytes");
+  const v1Limit = readFile("/sys/fs/cgroup/memory/memory.limit_in_bytes");
   if (v1Usage !== null && v1Limit !== null) {
     if (v1Limit >= CGROUP_UNLIMITED_THRESHOLD) return null;
     return {
@@ -285,7 +285,7 @@ function createMemoryAPI(options) {
   validateThresholds(thresholds);
   const readNode = options._readNode ?? readNodeUsage;
   const readBrowser = options._readBrowser ?? readBrowserUsage;
-  const readCgroup = options._readCgroup ?? readCgroupUsage;
+  const readCgroup = options._readCgroup ?? (() => readCgroupUsage(options._readCgroupFile));
   async function snapshot(opts) {
     const includeBrowser = opts?.browser !== false;
     const node = readNode();

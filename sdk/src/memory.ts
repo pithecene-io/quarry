@@ -146,17 +146,19 @@ const CGROUP_UNLIMITED_THRESHOLD = 2 ** 62
  * Tries cgroup v2 paths first, falls back to v1.
  * Returns null if not in a cgroup or if the limit is unlimited.
  */
-function readCgroupUsage(): MemoryUsage | null {
+function readCgroupUsage(
+  readFile: (path: string) => number | null = readCgroupFile
+): MemoryUsage | null {
   // cgroup v2
-  const v2Current = readCgroupFile('/sys/fs/cgroup/memory.current')
-  const v2Max = readCgroupFile('/sys/fs/cgroup/memory.max')
+  const v2Current = readFile('/sys/fs/cgroup/memory.current')
+  const v2Max = readFile('/sys/fs/cgroup/memory.max')
   if (v2Current !== null && v2Max !== null) {
     return { used: v2Current, limit: v2Max, ratio: v2Max > 0 ? v2Current / v2Max : 0 }
   }
 
   // cgroup v1 fallback
-  const v1Usage = readCgroupFile('/sys/fs/cgroup/memory/memory.usage_in_bytes')
-  const v1Limit = readCgroupFile('/sys/fs/cgroup/memory/memory.limit_in_bytes')
+  const v1Usage = readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes')
+  const v1Limit = readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes')
   if (v1Usage !== null && v1Limit !== null) {
     if (v1Limit >= CGROUP_UNLIMITED_THRESHOLD) return null
     return { used: v1Usage, limit: v1Limit, ratio: v1Limit > 0 ? v1Usage / v1Limit : 0 }
@@ -192,6 +194,8 @@ export type CreateMemoryAPIOptions = {
   readonly thresholds?: MemoryThresholds
   /** Override cgroup reader for testing. @internal */
   readonly _readCgroup?: () => MemoryUsage | null
+  /** Override cgroup file reader for testing (exercises real readCgroupUsage logic). @internal */
+  readonly _readCgroupFile?: (path: string) => number | null
   /** Override node reader for testing. @internal */
   readonly _readNode?: () => MemoryUsage
   /** Override browser reader for testing. @internal */
@@ -212,7 +216,7 @@ export function createMemoryAPI(options: CreateMemoryAPIOptions): MemoryAPI {
 
   const readNode = options._readNode ?? readNodeUsage
   const readBrowser = options._readBrowser ?? readBrowserUsage
-  const readCgroup = options._readCgroup ?? readCgroupUsage
+  const readCgroup = options._readCgroup ?? (() => readCgroupUsage(options._readCgroupFile))
 
   async function snapshot(opts?: { browser?: boolean }): Promise<MemorySnapshot> {
     const includeBrowser = opts?.browser !== false

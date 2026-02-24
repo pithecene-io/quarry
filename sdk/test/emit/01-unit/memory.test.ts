@@ -142,6 +142,63 @@ describe('createMemoryAPI', () => {
     })
   })
 
+  // ── Cgroup v1 unlimited sentinel ────────────────────────────────
+
+  describe('cgroup v1 unlimited sentinel', () => {
+    it('returns cgroup: null when v1 limit is the unlimited sentinel (~2^63)', async () => {
+      const api = createMemoryAPI({
+        page: null,
+        _readNode: stubNode(0.3),
+        _readBrowser: stubBrowser(null),
+        _readCgroupFile: (path: string) => {
+          // v2 paths unavailable
+          if (path === '/sys/fs/cgroup/memory/memory.usage_in_bytes') return 500_000_000
+          if (path === '/sys/fs/cgroup/memory/memory.limit_in_bytes') return 2 ** 63 - 4096
+          return null
+        }
+      })
+
+      const snap = await api.snapshot()
+
+      expect(snap.cgroup).toBeNull()
+    })
+
+    it('returns cgroup: null when v1 limit is exactly at 2^62 threshold', async () => {
+      const api = createMemoryAPI({
+        page: null,
+        _readNode: stubNode(0.3),
+        _readBrowser: stubBrowser(null),
+        _readCgroupFile: (path: string) => {
+          if (path === '/sys/fs/cgroup/memory/memory.usage_in_bytes') return 500_000_000
+          if (path === '/sys/fs/cgroup/memory/memory.limit_in_bytes') return 2 ** 62
+          return null
+        }
+      })
+
+      const snap = await api.snapshot()
+
+      expect(snap.cgroup).toBeNull()
+    })
+
+    it('returns valid cgroup usage when v1 limit is below sentinel threshold', async () => {
+      const api = createMemoryAPI({
+        page: null,
+        _readNode: stubNode(0.3),
+        _readBrowser: stubBrowser(null),
+        _readCgroupFile: (path: string) => {
+          if (path === '/sys/fs/cgroup/memory/memory.usage_in_bytes') return 500_000_000
+          if (path === '/sys/fs/cgroup/memory/memory.limit_in_bytes') return 1_000_000_000
+          return null
+        }
+      })
+
+      const snap = await api.snapshot()
+
+      expect(snap.cgroup).not.toBeNull()
+      expect(snap.cgroup!.ratio).toBeCloseTo(0.5, 2)
+    })
+  })
+
   // ── Pressure classification ─────────────────────────────────────
 
   describe('pressure classification', () => {
