@@ -204,6 +204,63 @@ the key is an empty string.
 - Content type is persisted as a companion `.meta.json` sidecar file
   alongside the data file in storage.
 
+### Storage Batcher (`createStorageBatcher`)
+
+`createStorageBatcher` is an SDK-level utility that dispatches multiple
+`storage.put()` calls with bounded concurrency. It does not modify the
+underlying IPC protocol or serialization semantics.
+
+- Each file write still produces one `file_write` IPC frame.
+- Calls queue through the existing serialization chain — the batcher
+  eliminates user-code latency between successive puts.
+- Concurrency is bounded (default: 16). At most N promises are in-flight
+  at any time.
+- **Fail-fast**: after the first `storage.put()` error, all queued and
+  subsequent `add()` calls reject with that error. `flush()` rethrows.
+- **Reusable**: the batcher may be reused after a successful `flush()`.
+- **Must flush before terminal events**: buffered writes after
+  `run_complete` or `run_error` will throw `TerminalEventError`.
+
+```typescript
+const batch = createStorageBatcher(ctx.storage, { concurrency: 16 })
+batch.add({ filename, content_type, data })
+await batch.flush()
+```
+
+---
+
+## Memory Pressure API (`ctx.memory`)
+
+`ctx.memory` provides a pull-based memory pressure API for proactive
+memory management in container-constrained workloads.
+
+### Sources
+
+| Source | Method | Always available |
+|--------|--------|-----------------|
+| Node heap | `v8.getHeapStatistics()` + `process.memoryUsage()` | Yes |
+| Browser | `page.metrics()` (CDP) | No (null when no browser or opted out) |
+| Cgroup | `/sys/fs/cgroup/memory.{current,max}` (v2) or `memory.{usage_in_bytes,limit_in_bytes}` (v1) | No (null outside cgroup or when limit is unlimited) |
+
+### Pressure Levels
+
+| Ratio | Level |
+|-------|-------|
+| < 0.5 | `low` |
+| 0.5–0.7 | `moderate` |
+| 0.7–0.9 | `high` |
+| ≥ 0.9 | `critical` |
+
+Thresholds are configurable. The `pressure` field reports the highest
+level across all available sources.
+
+### Semantics
+
+- **Pull-based**: scripts call `snapshot()` when they want; no push events.
+- **SDK-local**: no IPC round-trips. Browser metrics require a CDP call (~1-5ms).
+- **Graceful degradation**: unavailable sources return `null`.
+- **No protocol changes**: memory pressure is entirely SDK-side.
+
 ---
 
 ## Ordering Guarantees

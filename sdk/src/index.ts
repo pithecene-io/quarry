@@ -45,9 +45,20 @@ export type {
   QuarryScriptModule,
   TerminalSignal
 } from './hooks'
+// Memory pressure API (public — types for ctx.memory)
+export type {
+  MemoryAPI,
+  MemoryPressureLevel,
+  MemorySnapshot,
+  MemoryThresholds,
+  MemoryUsage
+} from './memory'
 // Proxy validation (from sdk/src/proxy.ts)
 export type { ProxyValidationError, ProxyValidationResult, ProxyValidationWarning } from './proxy'
 export { redactProxyEndpoint, validateProxyEndpoint, validateProxyPool } from './proxy'
+// Storage batcher utility (public — bounded-concurrency file uploads)
+export type { PendingStoragePut, StorageBatcher, StorageBatcherOptions } from './storage-batcher'
+export { createStorageBatcher } from './storage-batcher'
 // Context types (from sdk/src/types/context.ts)
 export type { QuarryContext, QuarryScript, RunMeta } from './types/context'
 export type {
