@@ -3055,6 +3055,10 @@ var AckReader = class {
   pending = /* @__PURE__ */ new Map();
   buffer = Buffer.alloc(0);
   stopped = false;
+  /** True when the runtime does not support ack frames (fire-and-forget fallback). */
+  noAckSupport = false;
+  /** True after at least one ack frame has been successfully dispatched. */
+  receivedAnyAck = false;
   stream;
   constructor(stream) {
     this.stream = stream;
@@ -3064,12 +3068,22 @@ var AckReader = class {
    * Returns a promise that resolves on success ack or rejects on error ack/EOF.
    */
   waitForAck(writeId) {
+    if (this.noAckSupport) {
+      return Promise.resolve();
+    }
     if (this.stopped) {
       return Promise.reject(new Error("AckReader is stopped"));
     }
     return new Promise((resolve3, reject) => {
       this.pending.set(writeId, { resolve: resolve3, reject });
     });
+  }
+  /**
+   * Returns true if the runtime does not support ack frames.
+   * Detected when stdin EOF arrives without having received any ack frames.
+   */
+  get hasAckSupport() {
+    return !this.noAckSupport;
   }
   /**
    * Start reading frames from the stream.
@@ -3103,6 +3117,11 @@ var AckReader = class {
   };
   onEnd = () => {
     this.stopped = true;
+    if (!this.receivedAnyAck) {
+      this.noAckSupport = true;
+      this.resolveAll();
+      return;
+    }
     this.rejectAll(new Error("stdin closed (EOF)"));
   };
   onError = (err) => {
@@ -3135,11 +3154,19 @@ var AckReader = class {
       return;
     }
     this.pending.delete(ack.write_id);
+    this.receivedAnyAck = true;
     if (ack.ok) {
       entry.resolve();
     } else {
       entry.reject(new Error(ack.error ?? "file write failed"));
     }
+  }
+  /** Resolve all pending promises (fire-and-forget fallback). */
+  resolveAll() {
+    for (const [, entry] of this.pending) {
+      entry.resolve();
+    }
+    this.pending.clear();
   }
   /** Reject all pending promises with the given error. */
   rejectAll(err) {

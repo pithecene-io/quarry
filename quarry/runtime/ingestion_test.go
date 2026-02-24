@@ -983,6 +983,117 @@ func TestIngestionEngine_FileWrite_AckWriteEPIPE_NonFatal(t *testing.T) {
 	}
 }
 
+// TestIngestionEngine_FileWrite_PostTerminal_ErrorAck verifies that a file_write
+// received after a terminal event sends an error ack to guarantee executor-side
+// promise settlement. Per CONTRACT_IPC.md §Terminal boundary.
+func TestIngestionEngine_FileWrite_PostTerminal_ErrorAck(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	// Terminal event first
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	// File write AFTER terminal — should get error ack
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     7,
+		Filename:    "late-file.png",
+		ContentType: "image/png",
+		Data:        []byte("late-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	var ackBuf bytes.Buffer
+	logger := log.NewLogger(runMeta)
+	fw := lode.NewStubFileWriter()
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, &ackBuf)
+
+	err := engine.Run(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify error ack was sent for the post-terminal file_write
+	if ackBuf.Len() == 0 {
+		t.Fatal("expected error ack frame for post-terminal file_write")
+	}
+
+	ackData := ackBuf.Bytes()
+	payloadLen := binary.BigEndian.Uint32(ackData[:4])
+	payload := ackData[4 : 4+payloadLen]
+
+	var ack types.FileWriteAckFrame
+	if err := msgpack.Unmarshal(payload, &ack); err != nil {
+		t.Fatalf("failed to decode ack: %v", err)
+	}
+
+	if ack.WriteID != 7 {
+		t.Errorf("WriteID = %d, want 7", ack.WriteID)
+	}
+	if ack.OK {
+		t.Error("OK = true, want false (post-terminal rejection)")
+	}
+	if ack.Error == nil || *ack.Error != "run already terminated" {
+		t.Errorf("Error = %v, want %q", ack.Error, "run already terminated")
+	}
+}
+
+// TestIngestionEngine_FileWrite_PostTerminal_NoAckWriter verifies that a
+// post-terminal file_write with nil ackWriter does not panic (backward compat).
+func TestIngestionEngine_FileWrite_PostTerminal_NoAckWriter(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-123",
+		Attempt: 1,
+	}
+
+	var buf bytes.Buffer
+
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-123",
+		Seq:             1,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2024-01-01T00:00:00Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     1,
+		Filename:    "late-file.png",
+		ContentType: "image/png",
+		Data:        []byte("late-data"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	logger := log.NewLogger(runMeta)
+	fw := lode.NewStubFileWriter()
+	// nil ackWriter — should not panic
+	engine := NewIngestionEngine(&buf, policy.NewNoopPolicy(), NewArtifactManager(), fw, logger, runMeta, nil, nil, nil)
+
+	err := engine.Run(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestIngestionEngine_PipeCloseBeforeTerminal verifies that pipe closure errors
 // BEFORE a terminal event are still treated as stream errors (executor crash).
 func TestIngestionEngine_PipeCloseBeforeTerminal(t *testing.T) {

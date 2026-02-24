@@ -434,4 +434,30 @@ describe('StdioSink writeFile with AckReader', () => {
 
     ackReader.stop()
   })
+
+  it('falls back to fire-and-forget when AckReader detects no ack support (CONTRACT_IPC.md §Backward Compatibility)', async () => {
+    const output = new PassThrough()
+    const ackStream = new PassThrough()
+    const ackReader = new AckReader(ackStream)
+    ackReader.start()
+
+    // Old runtime closes stdin immediately — trigger no-ack-support detection
+    ackStream.end()
+    await new Promise((r) => setTimeout(r, 10))
+
+    const sink = new StdioSink(output, undefined, ackReader)
+
+    // Collect written frames
+    const chunks: Buffer[] = []
+    output.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+    // writeFile should resolve without waiting for an ack
+    await sink.writeFile('test.png', 'image/png', Buffer.from('data'))
+
+    // Verify frame was written (write_id > 0 because ackReader was present)
+    const buf = Buffer.concat(chunks)
+    const payloadLen = buf.readUInt32BE(0)
+    const decoded = msgpackDecode(buf.subarray(4, 4 + payloadLen)) as FileWriteFrame
+    expect(decoded.write_id).toBe(1)
+  })
 })

@@ -514,11 +514,14 @@ func (e *IngestionEngine) processRunResult(frame *types.RunResultFrame) error {
 // script decides how to handle it. Validation errors (empty filename, path
 // traversal) remain fatal stream errors.
 func (e *IngestionEngine) processFileWrite(ctx context.Context, frame *types.FileWriteFrame) error {
-	// Reject file writes after terminal event
+	// Reject file writes after terminal event — send error ack to guarantee
+	// promise settlement on the executor side, then discard.
 	if e.terminalSeen {
-		e.logger.Warn("ignoring file_write after terminal event", map[string]any{
+		e.logger.Warn("rejecting file_write after terminal event", map[string]any{
 			"filename": frame.Filename,
+			"write_id": frame.WriteID,
 		})
+		e.sendFileWriteAck(frame.WriteID, false, "run already terminated")
 		return nil
 	}
 

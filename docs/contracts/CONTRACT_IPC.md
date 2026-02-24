@@ -223,7 +223,8 @@ Constraints:
 - **Maximum data size**: 8 MiB (same limit as artifact chunks).
 - **Single-frame**: file writes are not chunked.
 - **Terminal boundary**: file write frames received after a terminal event
-  are ignored by the runtime.
+  are rejected with an error ack (`ok: false`, `"run already terminated"`)
+  to guarantee executor-side promise settlement.
 - **Not events**: file write frames do not affect event sequence ordering
   and are not counted in `seq`.
 
@@ -273,7 +274,8 @@ try {
 ### Backward Compatibility
 
 - **Old runtime + new executor**: Runtime closes stdin after metadata. AckReader
-  gets EOF immediately with 0 pending acks — detected as "no ack support".
+  detects EOF without having received any ack frames — detected as "no ack
+  support". All pending and future `waitForAck()` calls resolve immediately.
   StdioSink falls back to fire-and-forget.
 - **New runtime + old executor**: Old executor must be updated to use two-phase
   stdin reading. The runtime sends acks which old executors would ignore.

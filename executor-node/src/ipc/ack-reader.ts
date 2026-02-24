@@ -31,6 +31,10 @@ export class AckReader {
   >()
   private buffer = Buffer.alloc(0)
   private stopped = false
+  /** True when the runtime does not support ack frames (fire-and-forget fallback). */
+  private noAckSupport = false
+  /** True after at least one ack frame has been successfully dispatched. */
+  private receivedAnyAck = false
   private readonly stream: Readable
 
   constructor(stream: Readable) {
@@ -42,12 +46,24 @@ export class AckReader {
    * Returns a promise that resolves on success ack or rejects on error ack/EOF.
    */
   waitForAck(writeId: number): Promise<void> {
+    // Old runtime closed stdin immediately → fire-and-forget fallback
+    if (this.noAckSupport) {
+      return Promise.resolve()
+    }
     if (this.stopped) {
       return Promise.reject(new Error('AckReader is stopped'))
     }
     return new Promise<void>((resolve, reject) => {
       this.pending.set(writeId, { resolve, reject })
     })
+  }
+
+  /**
+   * Returns true if the runtime does not support ack frames.
+   * Detected when stdin EOF arrives without having received any ack frames.
+   */
+  get hasAckSupport(): boolean {
+    return !this.noAckSupport
   }
 
   /**
@@ -85,8 +101,17 @@ export class AckReader {
   }
 
   private readonly onEnd = (): void => {
-    // stdin EOF — reject remaining if any, but 0 pending is normal ("no ack support")
     this.stopped = true
+    if (!this.receivedAnyAck) {
+      // No ack was ever received → runtime does not support ack frames.
+      // Resolve all pending (fire-and-forget fallback) per CONTRACT_IPC.md §Backward Compatibility.
+      // This is deterministic: regardless of whether waitForAck() was called before
+      // or after EOF, the outcome is the same.
+      this.noAckSupport = true
+      this.resolveAll()
+      return
+    }
+    // Runtime supports acks but closed stdin with pending writes → real failure.
     this.rejectAll(new Error('stdin closed (EOF)'))
   }
 
@@ -130,12 +155,21 @@ export class AckReader {
     }
 
     this.pending.delete(ack.write_id)
+    this.receivedAnyAck = true
 
     if (ack.ok) {
       entry.resolve()
     } else {
       entry.reject(new Error(ack.error ?? 'file write failed'))
     }
+  }
+
+  /** Resolve all pending promises (fire-and-forget fallback). */
+  private resolveAll(): void {
+    for (const [, entry] of this.pending) {
+      entry.resolve()
+    }
+    this.pending.clear()
   }
 
   /** Reject all pending promises with the given error. */

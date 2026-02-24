@@ -40,13 +40,34 @@ describe('AckReader', () => {
     reader.stop()
   })
 
-  it('rejects all pending on EOF', async () => {
+  it('resolves all pending on EOF when no ack was ever received (no-ack-support)', async () => {
     const stream = new PassThrough()
     const reader = new AckReader(stream)
     reader.start()
 
     const p1 = reader.waitForAck(1)
     const p2 = reader.waitForAck(2)
+
+    stream.end()
+
+    // No ack was ever received → fire-and-forget fallback
+    await expect(p1).resolves.toBeUndefined()
+    await expect(p2).resolves.toBeUndefined()
+  })
+
+  it('rejects all pending on EOF when acks were previously received', async () => {
+    const stream = new PassThrough()
+    const reader = new AckReader(stream)
+    reader.start()
+
+    // Receive one ack — runtime supports acks
+    const p0 = reader.waitForAck(1)
+    stream.write(encodeAck(1, true))
+    await expect(p0).resolves.toBeUndefined()
+
+    // Now two pending with no acks coming
+    const p1 = reader.waitForAck(2)
+    const p2 = reader.waitForAck(3)
 
     stream.end()
 
@@ -148,5 +169,69 @@ describe('AckReader', () => {
     })
     expect(reader.idle).toBe(false)
     reader.stop()
+  })
+
+  describe('backward compatibility (CONTRACT_IPC.md §Backward Compatibility)', () => {
+    it('EOF before any waitForAck enables fire-and-forget fallback', async () => {
+      const stream = new PassThrough()
+      const reader = new AckReader(stream)
+      reader.start()
+
+      // Old runtime closes stdin immediately after metadata — no acks
+      stream.end()
+
+      // Let EOF propagate
+      await new Promise((r) => setTimeout(r, 10))
+
+      // Reader should detect no-ack-support, not reject
+      expect(reader.hasAckSupport).toBe(false)
+
+      // Subsequent waitForAck calls should resolve immediately (fire-and-forget)
+      await expect(reader.waitForAck(1)).resolves.toBeUndefined()
+      await expect(reader.waitForAck(2)).resolves.toBeUndefined()
+    })
+
+    it('EOF races with waitForAck — resolves when no ack ever received (same tick)', async () => {
+      // This is the critical race path: waitForAck() is called before the
+      // EOF event fires. Because no ack was ever received, the pending
+      // promise must resolve (fire-and-forget), not reject.
+      const stream = new PassThrough()
+      const reader = new AckReader(stream)
+      reader.start()
+
+      // End stream AND register pending ack on the same tick
+      stream.end()
+      const p1 = reader.waitForAck(1)
+
+      // Must resolve (fire-and-forget), not reject
+      await expect(p1).resolves.toBeUndefined()
+      expect(reader.hasAckSupport).toBe(false)
+    })
+
+    it('EOF with pending rejects when acks were previously received (real failure)', async () => {
+      const stream = new PassThrough()
+      const reader = new AckReader(stream)
+      reader.start()
+
+      // First write succeeds — runtime supports acks
+      const p1 = reader.waitForAck(1)
+      stream.write(encodeAck(1, true))
+      await expect(p1).resolves.toBeUndefined()
+
+      // Second write is pending when EOF arrives — real failure
+      const p2 = reader.waitForAck(2)
+      stream.end()
+
+      await expect(p2).rejects.toThrow('stdin closed (EOF)')
+      expect(reader.hasAckSupport).toBe(true)
+    })
+
+    it('hasAckSupport is true before EOF', () => {
+      const stream = new PassThrough()
+      const reader = new AckReader(stream)
+      reader.start()
+
+      expect(reader.hasAckSupport).toBe(true)
+    })
   })
 })
