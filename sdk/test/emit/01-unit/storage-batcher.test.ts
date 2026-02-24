@@ -309,6 +309,32 @@ describe('createStorageBatcher', () => {
       await expect(p1.result).rejects.toThrow('boom')
       await expect(p2.result).rejects.toThrow('boom')
     })
+
+    it('pending settles to 0 after failure with queued items', async () => {
+      const { storage } = createMockStorage({
+        delayMs: 5,
+        failOnCall: 1,
+        failureError: new Error('fail')
+      })
+      const batcher = createStorageBatcher(storage, { concurrency: 1 })
+
+      const p1 = batcher.add({
+        filename: 'a.png',
+        content_type: 'image/png',
+        data: Buffer.from('A')
+      })
+      const p2 = batcher.add({
+        filename: 'b.png',
+        content_type: 'image/png',
+        data: Buffer.from('B')
+      })
+
+      // Wait for both rejections
+      await expect(p1.result).rejects.toThrow('fail')
+      await expect(p2.result).rejects.toThrow('fail')
+
+      expect(batcher.pending).toBe(0)
+    })
   })
 
   // ── Edge cases ──────────────────────────────────────────────────

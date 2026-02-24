@@ -85,8 +85,10 @@ export function createStorageBatcher(
             failed = err
           }
           entry.reject(err)
-          // Reject remaining queued entries
-          for (const queued of queue.splice(0)) {
+          // Reject remaining queued entries and count them as completed
+          const remaining = queue.splice(0)
+          completed += remaining.length
+          for (const queued of remaining) {
             queued.reject(err)
           }
         })

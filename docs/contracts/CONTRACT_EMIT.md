@@ -240,7 +240,7 @@ memory management in container-constrained workloads.
 |--------|--------|-----------------|
 | Node heap | `v8.getHeapStatistics()` + `process.memoryUsage()` | Yes |
 | Browser | `page.metrics()` (CDP) | No (null when no browser or opted out) |
-| Cgroup | `/sys/fs/cgroup/memory.{current,max}` (v2) or `memory.{usage_in_bytes,limit_in_bytes}` (v1) | No (null outside cgroup) |
+| Cgroup | `/sys/fs/cgroup/memory.{current,max}` (v2) or `memory.{usage_in_bytes,limit_in_bytes}` (v1) | No (null outside cgroup or when limit is unlimited) |
 
 ### Pressure Levels
 
