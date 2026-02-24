@@ -257,11 +257,14 @@ function readCgroupUsage() {
   };
   const v1Usage = readCgroupFile("/sys/fs/cgroup/memory/memory.usage_in_bytes");
   const v1Limit = readCgroupFile("/sys/fs/cgroup/memory/memory.limit_in_bytes");
-  if (v1Usage !== null && v1Limit !== null) return {
-    used: v1Usage,
-    limit: v1Limit,
-    ratio: v1Limit > 0 ? v1Usage / v1Limit : 0
-  };
+  if (v1Usage !== null && v1Limit !== null) {
+    if (v1Limit >= CGROUP_UNLIMITED_THRESHOLD) return null;
+    return {
+      used: v1Usage,
+      limit: v1Limit,
+      ratio: v1Limit > 0 ? v1Usage / v1Limit : 0
+    };
+  }
   return null;
 }
 function readCgroupFile(path) {
@@ -325,7 +328,7 @@ function createContext(options) {
   };
   return Object.freeze(ctx);
 }
-var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError, PRESSURE_ORDER, DEFAULT_THRESHOLDS;
+var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError, PRESSURE_ORDER, DEFAULT_THRESHOLDS, CGROUP_UNLIMITED_THRESHOLD;
 var init_dist = __esm({
   "../sdk/dist/index.mjs"() {
     "use strict";
@@ -360,6 +363,7 @@ var init_dist = __esm({
       high: 0.7,
       critical: 0.9
     };
+    CGROUP_UNLIMITED_THRESHOLD = 2 ** 62;
   }
 });
 

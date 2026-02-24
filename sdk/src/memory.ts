@@ -137,10 +137,14 @@ async function readBrowserUsage(page: Page | null): Promise<MemoryUsage | null> 
   }
 }
 
+// Cgroup v1 uses a large sentinel (typically 2^63 - page_size) to indicate
+// "no limit". Any value above 2^62 bytes (4 EiB) is treated as unlimited.
+const CGROUP_UNLIMITED_THRESHOLD = 2 ** 62
+
 /**
  * Read cgroup memory usage.
  * Tries cgroup v2 paths first, falls back to v1.
- * Returns null if not in a cgroup or if the limit is unlimited ("max").
+ * Returns null if not in a cgroup or if the limit is unlimited.
  */
 function readCgroupUsage(): MemoryUsage | null {
   // cgroup v2
@@ -154,6 +158,7 @@ function readCgroupUsage(): MemoryUsage | null {
   const v1Usage = readCgroupFile('/sys/fs/cgroup/memory/memory.usage_in_bytes')
   const v1Limit = readCgroupFile('/sys/fs/cgroup/memory/memory.limit_in_bytes')
   if (v1Usage !== null && v1Limit !== null) {
+    if (v1Limit >= CGROUP_UNLIMITED_THRESHOLD) return null
     return { used: v1Usage, limit: v1Limit, ratio: v1Limit > 0 ? v1Usage / v1Limit : 0 }
   }
 
