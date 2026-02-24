@@ -525,18 +525,9 @@ func (p *BufferedPolicy) dropOldestDroppable() bool {
 	return false
 }
 
-// estimateEventSize returns an estimated size in bytes for an event.
-// This is a rough estimate for buffer management.
+// estimateEventSize delegates to the package-level estimateEventSize.
 func (p *BufferedPolicy) estimateEventSize(envelope *types.EventEnvelope) int64 {
-	// Base size for envelope structure
-	size := int64(200)
-
-	// Add payload estimate (rough)
-	if envelope.Payload != nil {
-		size += int64(len(envelope.Payload) * 50) // rough estimate per field
-	}
-
-	return size
+	return estimateEventSize(envelope)
 }
 
 // --- Logging helpers (per CONTRACT_POLICY.md observability requirements) ---

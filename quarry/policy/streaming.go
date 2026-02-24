@@ -353,13 +353,9 @@ func (p *StreamingPolicy) intervalLoop() {
 	}
 }
 
-// estimateEventSize returns an estimated size in bytes for an event.
+// estimateEventSize delegates to the package-level estimateEventSize.
 func (p *StreamingPolicy) estimateEventSize(envelope *types.EventEnvelope) int64 {
-	size := int64(200)
-	if envelope.Payload != nil {
-		size += int64(len(envelope.Payload) * 50)
-	}
-	return size
+	return estimateEventSize(envelope)
 }
 
 // recalculateBufferBytes recalculates bufferBytes from all buffers. Caller must hold mu.
