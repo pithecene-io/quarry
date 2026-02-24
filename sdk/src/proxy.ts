@@ -74,6 +74,7 @@ function buildValidationResult(
  * Validate a proxy endpoint per CONTRACT_PROXY hard validation rules.
  *
  * Hard validation (must reject):
+ * - host must be a non-empty string
  * - port is within 1-65535
  * - protocol is one of http|https|socks5
  * - username and password must be provided together if either is set
@@ -82,6 +83,11 @@ export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): Pro
   const errors: ProxyValidationError[] = []
   const warnings: ProxyValidationWarning[] = []
   const fieldPrefix = prefix ? `${prefix}.` : ''
+
+  // Host validation (required per CONTRACT_PROXY.md)
+  if (!endpoint.host || typeof endpoint.host !== 'string') {
+    errors.push(validationError(`${fieldPrefix}host`, 'Host is required and must be a non-empty string'))
+  }
 
   // Protocol validation
   if (!VALID_PROTOCOLS.includes(endpoint.protocol)) {

@@ -2,6 +2,7 @@
  * Unit tests for proxy validation and redaction helpers.
  *
  * Validates the hard validation rules from CONTRACT_PROXY.md:
+ * - Host must be a non-empty string
  * - Protocol must be http|https|socks5
  * - Port must be integer between 1 and 65535
  * - Username and password must be provided together
@@ -75,12 +76,12 @@ describe('validateProxyEndpoint', () => {
     expect(result.errors[0].message).toContain('ftp')
   })
 
-  it('empty host still validates (host is not hard-validated)', () => {
-    // The current implementation does not hard-validate host;
-    // only protocol, port, and auth pairing are checked.
+  it('empty host returns invalid', () => {
     const result = validateProxyEndpoint(validEndpoint({ host: '' }))
 
-    expect(result.valid).toBe(true)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].field).toBe('host')
   })
 
   it('port 0 returns invalid', () => {
