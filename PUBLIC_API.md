@@ -1,6 +1,6 @@
 # Quarry Public API
 
-User-facing guide for Quarry v0.7.3.
+User-facing guide for Quarry.
 Normative behavior is defined by contracts under `docs/contracts/`.
 
 ---
@@ -26,24 +26,24 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.7.3
+mise install github:pithecene-io/quarry@0.10.0
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.7.3"
+"github:pithecene-io/quarry" = "0.10.0"
 ```
 
 ### Via Docker
 
 ```bash
 # Full image — includes Chrome for Testing + fonts (amd64 only, recommended)
-docker pull ghcr.io/pithecene-io/quarry:0.7.3
+docker pull ghcr.io/pithecene-io/quarry:0.10.0
 
 # Slim image — no browser, multi-arch (BYO Chromium via --browser-ws-endpoint)
-docker pull ghcr.io/pithecene-io/quarry:0.7.3-slim
+docker pull ghcr.io/pithecene-io/quarry:0.10.0-slim
 ```
 
 See [docs/guides/container.md](docs/guides/container.md) for `docker run` and Docker Compose examples.
@@ -334,7 +334,7 @@ Rules:
 - Maximum file size: 8 MiB
 - Shares ordering and fail-fast with `emit.*`
 - Cannot be called after a terminal event (`run_complete` / `run_error`)
-- Returns `StoragePutResult` with the resolved `key` (v1.0.0+)
+- Returns `StoragePutResult` with the resolved `key` (v0.11.0+)
 
 Files land at Hive-partitioned paths under the storage root:
 ```
@@ -641,14 +641,14 @@ task build
 
 Quarry ships container images via GHCR:
 
-- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.7.3` — includes Chrome for Testing + fonts
-- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.7.3-slim` — no browser (BYO via `--browser-ws-endpoint`)
+- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.10.0` — includes Chrome for Testing + fonts
+- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.10.0-slim` — no browser (BYO via `--browser-ws-endpoint`)
 
 For `docker run`, Docker Compose, and sidecar patterns, see [docs/guides/container.md](docs/guides/container.md).
 
 ---
 
-## Known Limitations (v0.7.3)
+## Known Limitations (v0.10.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -733,7 +733,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.7.3 (commit: ...)
+# 0.10.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -742,8 +742,8 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.7.3` |
-| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.7.3` |
-| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.7.3-slim` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.10.0` |
+| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.10.0` |
+| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.10.0-slim` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |
