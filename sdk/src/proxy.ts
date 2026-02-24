@@ -70,7 +70,9 @@ export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): Pro
 
   // Host validation (required per CONTRACT_PROXY.md)
   if (!endpoint.host || typeof endpoint.host !== 'string') {
-    errors.push(validationError(`${fieldPrefix}host`, 'Host is required and must be a non-empty string'))
+    errors.push(
+      validationError(`${fieldPrefix}host`, 'Host is required and must be a non-empty string')
+    )
   }
 
   // Protocol validation
