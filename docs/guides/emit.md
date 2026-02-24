@@ -124,7 +124,7 @@ const result = await ctx.storage.put({
 })
 // result is StoragePutResult { key: string }
 // key contains the full storage path where the file was written
-console.log(result.key) // e.g. "source=demo/category=default/run_id=run-001/files/report.json"
+console.log(result.key) // e.g. "datasets/quarry/partitions/source=demo/category=default/day=2026-02-23/run_id=run-001/files/report.json"
 ```
 
 Constraints:
