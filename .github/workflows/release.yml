@@ -244,7 +244,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
+          generate_release_notes: false
+          draft: true
+          body: |
+            <!-- Replace this with the release body per the GitHub release format standard in CLAUDE.md -->
+            **TODO: Add release notes before publishing**
           files: dist/*
 
   publish_ghpr:
