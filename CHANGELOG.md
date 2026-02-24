@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.12.0] - 2026-02-24
+
+### Added
+
+- **SDK**: `createStorageBatcher` utility for bounded-concurrency `storage.put()` pipelining — wraps serial puts with configurable concurrency (default 16), fail-fast semantics, and `flush()` drain (#196)
+- **SDK**: `ctx.memory` API — `snapshot()` returns heap, browser, and cgroup memory usage with composite pressure level; `isAbove(level)` provides boolean threshold check; cgroup v2/v1 auto-detection (#196)
+- **IPC**: `file_write_ack` frame for end-to-end storage error propagation — first bidirectional IPC frame; backend write failures reject the `storage.put()` promise as recoverable errors (#197)
+
+### Changed
+
+- **Lode**: Upgraded Lode dependency from v0.7.3 to v0.8.0 (#196)
+
+---
+
 ## [0.11.0] - 2026-02-23
 
 ### Added
@@ -468,7 +482,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.0
 [0.11.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.11.0
 [0.10.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.10.0
 [0.9.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.9.0
