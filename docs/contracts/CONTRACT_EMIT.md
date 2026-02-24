@@ -169,7 +169,7 @@ the event envelope, sequence numbering, and policy pipeline entirely.
   not counted in `seq`.
 - Files are transported as `file_write` IPC frames (see CONTRACT_IPC.md).
 
-### Return Value (v1.0.0+)
+### Return Value (v0.11.0+)
 
 `storage.put()` returns `Promise<StoragePutResult>`:
 

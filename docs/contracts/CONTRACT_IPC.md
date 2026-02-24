@@ -62,7 +62,7 @@ These payloads must:
 ### Run Request (Runtime → Executor)
 If present, the run request includes optional fields:
 - `proxy` (optional): `ProxyEndpoint`
-- `storage` (optional, v1.0.0+): `StoragePartition` — Hive partition metadata
+- `storage` (optional, v0.11.0+): `StoragePartition` — Hive partition metadata
   for SDK-side key computation. When present, `storage.put()` returns the
   resolved storage key without a bidirectional IPC round-trip.
 

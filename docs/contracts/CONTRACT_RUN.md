@@ -146,7 +146,7 @@ This metadata must be available to storage and logs.
 
 ---
 
-## Structured Exit Report (v1.0.0+)
+## Structured Exit Report (v0.11.0+)
 
 When `--report <path>` is specified, the runtime writes a structured JSON
 report on exit. `--report -` writes to stderr.
