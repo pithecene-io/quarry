@@ -10,7 +10,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { StoragePartitionMeta } from '../../../src/emit'
-import { buildStorageKey, createAPIs } from '../../../src/emit-impl'
+import { buildStorageKey, createAPIs, TerminalEventError } from '../../../src/emit-impl'
 import { createRunMeta, FakeSink } from '../_harness'
 
 const testPartition: StoragePartitionMeta = {
@@ -96,5 +96,29 @@ describe('storage.put() return value', () => {
     // Verify writeFile was called
     const fileCalls = sink.allCalls.filter((c) => c.kind === 'writeFile')
     expect(fileCalls).toHaveLength(1)
+  })
+})
+
+describe('storage.put() post-terminal', () => {
+  let sink: FakeSink
+  let run: ReturnType<typeof createRunMeta>
+
+  beforeEach(() => {
+    sink = new FakeSink()
+    run = createRunMeta()
+  })
+
+  it('throws TerminalEventError after run_complete', async () => {
+    const { emit, storage } = createAPIs(run, sink, testPartition)
+
+    await emit.runComplete()
+
+    await expect(
+      storage.put({
+        filename: 'late-file.json',
+        content_type: 'application/json',
+        data: Buffer.from('{}')
+      })
+    ).rejects.toThrow(TerminalEventError)
   })
 })

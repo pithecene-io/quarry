@@ -1,5 +1,5 @@
 import { decode as msgpackDecode } from '@msgpack/msgpack'
-import type { ArtifactId, EventEnvelope, EventId, RunId } from '@pithecene-io/quarry-sdk'
+import type { ArtifactId, EventEnvelope, EventId, JobId, RunId } from '@pithecene-io/quarry-sdk'
 import { describe, expect, it } from 'vitest'
 import {
   type ArtifactChunkFrame,
@@ -122,7 +122,7 @@ describe('encodeEventFrame', () => {
 
   it('preserves all envelope fields', () => {
     const envelope = makeEnvelope({
-      job_id: 'job-789' as any,
+      job_id: 'job-789' as JobId,
       parent_run_id: 'parent-run' as RunId,
       attempt: 3
     })

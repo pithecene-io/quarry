@@ -6,6 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, SinkFailedError, TerminalEventError } from '../../../src/emit-impl'
+import type { CheckpointId } from '../../../src/types/events'
 import { createRunMeta, FakeSink } from '../_harness'
 
 describe('terminal event exclusivity', () => {
@@ -167,7 +168,9 @@ describe('terminal event exclusivity', () => {
       await expect(
         emit.artifact({ name: 'c', content_type: 'text/plain', data: Buffer.from('') })
       ).rejects.toThrow(SinkFailedError)
-      await expect(emit.checkpoint({ checkpoint_id: 'd' as any })).rejects.toThrow(SinkFailedError)
+      await expect(emit.checkpoint({ checkpoint_id: 'd' as CheckpointId })).rejects.toThrow(
+        SinkFailedError
+      )
       await expect(emit.enqueue({ target: 'e', params: {} })).rejects.toThrow(SinkFailedError)
       await expect(emit.rotateProxy()).rejects.toThrow(SinkFailedError)
       await expect(emit.debug('f')).rejects.toThrow(SinkFailedError)
