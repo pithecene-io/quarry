@@ -26,7 +26,7 @@ export class ScriptLoadError extends Error {
 /**
  * Validated script module with guaranteed default export.
  */
-export interface LoadedScript<Job = unknown> {
+export type LoadedScript<Job = unknown> = {
   /** The main script function */
   readonly script: QuarryScript<Job>
   /** Optional lifecycle hooks */

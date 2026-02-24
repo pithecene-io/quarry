@@ -3,7 +3,7 @@ import type { ArtifactId, CheckpointId, EventEnvelope, LogLevel } from './types/
 /**
  * Options for emitting an item.
  */
-export interface EmitItemOptions {
+export type EmitItemOptions = {
   /** Caller-defined type label for the item */
   item_type: string
   /** The record payload */
@@ -14,7 +14,7 @@ export interface EmitItemOptions {
  * Options for emitting an artifact.
  * Binary data is passed separately from metadata.
  */
-export interface EmitArtifactOptions {
+export type EmitArtifactOptions = {
   /** Human-readable name for the artifact */
   name: string
   /** MIME content type */
@@ -26,7 +26,7 @@ export interface EmitArtifactOptions {
 /**
  * Options for emitting a checkpoint.
  */
-export interface EmitCheckpointOptions {
+export type EmitCheckpointOptions = {
   /** Unique identifier for the checkpoint */
   checkpoint_id: CheckpointId
   /** Optional human-readable note */
@@ -36,7 +36,7 @@ export interface EmitCheckpointOptions {
 /**
  * Options for emitting an enqueue advisory.
  */
-export interface EmitEnqueueOptions {
+export type EmitEnqueueOptions = {
   /** Target identifier for the work */
   target: string
   /** Parameters for the work */
@@ -50,7 +50,7 @@ export interface EmitEnqueueOptions {
 /**
  * Options for emitting a rotate_proxy advisory.
  */
-export interface EmitRotateProxyOptions {
+export type EmitRotateProxyOptions = {
   /** Optional reason for the rotation request */
   reason?: string
 }
@@ -58,7 +58,7 @@ export interface EmitRotateProxyOptions {
 /**
  * Options for emitting a log message.
  */
-export interface EmitLogOptions {
+export type EmitLogOptions = {
   /** Log level */
   level: LogLevel
   /** Log message */
@@ -70,7 +70,7 @@ export interface EmitLogOptions {
 /**
  * Options for emitting a run error.
  */
-export interface EmitRunErrorOptions {
+export type EmitRunErrorOptions = {
   /** Error type/category */
   error_type: string
   /** Error message */
@@ -82,7 +82,7 @@ export interface EmitRunErrorOptions {
 /**
  * Options for emitting run completion.
  */
-export interface EmitRunCompleteOptions {
+export type EmitRunCompleteOptions = {
   /** Optional summary object */
   summary?: Record<string, unknown>
 }
@@ -94,7 +94,7 @@ export interface EmitRunCompleteOptions {
  * All methods are async because they may block on backpressure
  * (per CONTRACT_IPC.md).
  */
-export interface EmitAPI {
+export type EmitAPI = {
   /**
    * Emit a structured item record.
    * This is the primary output mechanism for extracted data.
@@ -162,7 +162,7 @@ export interface EmitAPI {
 /**
  * Options for writing a sidecar file via ctx.storage.put().
  */
-export interface StoragePutOptions {
+export type StoragePutOptions = {
   /** Target filename (no path separators, no "..") */
   filename: string
   /** MIME content type */
@@ -175,7 +175,7 @@ export interface StoragePutOptions {
  * Result of a storage put operation.
  * Contains the resolved Hive-partitioned storage key.
  */
-export interface StoragePutResult {
+export type StoragePutResult = {
   /** The resolved Hive-partitioned storage key (e.g. "datasets/.../files/filename") */
   readonly key: string
 }
@@ -185,7 +185,7 @@ export interface StoragePutResult {
  * Files land at Hive-partitioned paths under files/, bypassing
  * Dataset segment/manifest machinery entirely.
  */
-export interface StorageAPI {
+export type StorageAPI = {
   /**
    * Write a file to Hive-partitioned storage.
    * Shares the emit serialization chain for ordering and fail-fast.
@@ -201,7 +201,7 @@ export interface StorageAPI {
  *
  * @internal
  */
-export interface StoragePartitionMeta {
+export type StoragePartitionMeta = {
   readonly dataset: string
   readonly source: string
   readonly category: string
@@ -216,7 +216,7 @@ export interface StoragePartitionMeta {
  *
  * @internal
  */
-export interface EmitSink {
+export type EmitSink = {
   /**
    * Write a complete event envelope.
    * May block on backpressure.
