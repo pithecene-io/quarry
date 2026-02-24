@@ -211,6 +211,7 @@ The `QuarryContext` provides:
 | `browserContext` | `BrowserContext` | Puppeteer browser context |
 | `emit` | `EmitAPI` | Output emission interface |
 | `storage` | `StorageAPI` | Sidecar file upload interface |
+| `memory` | `MemoryAPI` | Memory pressure monitoring |
 
 ### Terminal Behavior
 
@@ -340,6 +341,67 @@ Files land at Hive-partitioned paths under the storage root:
 ```
 <storage-path>/datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/files/<filename>
 ```
+
+### Batching File Uploads
+
+For workloads that write many files, `createStorageBatcher` dispatches
+multiple `storage.put()` calls with bounded concurrency — eliminating
+user-code latency between puts without creating unbounded promise counts.
+
+```typescript
+import { createStorageBatcher } from "@pithecene-io/quarry-sdk";
+
+export default async function run(ctx: QuarryContext): Promise<void> {
+  const batch = createStorageBatcher(ctx.storage, { concurrency: 16 });
+
+  for (const img of images) {
+    batch.add({
+      filename: img.name,
+      content_type: "image/png",
+      data: img.buffer,
+    });
+  }
+  await batch.flush();  // wait for all writes before terminal event
+}
+```
+
+- `concurrency` defaults to 16 (must be a positive integer)
+- `flush()` must be called before terminal events — buffered writes are lost otherwise
+- Fail-fast: first error rejects all queued writes and poisons the batcher
+- Reusable after a successful `flush()`
+
+### Memory Pressure API
+
+`ctx.memory` provides pull-based memory monitoring for container-constrained
+workloads. Reports node heap, browser heap, and cgroup usage with pressure
+classification.
+
+```typescript
+export default async function run(ctx: QuarryContext): Promise<void> {
+  // Check memory pressure before heavy operations
+  if (await ctx.memory.isAbove("high")) {
+    await ctx.emit.warn("Memory pressure is high, reducing batch size");
+  }
+
+  // Full snapshot with all sources
+  const snap = await ctx.memory.snapshot();
+  console.log(snap.node.ratio);     // 0.0–1.0
+  console.log(snap.cgroup?.ratio);   // null if not in container
+  console.log(snap.pressure);        // 'low' | 'moderate' | 'high' | 'critical'
+
+  // Opt out of browser metrics (avoids CDP call)
+  const nodeOnly = await ctx.memory.snapshot({ browser: false });
+}
+```
+
+Pressure levels (default thresholds):
+
+| Ratio | Level |
+|-------|-------|
+| < 0.5 | `low` |
+| 0.5–0.7 | `moderate` |
+| 0.7–0.9 | `high` |
+| ≥ 0.9 | `critical` |
 
 ---
 

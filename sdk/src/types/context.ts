@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
 import type { EmitAPI, StorageAPI } from '../emit'
+import type { MemoryAPI } from '../memory'
 import type { JobId, RunId } from './events'
 
 /**
@@ -66,6 +67,12 @@ export type QuarryContext<Job = unknown> = {
    * Dataset segment/manifest machinery.
    */
   readonly storage: StorageAPI
+
+  /**
+   * Memory pressure API for proactive memory management.
+   * Provides node, browser, and cgroup usage snapshots with pressure classification.
+   */
+  readonly memory: MemoryAPI
 }
 
 /**

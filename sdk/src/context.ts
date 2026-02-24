@@ -1,6 +1,8 @@
 import type { Browser, BrowserContext, Page } from 'puppeteer'
 import type { EmitSink, StoragePartitionMeta } from './emit'
 import { createAPIs } from './emit-impl'
+import type { MemoryThresholds } from './memory'
+import { createMemoryAPI } from './memory'
 import type { QuarryContext, RunMeta } from './types/context'
 
 /**
@@ -18,6 +20,8 @@ export type CreateContextOptions<Job = unknown> = {
   sink: EmitSink
   /** Storage partition metadata for SDK-side key computation. @internal */
   storagePartition?: StoragePartitionMeta
+  /** Custom memory pressure thresholds. @internal */
+  memoryThresholds?: MemoryThresholds
 }
 
 /**
@@ -30,6 +34,10 @@ export function createContext<Job = unknown>(
   options: CreateContextOptions<Job>
 ): QuarryContext<Job> {
   const { emit, storage } = createAPIs(options.run, options.sink, options.storagePartition)
+  const memory = createMemoryAPI({
+    page: options.page,
+    thresholds: options.memoryThresholds
+  })
 
   const ctx: QuarryContext<Job> = {
     job: options.job,
@@ -38,7 +46,8 @@ export function createContext<Job = unknown>(
     browser: options.browser,
     browserContext: options.browserContext,
     emit,
-    storage
+    storage,
+    memory
   }
 
   return Object.freeze(ctx)
