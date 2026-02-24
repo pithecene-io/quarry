@@ -1,15 +1,19 @@
-import { decode as msgpackDecode } from '@msgpack/msgpack'
+import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack'
 import type { ArtifactId, EventEnvelope, EventId, JobId, RunId } from '@pithecene-io/quarry-sdk'
 import { describe, expect, it } from 'vitest'
 import {
   type ArtifactChunkFrame,
   ChunkValidationError,
   calculateChunks,
+  decodeFileWriteAck,
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
   encodeEventFrame,
+  encodeFileWriteFrame,
   encodeFrame,
   encodeRunResultFrame,
+  type FileWriteAckFrame,
+  type FileWriteFrame,
   FrameSizeError,
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
@@ -540,5 +544,84 @@ describe('encodeRunResultFrame', () => {
     // Verify no password field exists
     const proxyUsedData = decoded.proxy_used as Record<string, unknown>
     expect(proxyUsedData.password).toBeUndefined()
+  })
+})
+
+describe('encodeFileWriteFrame', () => {
+  it('encodes write_id into frame', () => {
+    const data = new Uint8Array([1, 2, 3])
+    const frame = encodeFileWriteFrame('test.png', 'image/png', data, 42)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as FileWriteFrame
+
+    expect(decoded.type).toBe('file_write')
+    expect(decoded.write_id).toBe(42)
+    expect(decoded.filename).toBe('test.png')
+    expect(decoded.content_type).toBe('image/png')
+    expect(new Uint8Array(decoded.data)).toEqual(data)
+  })
+
+  it('defaults write_id to 0 when omitted', () => {
+    const data = new Uint8Array([1, 2, 3])
+    const frame = encodeFileWriteFrame('test.csv', 'text/csv', data)
+
+    const payloadLength = frame.readUInt32BE(0)
+    const payload = frame.subarray(LENGTH_PREFIX_SIZE, LENGTH_PREFIX_SIZE + payloadLength)
+    const decoded = msgpackDecode(payload) as FileWriteFrame
+
+    expect(decoded.write_id).toBe(0)
+  })
+
+  it('throws ChunkValidationError when data exceeds MAX_CHUNK_SIZE', () => {
+    const data = new Uint8Array(MAX_CHUNK_SIZE + 1)
+
+    expect(() => encodeFileWriteFrame('big.bin', 'application/octet-stream', data, 1)).toThrow(
+      ChunkValidationError
+    )
+  })
+})
+
+describe('decodeFileWriteAck', () => {
+  it('decodes success ack', () => {
+    const payload = msgpackEncode({
+      type: 'file_write_ack',
+      write_id: 7,
+      ok: true
+    })
+
+    const ack = decodeFileWriteAck(payload)
+
+    expect(ack.type).toBe('file_write_ack')
+    expect(ack.write_id).toBe(7)
+    expect(ack.ok).toBe(true)
+    expect(ack.error).toBeUndefined()
+  })
+
+  it('decodes error ack', () => {
+    const payload = msgpackEncode({
+      type: 'file_write_ack',
+      write_id: 3,
+      ok: false,
+      error: 'S3 PutObject failed'
+    })
+
+    const ack = decodeFileWriteAck(payload)
+
+    expect(ack.type).toBe('file_write_ack')
+    expect(ack.write_id).toBe(3)
+    expect(ack.ok).toBe(false)
+    expect(ack.error).toBe('S3 PutObject failed')
+  })
+
+  it('throws on wrong frame type', () => {
+    const payload = msgpackEncode({
+      type: 'artifact_chunk',
+      write_id: 1,
+      ok: true
+    })
+
+    expect(() => decodeFileWriteAck(payload)).toThrow('Expected file_write_ack frame')
   })
 })

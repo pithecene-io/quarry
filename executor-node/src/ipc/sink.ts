@@ -17,6 +17,7 @@
  */
 import type { Writable } from 'node:stream'
 import type { ArtifactId, EmitSink, EventEnvelope } from '@pithecene-io/quarry-sdk'
+import type { AckReader } from './ack-reader.js'
 import {
   encodeArtifactChunks,
   encodeEventFrame,
@@ -153,6 +154,8 @@ export function drainStdout(): Promise<void> {
  */
 export class StdioSink implements EmitSink {
   private readonly writeFn: (data: Buffer) => boolean
+  private readonly ackReader: AckReader | undefined
+  private writeIdCounter = 0
 
   /**
    * @param output - The writable stream (used for state checks and event listening)
@@ -160,12 +163,17 @@ export class StdioSink implements EmitSink {
    *   `output.write()`. When provided, allows the caller to bypass a patched
    *   `output.write` (e.g. the stdout guard) while still using `output` for
    *   backpressure events and stream state.
+   * @param ackReader - Optional AckReader for file_write_ack correlation.
+   *   When provided, writeFile blocks until the runtime sends an ack.
+   *   When omitted, writeFile is fire-and-forget (backward compat).
    */
   constructor(
     private readonly output: Writable,
-    writeFn?: (data: Buffer) => boolean
+    writeFn?: (data: Buffer) => boolean,
+    ackReader?: AckReader
   ) {
     this.writeFn = writeFn ?? ((data) => output.write(data))
+    this.ackReader = ackReader
   }
 
   /**
@@ -209,12 +217,24 @@ export class StdioSink implements EmitSink {
    * Bypasses seq numbering and the policy pipeline.
    * Blocks on backpressure per CONTRACT_IPC.md.
    *
+   * When an AckReader is configured, this method blocks until the runtime
+   * sends a file_write_ack. On error ack, the returned promise rejects.
+   * Without an AckReader, this is fire-and-forget (backward compat).
+   *
    * @param filename - Target filename (no path separators, no "..")
    * @param contentType - MIME content type
    * @param data - Raw binary data (max 8 MiB)
    */
   async writeFile(filename: string, contentType: string, data: Buffer | Uint8Array): Promise<void> {
-    const frame = encodeFileWriteFrame(filename, contentType, data)
-    await writeWithBackpressure(this.output, frame, this.writeFn)
+    if (this.ackReader) {
+      const writeId = ++this.writeIdCounter
+      const ackPromise = this.ackReader.waitForAck(writeId)
+      const frame = encodeFileWriteFrame(filename, contentType, data, writeId)
+      await writeWithBackpressure(this.output, frame, this.writeFn)
+      await ackPromise
+    } else {
+      const frame = encodeFileWriteFrame(filename, contentType, data)
+      await writeWithBackpressure(this.output, frame, this.writeFn)
+    }
   }
 }

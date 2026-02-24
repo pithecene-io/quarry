@@ -155,11 +155,8 @@ func (m *ExecutorManager) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to write input: %w", err)
 	}
 
-	// Close stdin to signal input complete
-	if err := stdin.Close(); err != nil {
-		_ = m.Kill()
-		return fmt.Errorf("failed to close stdin: %w", err)
-	}
+	// Stdin remains open for ack frames (file_write_ack).
+	// Caller closes via Stdin().Close() after ingestion completes.
 
 	return nil
 }
@@ -172,6 +169,12 @@ func (m *ExecutorManager) Stdout() io.Reader {
 // Stderr returns the stderr reader for diagnostic capture.
 func (m *ExecutorManager) Stderr() io.Reader {
 	return m.stderr
+}
+
+// Stdin returns the stdin writer for sending ack frames to the executor.
+// The caller must close it after ingestion completes to signal EOF.
+func (m *ExecutorManager) Stdin() io.WriteCloser {
+	return m.stdin
 }
 
 // Wait waits for the executor to exit and returns the result.

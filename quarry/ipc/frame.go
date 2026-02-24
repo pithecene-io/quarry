@@ -34,6 +34,10 @@ const RunResultType = "run_result"
 // File writes bypass seq numbering and the policy pipeline.
 const FileWriteType = "file_write"
 
+// FileWriteAckType is the type discriminant for file write acknowledgement frames.
+// Sent runtime→executor via stdin after processing a file_write frame.
+const FileWriteAckType = "file_write_ack"
+
 // FrameErrorKind classifies frame decoding errors.
 type FrameErrorKind int
 
@@ -162,6 +166,8 @@ func DecodeFrame(payload []byte) (any, error) {
 		return DecodeRunResult(payload)
 	case FileWriteType:
 		return DecodeFileWrite(payload)
+	case FileWriteAckType:
+		return DecodeFileWriteAck(payload)
 	default:
 		return DecodeEventEnvelope(payload)
 	}
@@ -217,4 +223,35 @@ func DecodeFileWrite(payload []byte) (*types.FileWriteFrame, error) {
 		}
 	}
 	return &frame, nil
+}
+
+// DecodeFileWriteAck decodes a payload as a FileWriteAckFrame.
+func DecodeFileWriteAck(payload []byte) (*types.FileWriteAckFrame, error) {
+	var frame types.FileWriteAckFrame
+	if err := msgpack.Unmarshal(payload, &frame); err != nil {
+		return nil, &FrameError{
+			Kind: FrameErrorDecode,
+			Msg:  "failed to decode file write ack",
+			Err:  err,
+		}
+	}
+	return &frame, nil
+}
+
+// EncodeFrame encodes a payload with a 4-byte big-endian length prefix.
+// This is the public encoder counterpart to FrameDecoder.ReadFrame.
+func EncodeFrame(payload []byte) []byte {
+	buf := make([]byte, LengthPrefixSize+len(payload))
+	binary.BigEndian.PutUint32(buf[:LengthPrefixSize], uint32(len(payload)))
+	copy(buf[LengthPrefixSize:], payload)
+	return buf
+}
+
+// EncodeFileWriteAck encodes a FileWriteAckFrame as a length-prefixed msgpack frame.
+func EncodeFileWriteAck(ack *types.FileWriteAckFrame) ([]byte, error) {
+	payload, err := msgpack.Marshal(ack)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode file write ack: %w", err)
+	}
+	return EncodeFrame(payload), nil
 }

@@ -336,6 +336,7 @@ Rules:
 - Shares ordering and fail-fast with `emit.*`
 - Cannot be called after a terminal event (`run_complete` / `run_error`)
 - Returns `StoragePutResult` with the resolved `key` (v0.11.0+)
+- Promise rejects on backend write failure (v0.12.0+) — errors are recoverable
 
 Files land at Hive-partitioned paths under the storage root:
 ```

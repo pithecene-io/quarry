@@ -17,6 +17,7 @@ import (
 type Executor interface {
 	Start(ctx context.Context) error
 	Stdout() io.Reader
+	Stdin() io.WriteCloser
 	Wait() (*ExecutorResult, error)
 	Kill() error
 }
@@ -192,7 +193,8 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	// Create artifact manager
 	artifacts := NewArtifactManager()
 
-	// Create ingestion engine
+	// Create ingestion engine with ack writer for file_write_ack frames.
+	// executor.Stdin() is kept open after metadata delivery for this purpose.
 	ingestion := NewIngestionEngine(
 		executor.Stdout(),
 		r.config.Policy,
@@ -202,6 +204,7 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		r.config.RunMeta,
 		r.config.Collector,
 		r.config.EnqueueObserver,
+		executor.Stdin(),
 	)
 
 	// Run ingestion in goroutine
@@ -215,6 +218,14 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 	// Go's exec.Cmd.Wait() closes StdoutPipe, which would cause ingestion reads to
 	// fail with "file already closed" even if data is still in the pipe buffer.
 	ingErr := <-ingestionDone
+
+	// Close stdin after ingestion completes — signals EOF to executor's AckReader.
+	// Errors are expected if the executor already exited.
+	if err := executor.Stdin().Close(); err != nil {
+		r.logger.Debug("stdin close after ingestion (expected if executor exited)", map[string]any{
+			"error": err.Error(),
+		})
+	}
 
 	// On ANY ingestion error (policy, stream, or canceled), kill executor immediately
 	// This prevents the executor from continuing to emit after we've decided to terminate

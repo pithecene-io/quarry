@@ -6,24 +6,23 @@
  * @module
  */
 
+export { AckReader } from './ack-reader.js'
 export {
-  // Types
   type ArtifactChunkFrame,
   type ArtifactChunkType,
   type ChunkMeta,
-  // Errors
   ChunkValidationError,
-  // Encoding
   calculateChunks,
+  decodeFileWriteAck,
   encodeArtifactChunkFrame,
   encodeArtifactChunks,
   encodeEventFrame,
   encodeFileWriteFrame,
   encodeFrame,
+  type FileWriteAckFrame,
   type FileWriteFrame,
   type Frame,
   FrameSizeError,
-  // Constants
   LENGTH_PREFIX_SIZE,
   MAX_CHUNK_SIZE,
   MAX_FRAME_SIZE,

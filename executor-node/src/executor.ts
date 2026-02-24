@@ -34,6 +34,7 @@ import {
   type TerminalSignal
 } from '@pithecene-io/quarry-sdk'
 import type { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer'
+import type { AckReader } from './ipc/ack-reader.js'
 import type { ProxyEndpointRedactedFrame, RunResultOutcome } from './ipc/frame.js'
 import { ObservingSink, type SinkState } from './ipc/observing-sink.js'
 import { StdioSink } from './ipc/sink.js'
@@ -231,6 +232,8 @@ export type ExecutorConfig<Job = unknown> = {
   readonly browserWSEndpoint?: string
   /** Optional storage partition metadata for SDK-side key computation. */
   readonly storagePartition?: StoragePartitionMeta
+  /** Optional AckReader for file_write_ack correlation on stdin. */
+  readonly ackReader?: AckReader
 }
 
 /**
@@ -441,7 +444,7 @@ function redactProxy(proxy: ProxyEndpoint): ProxyEndpointRedactedFrame {
  */
 export async function execute<Job = unknown>(config: ExecutorConfig<Job>): Promise<ExecutorResult> {
   const output = config.output ?? process.stdout
-  const stdioSink = new StdioSink(output, config.outputWrite)
+  const stdioSink = new StdioSink(output, config.outputWrite, config.ackReader)
   const sink = new ObservingSink(stdioSink)
 
   let browser: Browser | null = null
