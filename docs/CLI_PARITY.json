@@ -261,6 +261,12 @@
           "required": false,
           "description": "Path to node_modules directory for bare-specifier ESM resolution fallback (monorepo/container support)",
           "notes": "Must be an existing directory. The executor registers an ESM resolve hook that falls back to this path for bare specifiers that cannot be resolved from the script's location."
+        },
+        "dry-run": {
+          "type": "bool",
+          "required": false,
+          "description": "Validate script loadability without executing a run (no browser, no storage)",
+          "notes": "When set, --source, --storage-backend, and --storage-path are not required. Only --script and --run-id are needed. Spawns executor in --validate mode to check module loading and export shape."
         }
       }
     },

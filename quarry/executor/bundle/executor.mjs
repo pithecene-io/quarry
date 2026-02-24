@@ -2341,7 +2341,7 @@ async function loadScript(scriptPath) {
   if (!isFunction(mod.default)) {
     throw new ScriptLoadError(scriptPath, "default export is not a function");
   }
-  const HOOK_NAMES = [
+  const HOOK_NAMES2 = [
     "prepare",
     "beforeRun",
     "afterRun",
@@ -2349,7 +2349,7 @@ async function loadScript(scriptPath) {
     "beforeTerminal",
     "cleanup"
   ];
-  for (const name of HOOK_NAMES) {
+  for (const name of HOOK_NAMES2) {
     if (!isOptionalFunction(mod[name])) {
       throw new ScriptLoadError(scriptPath, `${name} hook is not a function`);
     }
@@ -2918,6 +2918,9 @@ function installStdoutGuard() {
   };
 }
 
+// src/bin/executor.ts
+init_loader();
+
 // src/parse-storage-partition.ts
 function parseStoragePartition(input, onWarning) {
   if (!("storage" in input) || input.storage === null || input.storage === void 0) {
@@ -2954,6 +2957,45 @@ function fatalError(message) {
   process.stderr.write(`Error: ${message}
 `);
   process.exit(3);
+}
+var HOOK_NAMES = [
+  "prepare",
+  "beforeRun",
+  "afterRun",
+  "onError",
+  "beforeTerminal",
+  "cleanup"
+];
+async function validateScript(scriptPath) {
+  const resolveFrom = process.env.QUARRY_RESOLVE_FROM;
+  if (resolveFrom) {
+    const { registerResolveFromHook: registerResolveFromHook2 } = await Promise.resolve().then(() => (init_resolve_from(), resolve_from_exports));
+    await registerResolveFromHook2(resolveFrom);
+  }
+  let loaded;
+  try {
+    loaded = await loadScript(scriptPath);
+  } catch (err) {
+    const message = err instanceof ScriptLoadError ? err.message : errorMessage(err);
+    const result2 = { valid: false, error: message };
+    process.stdout.write(JSON.stringify(result2) + "\n");
+    process.exit(1);
+  }
+  const hooks = [];
+  for (const name of HOOK_NAMES) {
+    if (loaded.hooks[name] !== void 0) {
+      hooks.push(name);
+    }
+  }
+  const result = {
+    valid: true,
+    exports: {
+      default: true,
+      hooks
+    }
+  };
+  process.stdout.write(JSON.stringify(result) + "\n");
+  process.exit(0);
 }
 function parseProxy(input) {
   if (!("proxy" in input) || input.proxy === null || input.proxy === void 0) {
@@ -3102,6 +3144,14 @@ async function main() {
       process.exit(3);
     }
     return browserServer(scriptPath2);
+  }
+  if (args[0] === "--validate") {
+    const scriptPath2 = args[1];
+    if (!scriptPath2) {
+      process.stderr.write("Usage: quarry-executor --validate <script-path>\n");
+      process.exit(3);
+    }
+    return validateScript(scriptPath2);
   }
   if (args[0] === "--launch-browser") {
     const scriptPath2 = args[1];

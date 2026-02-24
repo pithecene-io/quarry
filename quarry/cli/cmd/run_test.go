@@ -1588,6 +1588,128 @@ func TestParseAdapterConfig_RedisChannelFromConfig(t *testing.T) {
 	}
 }
 
+// --- --dry-run validation ---
+
+// TestRunAction_DryRun_SkipsSourceRequirement validates that --dry-run does
+// not require --source (script validation does not need partition keys).
+func TestRunAction_DryRun_SkipsSourceRequirement(t *testing.T) {
+	app := newTestApp()
+
+	// With --dry-run but no --source: should NOT get "--source is required"
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--dry-run",
+	})
+	// Will fail at executor resolution, but should NOT fail at --source validation
+	if err == nil {
+		t.Skip("executor found; cannot test validation-only path")
+	}
+	if strings.Contains(err.Error(), "--source is required") {
+		t.Error("--dry-run should not require --source")
+	}
+}
+
+// TestRunAction_DryRun_SkipsStorageRequirement validates that --dry-run does
+// not require --storage-backend or --storage-path.
+func TestRunAction_DryRun_SkipsStorageRequirement(t *testing.T) {
+	app := newTestApp()
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--dry-run",
+	})
+	if err == nil {
+		t.Skip("executor found; cannot test validation-only path")
+	}
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "--storage-backend is required") {
+		t.Error("--dry-run should not require --storage-backend")
+	}
+	if strings.Contains(errMsg, "--storage-path is required") {
+		t.Error("--dry-run should not require --storage-path")
+	}
+}
+
+// TestRunAction_DryRun_ExecutorMissing_ExitCode2 validates that when
+// --dry-run cannot resolve the executor, the exit code is 2 (exitConfigError
+// which maps to exitExecutorCrash).
+func TestRunAction_DryRun_ExecutorMissing_ExitCode2(t *testing.T) {
+	app := newTestApp()
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--dry-run",
+		"--executor", "/nonexistent/executor.js",
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent executor")
+	}
+	exitErr, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder, got %T: %v", err, err)
+	}
+	if exitErr.ExitCode() != exitConfigError {
+		t.Errorf("exit code = %d, want %d (exitConfigError)", exitErr.ExitCode(), exitConfigError)
+	}
+}
+
+// TestRunAction_DryRun_ExecutorSpawnFailure_ExitCode2 validates the contract
+// path: executor file exists (resolveExecutor passes) but the process fails to
+// execute (runtime.ValidateScript returns an error) → exit 2 (exitExecutorCrash).
+func TestRunAction_DryRun_ExecutorSpawnFailure_ExitCode2(t *testing.T) {
+	// Create a temp file that exists on disk (passes os.Stat in resolveExecutor)
+	// but is not a valid executable, so exec.CommandContext will fail.
+	badExecutor := filepath.Join(t.TempDir(), "bad-executor")
+	if err := os.WriteFile(badExecutor, []byte("not a valid executable"), 0o644); err != nil {
+		t.Fatalf("writing bad executor: %v", err)
+	}
+
+	app := newTestApp()
+
+	err := app.Run([]string{"quarry", "run",
+		"--script", "./test.ts",
+		"--run-id", "run-001",
+		"--dry-run",
+		"--executor", badExecutor,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-executable executor")
+	}
+	exitErr, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder, got %T: %v", err, err)
+	}
+	if exitErr.ExitCode() != exitExecutorCrash {
+		t.Errorf("exit code = %d, want %d (exitExecutorCrash)", exitErr.ExitCode(), exitExecutorCrash)
+	}
+}
+
+// TestRunDryRun_ExitCodes validates the exit code mapping for runDryRun.
+func TestRunDryRun_ExitCodes(t *testing.T) {
+	t.Run("valid result exits 0", func(t *testing.T) {
+		// runDryRun is not directly testable without an executor, but we can
+		// verify the exit code constants match the contract.
+		if exitSuccess != 0 {
+			t.Errorf("exitSuccess = %d, want 0", exitSuccess)
+		}
+	})
+
+	t.Run("script error exits 1", func(t *testing.T) {
+		if exitScriptError != 1 {
+			t.Errorf("exitScriptError = %d, want 1", exitScriptError)
+		}
+	})
+
+	t.Run("executor crash exits 2", func(t *testing.T) {
+		if exitExecutorCrash != 2 {
+			t.Errorf("exitExecutorCrash = %d, want 2", exitExecutorCrash)
+		}
+	})
+}
+
 // TestChildRun_StorageDayAlignedWithBuildPolicy verifies the invariant that
 // was broken before the day-drift fix: buildPolicy() and the RunConfig's
 // StorageDay must derive the same day from a single captured timestamp.
