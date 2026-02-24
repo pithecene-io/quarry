@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- **CLI**: `--dry-run` flag for script validation without execution (#191)
+- **CLI**: `--report` flag for structured exit reporting — writes JSON report to file on exit (#189)
+- **SDK**: `storage.put()` now returns `StoragePutResult` with `key` field containing the storage path (#190)
 
 ---
 
@@ -460,6 +464,7 @@ _No unreleased changes._
 
 ---
 
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.10.0...HEAD
 [0.10.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.10.0
 [0.9.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.9.0
 [0.8.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.8.0

@@ -45,6 +45,7 @@ Runs end in one of a few outcomes:
 - script error (emitted `run_error`)
 - executor crash
 - policy failure
+- version mismatch (SDK/CLI contract version mismatch)
 
 Each outcome is observable in runtime metadata.
 

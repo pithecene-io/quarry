@@ -111,7 +111,7 @@ See `docs/guides/proxy.md` for pool configuration format and selection behavior.
 | `--adapter-url` | string | | Endpoint URL (required when `--adapter` set) |
 | `--adapter-header` | string (repeatable) | | Custom header as `key=value` (webhook only) |
 | `--adapter-channel` | string | `quarry:run_completed` | Pub/sub channel name (redis only) |
-| `--adapter-timeout` | duration | `10s` (webhook) / `5s` (redis) | Per-request/publish timeout |
+| `--adapter-timeout` | duration | `10s` | Per-request/publish timeout |
 | `--adapter-retries` | int | `3` | Retry attempts |
 
 See `docs/guides/integration.md` for adapter usage patterns.
@@ -136,6 +136,8 @@ at runtime. `--max-runs` is mandatory as a safety rail.
 | `--no-color` | bool | `false` | Disable color in table output |
 | `--tui` | bool | `false` | Interactive TUI (inspect/stats only) |
 | `--quiet` | bool | `false` | Suppress run result output |
+| `--report` | string | | Path to write JSON report on exit (use `-` for stderr) |
+| `--dry-run` | bool | `false` | Validate script loadability without execution (no browser, no storage) |
 
 ### Module Resolution
 

@@ -127,9 +127,10 @@ Storage flags:
 - `--storage-s3-path-style` (force path-style addressing, required by R2/MinIO)
 
 Adapter flags (event-bus notification):
-- `--adapter <type>` (event-bus adapter, e.g. `webhook`)
+- `--adapter <type>` (event-bus adapter, e.g. `webhook`, `redis`)
 - `--adapter-url <url>` (adapter endpoint URL, required when `--adapter` is set)
-- `--adapter-header <key=value>` (custom HTTP header, repeatable)
+- `--adapter-header <key=value>` (custom HTTP header, repeatable, webhook only)
+- `--adapter-channel <name>` (Redis pub/sub channel name, default: `quarry:run_completed`)
 - `--adapter-timeout <duration>` (per-request timeout, default: `10s`)
 - `--adapter-retries <n>` (retry attempts with exponential backoff, default: `3`)
 
@@ -138,8 +139,14 @@ Fan-out flags (derived work execution):
 - `--max-runs <n>` (total child run cap; required when `--depth > 0`)
 - `--parallel <n>` (concurrent child runs, default: `1`)
 
-Advanced flags:
+Module resolution flags:
+- `--resolve-from <path>` (resolve bare-specifier ESM imports from an alternate `node_modules` directory; for monorepo/container setups)
+
+Browser flags:
 - `--browser-ws-endpoint <url>` (connect to an externally managed browser instead of launching one; see below)
+- `--no-browser-reuse` (disable transparent browser reuse across runs; each run launches its own Chromium)
+
+Advanced flags:
 - `--executor <path>` (auto-resolved by default; override for troubleshooting)
 
 #### Browser Reuse (`--browser-ws-endpoint`)
@@ -167,6 +174,19 @@ root run's browser connection.
 > **Note:** When using `--browser-ws-endpoint`, stealth and adblocker plugins
 > are skipped (vanilla Puppeteer `connect()` is used). Proxy credentials
 > configured via `--proxy-*` flags still apply via `page.authenticate()`.
+
+Output and reporting flags:
+- `--report <path>` (write structured JSON report to file on exit; use `-` for stderr)
+
+Dry-run validation:
+- `--dry-run` (validate script loadability without execution; no browser, no storage)
+
+When `--dry-run` is set, `--source`, `--storage-backend`, and `--storage-path`
+are not required. Only `--script` and `--run-id` are needed. The executor is
+spawned in validation mode, which loads the script module (including
+`--resolve-from` ESM hook if configured), checks the default export and
+optional hook signatures, and exits. Exit code 0 = valid, 1 = load/validation
+failure, 2 = executor missing.
 
 Exit codes (per CONTRACT_RUN.md):
 - `0`: success (run_complete)
@@ -285,6 +305,7 @@ Subcommands:
 - `stats tasks`
 - `stats proxies`
 - `stats executors`
+- `stats metrics`
 
 Examples:
 
@@ -292,6 +313,8 @@ Examples:
 quarry stats runs
 quarry stats proxies --format json
 quarry stats runs --tui
+quarry stats metrics --storage-backend fs --storage-path ./quarry-data
+quarry stats metrics --storage-backend fs --storage-path ./quarry-data --run-id run-001
 ```
 
 ### `list`

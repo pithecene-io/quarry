@@ -150,7 +150,7 @@ The `run` command exit code is determined by execution outcome:
 `policy_failure` and `version_mismatch` share exit code 3 because both
 are non-retryable configuration errors that cannot be resolved by re-running.
 
-### Structured Exit Report (v1.0.0+)
+### Structured Exit Report (v0.11.0+)
 
 `quarry run` supports an optional `--report` flag that writes a structured
 JSON report on exit, making every run machine-auditable.
@@ -167,7 +167,7 @@ JSON report on exit, making every run machine-auditable.
   the run exit code.
 - The `exit_code` field in the report matches the process exit code.
 
-### Dry-Run Validation (v1.1.0+)
+### Dry-Run Validation (v0.11.0+)
 
 `quarry run` supports a `--dry-run` flag that validates script loadability
 without executing a run. No browser is launched, no storage is written,
