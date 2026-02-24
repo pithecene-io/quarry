@@ -140,7 +140,7 @@ async function readBrowserUsage(page: Page | null): Promise<MemoryUsage | null> 
 /**
  * Read cgroup memory usage.
  * Tries cgroup v2 paths first, falls back to v1.
- * Returns null if not in a cgroup.
+ * Returns null if not in a cgroup or if the limit is unlimited ("max").
  */
 function readCgroupUsage(): MemoryUsage | null {
   // cgroup v2

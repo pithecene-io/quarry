@@ -38,6 +38,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // ../sdk/dist/index.mjs
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import v8 from "node:v8";
 function buildStorageKey(partition, filename) {
   return `datasets/${partition.dataset}/partitions/source=${partition.source}/category=${partition.category}/day=${partition.day}/run_id=${partition.run_id}/files/${filename}`;
 }
@@ -201,8 +203,116 @@ function createAPIs(run, sink, storagePartition) {
     } }
   };
 }
+function validateThresholds(t) {
+  for (const [name, value] of Object.entries(t)) if (value <= 0 || value > 1) throw new RangeError(`MemoryThreshold "${name}" must be in (0, 1], got ${value}`);
+  if (t.moderate >= t.high) throw new RangeError(`MemoryThresholds must be monotonic: moderate (${t.moderate}) must be < high (${t.high})`);
+  if (t.high >= t.critical) throw new RangeError(`MemoryThresholds must be monotonic: high (${t.high}) must be < critical (${t.critical})`);
+}
+function classifyPressure(ratio, thresholds) {
+  if (ratio >= thresholds.critical) return "critical";
+  if (ratio >= thresholds.high) return "high";
+  if (ratio >= thresholds.moderate) return "moderate";
+  return "low";
+}
+function highestPressure(levels) {
+  let max = 0;
+  for (const level of levels) {
+    const idx = PRESSURE_ORDER.indexOf(level);
+    if (idx > max) max = idx;
+  }
+  return PRESSURE_ORDER[max];
+}
+function readNodeUsage() {
+  const heapStats = v8.getHeapStatistics();
+  const used = process.memoryUsage().heapUsed;
+  const limit = heapStats.heap_size_limit;
+  return {
+    used,
+    limit,
+    ratio: limit > 0 ? used / limit : 0
+  };
+}
+async function readBrowserUsage(page) {
+  if (!page) return null;
+  try {
+    const m = await page.metrics();
+    const used = m.JSHeapUsedSize ?? 0;
+    const limit = m.JSHeapTotalSize ?? 0;
+    return {
+      used,
+      limit,
+      ratio: limit > 0 ? used / limit : 0
+    };
+  } catch {
+    return null;
+  }
+}
+function readCgroupUsage() {
+  const v2Current = readCgroupFile("/sys/fs/cgroup/memory.current");
+  const v2Max = readCgroupFile("/sys/fs/cgroup/memory.max");
+  if (v2Current !== null && v2Max !== null) return {
+    used: v2Current,
+    limit: v2Max,
+    ratio: v2Max > 0 ? v2Current / v2Max : 0
+  };
+  const v1Usage = readCgroupFile("/sys/fs/cgroup/memory/memory.usage_in_bytes");
+  const v1Limit = readCgroupFile("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+  if (v1Usage !== null && v1Limit !== null) return {
+    used: v1Usage,
+    limit: v1Limit,
+    ratio: v1Limit > 0 ? v1Usage / v1Limit : 0
+  };
+  return null;
+}
+function readCgroupFile(path) {
+  try {
+    const content = readFileSync(path, "utf8").trim();
+    if (content === "max") return null;
+    const value = Number.parseInt(content, 10);
+    return Number.isNaN(value) ? null : value;
+  } catch {
+    return null;
+  }
+}
+function createMemoryAPI(options) {
+  const thresholds = {
+    ...DEFAULT_THRESHOLDS,
+    ...options.thresholds
+  };
+  validateThresholds(thresholds);
+  const readNode = options._readNode ?? readNodeUsage;
+  const readBrowser = options._readBrowser ?? readBrowserUsage;
+  const readCgroup = options._readCgroup ?? readCgroupUsage;
+  async function snapshot(opts) {
+    const includeBrowser = opts?.browser !== false;
+    const node = readNode();
+    const browser = includeBrowser ? await readBrowser(options.page) : null;
+    const cgroup = readCgroup();
+    const levels = [classifyPressure(node.ratio, thresholds)];
+    if (browser) levels.push(classifyPressure(browser.ratio, thresholds));
+    if (cgroup) levels.push(classifyPressure(cgroup.ratio, thresholds));
+    return {
+      node,
+      browser,
+      cgroup,
+      pressure: highestPressure(levels),
+      ts: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  return {
+    snapshot,
+    async isAbove(level) {
+      const snap = await snapshot();
+      return PRESSURE_ORDER.indexOf(snap.pressure) >= PRESSURE_ORDER.indexOf(level);
+    }
+  };
+}
 function createContext(options) {
   const { emit, storage } = createAPIs(options.run, options.sink, options.storagePartition);
+  const memory = createMemoryAPI({
+    page: options.page,
+    thresholds: options.memoryThresholds
+  });
   const ctx = {
     job: options.job,
     run: Object.freeze(options.run),
@@ -210,11 +320,12 @@ function createContext(options) {
     browser: options.browser,
     browserContext: options.browserContext,
     emit,
-    storage
+    storage,
+    memory
   };
   return Object.freeze(ctx);
 }
-var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError;
+var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError, PRESSURE_ORDER, DEFAULT_THRESHOLDS;
 var init_dist = __esm({
   "../sdk/dist/index.mjs"() {
     "use strict";
@@ -237,6 +348,17 @@ var init_dist = __esm({
         super(`Invalid storage filename "${filename}": ${reason}`);
         this.name = "StorageFilenameError";
       }
+    };
+    PRESSURE_ORDER = [
+      "low",
+      "moderate",
+      "high",
+      "critical"
+    ];
+    DEFAULT_THRESHOLDS = {
+      moderate: 0.5,
+      high: 0.7,
+      critical: 0.9
     };
   }
 });
