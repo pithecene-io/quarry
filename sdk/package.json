@@ -1,6 +1,6 @@
 {
   "name": "@pithecene-io/quarry-sdk",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "module",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
