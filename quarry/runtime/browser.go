@@ -3,6 +3,7 @@ package runtime
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -60,7 +61,7 @@ func LaunchManagedBrowser(ctx context.Context, executorPath, scriptPath string) 
 			errCh <- fmt.Errorf("reading browser server stdout: %w", err)
 			return
 		}
-		errCh <- fmt.Errorf("browser server exited without printing WS endpoint")
+		errCh <- errors.New("browser server exited without printing WS endpoint")
 	}()
 
 	select {
@@ -79,7 +80,7 @@ func LaunchManagedBrowser(ctx context.Context, executorPath, scriptPath string) 
 		_ = stdin.Close()
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		return nil, fmt.Errorf("timed out waiting for browser server WS endpoint")
+		return nil, errors.New("timed out waiting for browser server WS endpoint")
 	case <-ctx.Done():
 		_ = stdin.Close()
 		_ = cmd.Process.Kill()

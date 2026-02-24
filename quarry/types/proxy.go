@@ -54,6 +54,11 @@ type ProxyEndpoint struct {
 
 // Validate validates a proxy endpoint per CONTRACT_PROXY.md hard validation rules.
 func (p *ProxyEndpoint) Validate() error {
+	// Host validation (required per CONTRACT_PROXY.md)
+	if p.Host == "" {
+		return errors.New("host is required and must be non-empty")
+	}
+
 	// Protocol validation
 	switch p.Protocol {
 	case ProxyProtocolHTTP, ProxyProtocolHTTPS, ProxyProtocolSOCKS5:

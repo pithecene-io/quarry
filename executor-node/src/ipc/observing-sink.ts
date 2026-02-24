@@ -47,7 +47,7 @@ export class SinkAlreadyFailedError extends Error {
  * 2. If getTerminalState() exists → outcome matches terminal event
  * 3. Otherwise → script completed without emitting terminal
  */
-export interface SinkState {
+export type SinkState = {
   /**
    * Returns the first successfully written terminal event state.
    * Returns null if no terminal event has been written yet.

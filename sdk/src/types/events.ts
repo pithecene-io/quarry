@@ -5,10 +5,6 @@
 export const CONTRACT_VERSION = '0.10.0' as const
 export type ContractVersion = typeof CONTRACT_VERSION
 
-// ============================================
-// Branded ID Types
-// ============================================
-
 /** Branded type for run identifiers */
 export type RunId = string & { readonly __brand: 'RunId' }
 
@@ -45,15 +41,11 @@ export type EventType =
  */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-// ============================================
-// Payload Types (one per event type)
-// ============================================
-
 /**
  * Payload for 'item' events.
  * Represents a durable, structured output record.
  */
-export interface ItemPayload {
+export type ItemPayload = {
   /** Caller-defined type label */
   item_type: string
   /** The record payload */
@@ -65,7 +57,7 @@ export interface ItemPayload {
  * Represents a binary or large payload.
  * Note: Actual binary data is handled separately via chunking (IPC layer).
  */
-export interface ArtifactPayload {
+export type ArtifactPayload = {
   /** Unique identifier for the artifact */
   artifact_id: ArtifactId
   /** Human-readable name */
@@ -80,7 +72,7 @@ export interface ArtifactPayload {
  * Payload for 'checkpoint' events.
  * Represents an explicit script checkpoint.
  */
-export interface CheckpointPayload {
+export type CheckpointPayload = {
   /** Unique identifier for the checkpoint */
   checkpoint_id: CheckpointId
   /** Optional human-readable note */
@@ -91,7 +83,7 @@ export interface CheckpointPayload {
  * Payload for 'enqueue' events.
  * Advisory suggestion to enqueue additional work.
  */
-export interface EnqueuePayload {
+export type EnqueuePayload = {
   /** Target identifier for the work */
   target: string
   /** Parameters for the work */
@@ -106,7 +98,7 @@ export interface EnqueuePayload {
  * Payload for 'rotate_proxy' events.
  * Advisory suggestion to rotate proxy/session identity.
  */
-export interface RotateProxyPayload {
+export type RotateProxyPayload = {
   /** Optional reason for the rotation request */
   reason?: string
 }
@@ -115,7 +107,7 @@ export interface RotateProxyPayload {
  * Payload for 'log' events.
  * Structured log event emitted by script.
  */
-export interface LogPayload {
+export type LogPayload = {
   /** Log level */
   level: LogLevel
   /** Log message */
@@ -128,7 +120,7 @@ export interface LogPayload {
  * Payload for 'run_error' events.
  * Represents a script-level error that should terminate the run.
  */
-export interface RunErrorPayload {
+export type RunErrorPayload = {
   /**
    * Error type/category.
    * Expected values include: script_error, timeout, blocked, abort, etc.
@@ -145,20 +137,16 @@ export interface RunErrorPayload {
  * Payload for 'run_complete' events.
  * Represents normal completion of the script.
  */
-export interface RunCompletePayload {
+export type RunCompletePayload = {
   /** Optional summary object */
   summary?: Record<string, unknown>
 }
-
-// ============================================
-// Payload Type Map (for type inference)
-// ============================================
 
 /**
  * Maps event types to their payload types.
  * Used for type-safe payload handling.
  */
-export interface PayloadMap {
+export type PayloadMap = {
   item: ItemPayload
   artifact: ArtifactPayload
   checkpoint: CheckpointPayload
@@ -169,17 +157,13 @@ export interface PayloadMap {
   run_complete: RunCompletePayload
 }
 
-// ============================================
-// Event Envelope
-// ============================================
-
 /**
  * Base envelope fields present on all events.
  * From CONTRACT_EMIT.md.
  *
  * All fields are readonly — envelopes are immutable once constructed.
  */
-export interface EventEnvelopeBase {
+export type EventEnvelopeBase = {
   /** Semantic version string for the emit contract */
   readonly contract_version: ContractVersion
   /** Unique ID for the event, scoped to a run */
@@ -201,7 +185,7 @@ export interface EventEnvelopeBase {
 /**
  * Typed event envelope with specific event type and payload.
  */
-export interface EventEnvelope<T extends EventType = EventType> extends EventEnvelopeBase {
+export type EventEnvelope<T extends EventType = EventType> = EventEnvelopeBase & {
   /** Event type identifier */
   readonly type: T
   /** Type-specific payload */

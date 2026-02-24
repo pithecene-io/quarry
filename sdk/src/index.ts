@@ -28,6 +28,7 @@ export {
   buildStorageKey,
   createAPIs,
   createEmitAPI,
+  SinkFailedError,
   StorageFilenameError,
   TerminalEventError
 } from './emit-impl'

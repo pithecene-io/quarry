@@ -206,7 +206,7 @@ async function getVanillaPuppeteer(
 /**
  * Executor configuration passed from the runtime.
  */
-export interface ExecutorConfig<Job = unknown> {
+export type ExecutorConfig<Job = unknown> = {
   /** Path to the script file */
   readonly scriptPath: string
   /** Job payload for the script */
@@ -249,7 +249,7 @@ export type ExecutionOutcome =
 /**
  * Result of executor run.
  */
-export interface ExecutorResult {
+export type ExecutorResult = {
   readonly outcome: ExecutionOutcome
   /** True if a terminal event was successfully written to the sink (by script or executor) */
   readonly terminalEmitted: boolean

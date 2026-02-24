@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -184,7 +185,7 @@ func statsMetricsAction(c *cli.Context) error {
 		snapshot = parsed
 	} else {
 		if backend != "" || path != "" {
-			return fmt.Errorf("both --storage-backend and --storage-path are required for Lode reads")
+			return errors.New("both --storage-backend and --storage-path are required for Lode reads")
 		}
 		snapshot = reader.StatsMetrics()
 	}

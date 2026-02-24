@@ -6,6 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, TerminalEventError } from '../../../src/emit-impl'
+import type { CheckpointId } from '../../../src/types/events'
 import { createRunMeta, FakeSink } from '../_harness'
 
 describe('runComplete terminal semantics', () => {
@@ -56,7 +57,7 @@ describe('runComplete terminal semantics', () => {
     const emit = createEmitAPI(run, sink)
     await emit.runComplete()
 
-    await expect(emit.checkpoint({ checkpoint_id: 'cp' as any })).rejects.toThrow(
+    await expect(emit.checkpoint({ checkpoint_id: 'cp' as CheckpointId })).rejects.toThrow(
       TerminalEventError
     )
   })

@@ -80,7 +80,7 @@ export type CleanupHook<Job = unknown> = (ctx: QuarryContext<Job>) => Promise<vo
  * Optional lifecycle hooks that scripts can export.
  * All hooks are optional.
  */
-export interface QuarryHooks<Job = unknown> {
+export type QuarryHooks<Job = unknown> = {
   prepare?: PrepareHook<Job>
   beforeRun?: BeforeRunHook<Job>
   afterRun?: AfterRunHook<Job>
@@ -93,6 +93,6 @@ export interface QuarryHooks<Job = unknown> {
  * A script module with optional hooks.
  * Scripts can export these alongside their default function.
  */
-export interface QuarryScriptModule<Job = unknown> extends QuarryHooks<Job> {
+export type QuarryScriptModule<Job = unknown> = QuarryHooks<Job> & {
   default: (ctx: QuarryContext<Job>) => Promise<void>
 }

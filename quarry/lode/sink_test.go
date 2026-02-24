@@ -2,6 +2,7 @@ package lode
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -180,7 +181,7 @@ func TestSink_WriteEvents_DiskFullError(t *testing.T) {
 	}
 
 	// Error should propagate
-	if err != diskFullErr {
+	if !errors.Is(err, diskFullErr) {
 		t.Errorf("expected disk full error, got: %v", err)
 	}
 
@@ -204,7 +205,7 @@ func TestSink_WriteChunks_DiskFullError(t *testing.T) {
 		t.Fatal("expected error for disk full, got nil")
 	}
 
-	if err != diskFullErr {
+	if !errors.Is(err, diskFullErr) {
 		t.Errorf("expected disk full error, got: %v", err)
 	}
 
@@ -227,7 +228,7 @@ func TestSink_WriteEvents_PermissionError(t *testing.T) {
 		t.Fatal("expected error for permission denied, got nil")
 	}
 
-	if err != permErr {
+	if !errors.Is(err, permErr) {
 		t.Errorf("expected permission error, got: %v", err)
 	}
 }
@@ -246,7 +247,7 @@ func TestSink_WriteChunks_PermissionError(t *testing.T) {
 		t.Fatal("expected error for permission denied, got nil")
 	}
 
-	if err != permErr {
+	if !errors.Is(err, permErr) {
 		t.Errorf("expected permission error, got: %v", err)
 	}
 }
@@ -261,7 +262,7 @@ func TestSink_Close_Error(t *testing.T) {
 		t.Fatal("expected error on close, got nil")
 	}
 
-	if err != closeErr {
+	if !errors.Is(err, closeErr) {
 		t.Errorf("expected close error, got: %v", err)
 	}
 

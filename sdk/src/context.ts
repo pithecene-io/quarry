@@ -9,7 +9,7 @@ import type { QuarryContext, RunMeta } from './types/context'
  *
  * @internal
  */
-export interface CreateContextOptions<Job = unknown> {
+export type CreateContextOptions<Job = unknown> = {
   job: Job
   run: RunMeta
   page: Page

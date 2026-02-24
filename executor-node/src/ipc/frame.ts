@@ -66,7 +66,7 @@ export type RunResultType = 'run_result'
  * The `data` field is encoded as msgpack bin type (not array).
  * Receivers must decode it as raw bytes.
  */
-export interface ArtifactChunkFrame {
+export type ArtifactChunkFrame = {
   readonly type: 'artifact_chunk'
   readonly artifact_id: ArtifactId
   /** Sequence number, starts at 1 */
@@ -86,7 +86,7 @@ export type RunResultStatus = 'completed' | 'error' | 'crash'
  * Run result outcome per CONTRACT_IPC.md.
  * Describes the final outcome of a run.
  */
-export interface RunResultOutcome {
+export type RunResultOutcome = {
   /** Outcome status */
   readonly status: RunResultStatus
   /** Human-readable message */
@@ -101,7 +101,7 @@ export interface RunResultOutcome {
  * Redacted proxy endpoint for run results (no password).
  * Per CONTRACT_PROXY.md: proxy_used must exclude password fields.
  */
-export interface ProxyEndpointRedactedFrame {
+export type ProxyEndpointRedactedFrame = {
   readonly protocol: 'http' | 'https' | 'socks5'
   readonly host: string
   readonly port: number
@@ -113,7 +113,7 @@ export interface ProxyEndpointRedactedFrame {
  * This is a control frame emitted once after terminal event emission.
  * It does NOT affect seq ordering (not an event).
  */
-export interface RunResultFrame {
+export type RunResultFrame = {
   readonly type: 'run_result'
   /** Final run outcome */
   readonly outcome: RunResultOutcome
@@ -126,7 +126,7 @@ export interface RunResultFrame {
  * Single-frame transport (not chunked). Max 8 MiB data.
  * Bypasses seq numbering, policy pipeline, and artifact manager.
  */
-export interface FileWriteFrame {
+export type FileWriteFrame = {
   readonly type: 'file_write'
   /** Target filename (no path separators, no "..") */
   readonly filename: string
@@ -246,7 +246,7 @@ export function encodeArtifactChunkFrame(
  * Metadata for a single artifact chunk (without data).
  * Used by chunk iterators to avoid data copying.
  */
-export interface ChunkMeta {
+export type ChunkMeta = {
   readonly seq: number
   readonly isLast: boolean
   readonly offset: number

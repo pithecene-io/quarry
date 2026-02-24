@@ -6,6 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmitAPI, SinkFailedError } from '../../../src/emit-impl'
+import type { CheckpointId } from '../../../src/types/events'
 import { createRunMeta, FakeSink } from '../_harness'
 
 describe('event write failure semantics', () => {
@@ -76,7 +77,9 @@ describe('event write failure semantics', () => {
     // All methods should throw SinkFailedError
     await expect(emit.item({ item_type: 'test', data: {} })).rejects.toThrow(SinkFailedError)
     await expect(emit.log({ level: 'info', message: 'test' })).rejects.toThrow(SinkFailedError)
-    await expect(emit.checkpoint({ checkpoint_id: 'cp' as any })).rejects.toThrow(SinkFailedError)
+    await expect(emit.checkpoint({ checkpoint_id: 'cp' as CheckpointId })).rejects.toThrow(
+      SinkFailedError
+    )
     await expect(emit.enqueue({ target: 'next', params: {} })).rejects.toThrow(SinkFailedError)
     await expect(emit.rotateProxy()).rejects.toThrow(SinkFailedError)
     await expect(emit.debug('test')).rejects.toThrow(SinkFailedError)

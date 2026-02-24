@@ -4,10 +4,6 @@
 
 import type { ProxyEndpoint, ProxyPool, ProxyProtocol, ProxyStrategy } from './types/proxy'
 
-// ============================================
-// Validation Result Types
-// ============================================
-
 /**
  * Hard validation error that must cause rejection.
  */
@@ -33,19 +29,11 @@ export type ProxyValidationResult = {
   readonly warnings: readonly ProxyValidationWarning[]
 }
 
-// ============================================
-// Constants
-// ============================================
-
 const VALID_PROTOCOLS: readonly ProxyProtocol[] = ['http', 'https', 'socks5']
 const VALID_STRATEGIES: readonly ProxyStrategy[] = ['round_robin', 'random', 'sticky']
 const MIN_PORT = 1
 const MAX_PORT = 65535
 const LARGE_POOL_THRESHOLD = 100
-
-// ============================================
-// Validation Helpers
-// ============================================
 
 function validationError(field: string, message: string): ProxyValidationError {
   return { field, message }
@@ -66,14 +54,11 @@ function buildValidationResult(
   return { valid: errors.length === 0, errors, warnings }
 }
 
-// ============================================
-// Validation Functions
-// ============================================
-
 /**
  * Validate a proxy endpoint per CONTRACT_PROXY hard validation rules.
  *
  * Hard validation (must reject):
+ * - host must be a non-empty string
  * - port is within 1-65535
  * - protocol is one of http|https|socks5
  * - username and password must be provided together if either is set
@@ -82,6 +67,11 @@ export function validateProxyEndpoint(endpoint: ProxyEndpoint, prefix = ''): Pro
   const errors: ProxyValidationError[] = []
   const warnings: ProxyValidationWarning[] = []
   const fieldPrefix = prefix ? `${prefix}.` : ''
+
+  // Host validation (required per CONTRACT_PROXY.md)
+  if (!endpoint.host || typeof endpoint.host !== 'string') {
+    errors.push(validationError(`${fieldPrefix}host`, 'Host is required and must be a non-empty string'))
+  }
 
   // Protocol validation
   if (!VALID_PROTOCOLS.includes(endpoint.protocol)) {

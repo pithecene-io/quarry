@@ -1,8 +1,25 @@
 package types //nolint:revive // types is a valid package name
 
 import (
+	"strings"
 	"testing"
 )
+
+func TestProxyEndpoint_Validate_EmptyHost(t *testing.T) {
+	ep := &ProxyEndpoint{
+		Protocol: ProxyProtocolHTTP,
+		Host:     "",
+		Port:     8080,
+	}
+
+	err := ep.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for empty host")
+	}
+	if !strings.Contains(err.Error(), "host") {
+		t.Errorf("error should mention host, got: %v", err)
+	}
+}
 
 func TestProxyEndpoint_Warnings_Socks5(t *testing.T) {
 	// socks5 should generate a warning

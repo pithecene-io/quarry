@@ -6,7 +6,7 @@ import type { JobId, RunId } from './events'
  * Run metadata available to scripts.
  * From CONTRACT_RUN.md.
  */
-export interface RunMeta {
+export type RunMeta = {
   /** Canonical run identifier */
   readonly run_id: RunId
   /** Job ID, may be undefined if not known */
@@ -23,7 +23,7 @@ export interface RunMeta {
  *
  * @template Job - User-defined job payload type
  */
-export interface QuarryContext<Job = unknown> {
+export type QuarryContext<Job = unknown> = {
   /**
    * The job payload provided when the run was initiated.
    * Type is user-defined via generic parameter.
