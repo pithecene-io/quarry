@@ -12,10 +12,6 @@ import { describe, expect, it } from 'vitest'
 import { redactProxyEndpoint, validateProxyEndpoint, validateProxyPool } from '../src/proxy'
 import type { ProxyEndpoint, ProxyPool } from '../src/types/proxy'
 
-// ============================================
-// Helpers
-// ============================================
-
 function validEndpoint(overrides: Partial<ProxyEndpoint> = {}): ProxyEndpoint {
   return {
     protocol: 'http',
@@ -33,10 +29,6 @@ function validPool(overrides: Partial<ProxyPool> = {}): ProxyPool {
     ...overrides
   }
 }
-
-// ============================================
-// validateProxyEndpoint
-// ============================================
 
 describe('validateProxyEndpoint', () => {
   it('valid endpoint (http, host, port) returns valid', () => {
@@ -127,10 +119,6 @@ describe('validateProxyEndpoint', () => {
   })
 })
 
-// ============================================
-// validateProxyPool
-// ============================================
-
 describe('validateProxyPool', () => {
   it('valid pool with endpoints returns valid', () => {
     const result = validateProxyPool(validPool())
@@ -154,10 +142,6 @@ describe('validateProxyPool', () => {
     expect(result.errors.some((e) => e.field === 'endpoints[0].port')).toBe(true)
   })
 })
-
-// ============================================
-// redactProxyEndpoint
-// ============================================
 
 describe('redactProxyEndpoint', () => {
   it('endpoint without auth returns unchanged', () => {

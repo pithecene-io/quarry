@@ -12,10 +12,6 @@ import type { ArtifactId, CheckpointId } from '../../../src/types/events'
 
 declare const emit: EmitAPI
 
-// ============================================
-// EmitAPI method signatures
-// ============================================
-
 // item() returns Promise<void>
 expectType<Promise<void>>(emit.item({ item_type: 'product', data: {} }))
 
@@ -50,10 +46,6 @@ expectType<Promise<void>>(emit.runError({ error_type: 'script_error', message: '
 expectType<Promise<void>>(emit.runComplete())
 expectType<Promise<void>>(emit.runComplete({ summary: { items: 10 } }))
 
-// ============================================
-// Optional fields
-// ============================================
-
 // checkpoint note is optional
 expectType<Promise<void>>(emit.checkpoint({ checkpoint_id: 'cp-1' as CheckpointId }))
 expectType<Promise<void>>(
@@ -78,10 +70,6 @@ expectType<Promise<void>>(emit.rotateProxy())
 expectType<Promise<void>>(emit.rotateProxy({}))
 expectType<Promise<void>>(emit.rotateProxy({ reason: 'blocked' }))
 
-// ============================================
-// Artifact data is byte-addressable
-// ============================================
-
 // Buffer is accepted
 expectType<Promise<ArtifactId>>(
   emit.artifact({
@@ -99,10 +87,6 @@ expectType<Promise<ArtifactId>>(
     data: new Uint8Array([1, 2, 3])
   })
 )
-
-// ============================================
-// EmitAPI methods are readonly
-// ============================================
 
 expectAssignable<{
   readonly item: (options: { item_type: string; data: Record<string, unknown> }) => Promise<void>

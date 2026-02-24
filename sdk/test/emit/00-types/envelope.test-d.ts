@@ -22,10 +22,6 @@ import type {
   RunId
 } from '../../../src/types/events'
 
-// ============================================
-// EventType is a union of all event types
-// ============================================
-
 expectAssignable<EventType>('item')
 expectAssignable<EventType>('artifact')
 expectAssignable<EventType>('checkpoint')
@@ -35,19 +31,11 @@ expectAssignable<EventType>('log')
 expectAssignable<EventType>('run_error')
 expectAssignable<EventType>('run_complete')
 
-// ============================================
-// PayloadMap maps event types to payloads
-// ============================================
-
 expectType<ItemPayload>({} as PayloadMap['item'])
 expectType<ArtifactPayload>({} as PayloadMap['artifact'])
 expectType<LogPayload>({} as PayloadMap['log'])
 expectType<RunErrorPayload>({} as PayloadMap['run_error'])
 expectType<RunCompletePayload>({} as PayloadMap['run_complete'])
-
-// ============================================
-// EventEnvelope is generic over EventType
-// ============================================
 
 declare const itemEnvelope: EventEnvelope<'item'>
 expectType<'item'>(itemEnvelope.type)
@@ -56,10 +44,6 @@ expectType<ItemPayload>(itemEnvelope.payload)
 declare const logEnvelope: EventEnvelope<'log'>
 expectType<'log'>(logEnvelope.type)
 expectType<LogPayload>(logEnvelope.payload)
-
-// ============================================
-// Envelope base fields are present
-// ============================================
 
 declare const anyEnvelope: EventEnvelope
 expectType<ContractVersion>(anyEnvelope.contract_version)
@@ -73,19 +57,11 @@ expectType<number>(anyEnvelope.attempt)
 expectType<JobId | undefined>(anyEnvelope.job_id)
 expectType<RunId | undefined>(anyEnvelope.parent_run_id)
 
-// ============================================
-// Branded types are strings
-// ============================================
-
 expectAssignable<string>({} as RunId)
 expectAssignable<string>({} as EventId)
 expectAssignable<string>({} as JobId)
 expectAssignable<string>({} as ArtifactId)
 expectAssignable<string>({} as CheckpointId)
-
-// ============================================
-// LogLevel is a union
-// ============================================
 
 expectAssignable<LogLevel>('debug')
 expectAssignable<LogLevel>('info')

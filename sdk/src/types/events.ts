@@ -5,10 +5,6 @@
 export const CONTRACT_VERSION = '0.10.0' as const
 export type ContractVersion = typeof CONTRACT_VERSION
 
-// ============================================
-// Branded ID Types
-// ============================================
-
 /** Branded type for run identifiers */
 export type RunId = string & { readonly __brand: 'RunId' }
 
@@ -44,10 +40,6 @@ export type EventType =
  * Log levels for the log event type.
  */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-
-// ============================================
-// Payload Types (one per event type)
-// ============================================
 
 /**
  * Payload for 'item' events.
@@ -150,10 +142,6 @@ export type RunCompletePayload = {
   summary?: Record<string, unknown>
 }
 
-// ============================================
-// Payload Type Map (for type inference)
-// ============================================
-
 /**
  * Maps event types to their payload types.
  * Used for type-safe payload handling.
@@ -168,10 +156,6 @@ export type PayloadMap = {
   run_error: RunErrorPayload
   run_complete: RunCompletePayload
 }
-
-// ============================================
-// Event Envelope
-// ============================================
 
 /**
  * Base envelope fields present on all events.

@@ -4,10 +4,6 @@
 
 import type { ProxyEndpoint, ProxyPool, ProxyProtocol, ProxyStrategy } from './types/proxy'
 
-// ============================================
-// Validation Result Types
-// ============================================
-
 /**
  * Hard validation error that must cause rejection.
  */
@@ -33,19 +29,11 @@ export type ProxyValidationResult = {
   readonly warnings: readonly ProxyValidationWarning[]
 }
 
-// ============================================
-// Constants
-// ============================================
-
 const VALID_PROTOCOLS: readonly ProxyProtocol[] = ['http', 'https', 'socks5']
 const VALID_STRATEGIES: readonly ProxyStrategy[] = ['round_robin', 'random', 'sticky']
 const MIN_PORT = 1
 const MAX_PORT = 65535
 const LARGE_POOL_THRESHOLD = 100
-
-// ============================================
-// Validation Helpers
-// ============================================
 
 function validationError(field: string, message: string): ProxyValidationError {
   return { field, message }
@@ -65,10 +53,6 @@ function buildValidationResult(
 ): ProxyValidationResult {
   return { valid: errors.length === 0, errors, warnings }
 }
-
-// ============================================
-// Validation Functions
-// ============================================
 
 /**
  * Validate a proxy endpoint per CONTRACT_PROXY hard validation rules.

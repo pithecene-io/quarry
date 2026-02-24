@@ -2,10 +2,6 @@
  * Proxy configuration types per CONTRACT_PROXY.md
  */
 
-// ============================================
-// Protocol and Strategy Enums
-// ============================================
-
 /**
  * Allowed proxy protocols.
  * Note: socks5 is best-effort with Puppeteer.
@@ -16,10 +12,6 @@ export type ProxyProtocol = 'http' | 'https' | 'socks5'
  * Proxy selection strategies for pools.
  */
 export type ProxyStrategy = 'round_robin' | 'random' | 'sticky'
-
-// ============================================
-// Proxy Endpoint
-// ============================================
 
 /**
  * A resolved proxy endpoint the executor can dial.
@@ -44,10 +36,6 @@ export type ProxyEndpoint = {
  */
 export type ProxyEndpointRedacted = Omit<ProxyEndpoint, 'password'>
 
-// ============================================
-// Sticky Configuration
-// ============================================
-
 /**
  * Sticky scope determines what key is used for sticky assignment.
  */
@@ -62,10 +50,6 @@ export type ProxySticky = {
   /** Optional TTL in milliseconds for sticky entries */
   readonly ttlMs?: number
 }
-
-// ============================================
-// Proxy Pool
-// ============================================
 
 /**
  * Proxy pool definition.
@@ -85,10 +69,6 @@ export type ProxyPool = {
    * and excludes them from random selection. */
   readonly recencyWindow?: number
 }
-
-// ============================================
-// Job-Level Proxy Request
-// ============================================
 
 /**
  * Job-level proxy selection request.
