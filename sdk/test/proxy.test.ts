@@ -39,9 +39,7 @@ describe('validateProxyEndpoint', () => {
   })
 
   it('valid endpoint with auth (username + password) returns valid', () => {
-    const result = validateProxyEndpoint(
-      validEndpoint({ username: 'user', password: 'pass' })
-    )
+    const result = validateProxyEndpoint(validEndpoint({ username: 'user', password: 'pass' }))
 
     expect(result.valid).toBe(true)
     expect(result.errors).toHaveLength(0)
