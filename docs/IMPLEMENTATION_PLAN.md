@@ -13,13 +13,10 @@ Quarry’s core principle:
 
 Scripts and executors remain **policy-agnostic**.
 
-## Current Status (as of v0.7.0-dev)
-- Latest release: v0.6.3 (see CHANGELOG.md).
+## Current Status (as of v0.12.0)
+- Latest release: v0.12.0 (see CHANGELOG.md).
 - Phases 0–5 complete. Phase 6 (dogfooding) in progress.
-- v0.7.0 features merged to main: streaming ingestion policy, recency window for proxy rotation, performance benchmarks. Version bump pending.
-- v0.6.x adds derived work execution (fan-out flags on `quarry run`).
-- v0.5.x adds webhook and Redis pub/sub event-bus adapters.
-- v0.4.x added `--config` for YAML project-level defaults and `ctx.storage.put()`.
+- All v1.0 readiness items resolved (see docs/RELEASE_READINESS_v1.0.md).
 
 ---
 
@@ -823,73 +820,6 @@ Principles:
 - Integrations must not change contracts.
 - Event envelope remains stable across adapters.
 - CLI/Stats/Metrics hardening is a prerequisite for each new adapter.
-
----
-
-## Module Split — Multi-Module Restructure (Deferred)
-
-> **Status: Deferred.** The module split was originally motivated by the
-> Temporal integration (see below). With Temporal deprioritized, the split
-> is not urgent. It remains a clean-up goal for dependency hygiene but is
-> no longer on the critical path.
-
-### Goal
-
-Split the `quarry/` Go module into independent modules so that future
-integrations can depend on core runtime types without pulling in CLI,
-TUI, or unrelated dependencies.
-
-### Agreed Layout
-
-| Module | Go Module Path | Contains |
-|--------|---------------|----------|
-| `quarry-core/` | `github.com/pithecene-io/quarry-core` | types, runtime, policy, lode, adapter, proxy, metrics, log |
-| `quarry-cli/` | `github.com/pithecene-io/quarry-cli` | CLI commands, TUI, config, reader |
-
-### Prerequisites
-
-- [x] Decouple lode from cli/reader dependency (PR #113)
-- [ ] Zero cli/tui imports from core packages
-
-### Sequencing
-
-1. Extract `quarry-core/` — move types, runtime, policy, lode, adapter,
-   proxy, metrics, log into standalone module.
-2. Extract `quarry-cli/` — CLI, TUI, config, reader depend on
-   `quarry-core/`.
-3. Update CI — build matrix, release workflows, go.work for local dev.
-
----
-
-## Temporal Orchestration Integration (Deferred)
-
-> **Status: Deferred.** Temporal integration is the right answer for teams
-> that already operate Temporal infrastructure and need complex DAG
-> orchestration, conditional branching, or human-in-the-loop workflows.
-> However, most Quarry users do not run Temporal, and the most common
-> gap — discovery-driven fan-out — is better served by derived work
-> execution via fan-out flags on `quarry run` (v0.6.0) with zero
-> infrastructure requirements.
->
-> Temporal remains a valid future integration. When demand justifies it,
-> the module split (above) is its prerequisite.
-
-### Goal
-
-Enable Quarry to run as a Temporal activity, with workflow-level retries,
-lineage tracking, and durable execution guarantees.
-
-### Prerequisites
-
-- [ ] Module split complete (`quarry-core/` extracted)
-
-### Deliverables
-
-- Activity wrapper calling `runtime.NewRunOrchestrator(config).Execute(ctx)`
-- Heartbeat goroutine for liveness reporting
-- Outcome mapping: `OutcomeStatus` → Temporal error semantics
-- Reference workflow with lineage-aware retry logic
-- Worker binary for `quarry-temporal/`
 
 ---
 
