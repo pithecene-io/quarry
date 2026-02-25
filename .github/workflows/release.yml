@@ -355,7 +355,22 @@ jobs:
         working-directory: sdk
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          npx jsr publish --set-version "$VERSION"
+          MAX_ATTEMPTS=3
+          DELAY=10
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "🔄 Attempt $attempt/$MAX_ATTEMPTS"
+            if npx jsr publish --set-version "$VERSION"; then
+              echo "✅ Published successfully"
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "⏳ Retrying in ${DELAY}s..."
+              sleep "$DELAY"
+              DELAY=$((DELAY * 2))
+            fi
+          done
+          echo "❌ Failed after $MAX_ATTEMPTS attempts"
+          exit 1
 
   container:
     name: 🐳 Container Images
