@@ -74,7 +74,7 @@ func (s slowSink) Close() error { return nil }
 // for strict policy with a zero-cost sink.
 func BenchmarkStrictPolicy_IngestEvent(b *testing.B) {
 	pol := NewStrictPolicy(noopSink{})
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.ResetTimer()
@@ -89,7 +89,7 @@ func BenchmarkStrictPolicy_IngestEvent(b *testing.B) {
 // BenchmarkStrictPolicy_IngestArtifactChunk measures per-chunk throughput.
 func BenchmarkStrictPolicy_IngestArtifactChunk(b *testing.B) {
 	pol := NewStrictPolicy(noopSink{})
-	ctx := context.Background()
+	ctx := b.Context()
 	chunk := benchChunk(1)
 
 	b.ResetTimer()
@@ -110,7 +110,7 @@ func BenchmarkStrictPolicy_ConcurrentIngest(b *testing.B) {
 			b.Cleanup(func() { runtime.GOMAXPROCS(prev) })
 
 			pol := NewStrictPolicy(noopSink{})
-			ctx := context.Background()
+			ctx := b.Context()
 			env := benchEnvelope(1)
 
 			b.ResetTimer()
@@ -132,7 +132,7 @@ func BenchmarkStrictPolicy_SlowSink(b *testing.B) {
 	for _, delay := range []time.Duration{10 * time.Microsecond, 100 * time.Microsecond, time.Millisecond} {
 		b.Run(fmt.Sprintf("delay=%s", delay), func(b *testing.B) {
 			pol := NewStrictPolicy(slowSink{delay: delay})
-			ctx := context.Background()
+			ctx := b.Context()
 			env := benchEnvelope(1)
 
 			b.ResetTimer()
@@ -162,7 +162,7 @@ func BenchmarkBufferedPolicy_IngestEvent(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			ctx := context.Background()
+			ctx := b.Context()
 			env := benchEnvelope(1)
 
 			b.ResetTimer()
@@ -189,7 +189,7 @@ func BenchmarkBufferedPolicy_IngestThenFlush(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			ctx := context.Background()
+			ctx := b.Context()
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -219,7 +219,7 @@ func BenchmarkBufferedPolicy_DropPressure(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Fill buffer with non-droppable events
 	for i := range 10 {
@@ -262,7 +262,7 @@ func BenchmarkBufferedPolicy_ConcurrentIngest(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.ResetTimer()
@@ -292,7 +292,7 @@ func BenchmarkStreamingPolicy_IngestEvent(b *testing.B) {
 	}
 	b.Cleanup(func() { _ = pol.Close() })
 
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.ResetTimer()
@@ -314,7 +314,7 @@ func BenchmarkStreamingPolicy_IngestArtifactChunk(b *testing.B) {
 	}
 	b.Cleanup(func() { _ = pol.Close() })
 
-	ctx := context.Background()
+	ctx := b.Context()
 	chunk := benchChunk(1)
 
 	b.ResetTimer()
@@ -339,7 +339,7 @@ func BenchmarkStreamingPolicy_CountTriggerFlush(b *testing.B) {
 			}
 			b.Cleanup(func() { _ = pol.Close() })
 
-			ctx := context.Background()
+			ctx := b.Context()
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -363,7 +363,7 @@ func BenchmarkStreamingPolicy_ConcurrentIngest(b *testing.B) {
 	}
 	b.Cleanup(func() { _ = pol.Close() })
 
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.ResetTimer()
@@ -391,7 +391,7 @@ func BenchmarkStreamingPolicy_SlowSink(b *testing.B) {
 			}
 			b.Cleanup(func() { _ = pol.Close() })
 
-			ctx := context.Background()
+			ctx := b.Context()
 			env := benchEnvelope(1)
 
 			b.ResetTimer()
@@ -411,7 +411,7 @@ func BenchmarkStreamingPolicy_SlowSink(b *testing.B) {
 // BenchmarkPolicies_IngestEvent_Comparison provides a side-by-side comparison
 // of per-event ingestion cost across all three policies.
 func BenchmarkPolicies_IngestEvent_Comparison(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.Run("strict", func(b *testing.B) {
@@ -457,7 +457,7 @@ func BenchmarkPolicies_IngestEvent_Comparison(b *testing.B) {
 
 // BenchmarkPolicies_Stats_Comparison measures stats snapshot cost across policies.
 func BenchmarkPolicies_Stats_Comparison(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.Run("strict", func(b *testing.B) {
@@ -508,7 +508,7 @@ func BenchmarkPolicies_Stats_Comparison(b *testing.B) {
 // BenchmarkPolicies_Concurrent_Comparison measures concurrent ingestion cost
 // across all three policies with concurrent flush pressure.
 func BenchmarkPolicies_Concurrent_Comparison(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	env := benchEnvelope(1)
 
 	b.Run("strict", func(b *testing.B) {
@@ -569,7 +569,7 @@ func BenchmarkPolicies_Concurrent_Comparison(b *testing.B) {
 // BenchmarkPolicies_MixedWorkload simulates a realistic workload with
 // events and artifact chunks interleaved, measured across all policies.
 func BenchmarkPolicies_MixedWorkload(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.Run("strict", func(b *testing.B) {
 		pol := NewStrictPolicy(noopSink{})
@@ -629,7 +629,7 @@ func BenchmarkStreamingPolicy_FlushUnderLoad(b *testing.B) {
 	}
 	b.Cleanup(func() { _ = pol.Close() })
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Background writer goroutines
 	var wg sync.WaitGroup
