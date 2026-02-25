@@ -275,6 +275,7 @@ func (p *BufferedPolicy) flushAtLeastOnce(ctx context.Context) error {
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearChunkBuffer()
+	p.recalculateBufferBytes()
 	p.mu.Unlock()
 
 	return nil
@@ -310,6 +311,7 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 			p.stats.incErrorsLocked()
 			// Chunks succeeded, events failed - clear chunks only
 			p.clearChunkBuffer()
+			p.recalculateBufferBytes()
 			p.mu.Unlock()
 			return err
 		}
@@ -322,6 +324,7 @@ func (p *BufferedPolicy) flushChunksFirst(ctx context.Context) error {
 	p.mu.Lock()
 	p.clearEventBuffer()
 	p.clearChunkBuffer()
+	p.recalculateBufferBytes()
 	p.mu.Unlock()
 
 	return nil
@@ -366,6 +369,7 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 		p.mu.Lock()
 		p.stats.incChunksPersistedLocked(int64(len(chunksNext)))
 		p.clearChunkBufferNext()
+		p.recalculateBufferBytes()
 		p.mu.Unlock()
 	}
 
@@ -402,6 +406,7 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 	p.clearEventBufferNext()
 	p.clearChunkBuffer()
 	p.clearChunkBufferNext()
+	p.recalculateBufferBytes()
 	p.chunksFlushed = false
 	p.eventsFlushed = false
 	p.mu.Unlock()
@@ -410,27 +415,27 @@ func (p *BufferedPolicy) flushTwoPhase(ctx context.Context) error {
 }
 
 // clearEventBuffer resets the event buffer. Caller must hold mu.
+// Call recalculateBufferBytes after all buffer clears are complete.
 func (p *BufferedPolicy) clearEventBuffer() {
 	p.eventBuffer = make([]*types.EventEnvelope, 0, max(p.config.MaxBufferEvents, 100))
-	p.recalculateBufferBytes()
 }
 
 // clearEventBufferNext resets the next event buffer (TwoPhase). Caller must hold mu.
+// Call recalculateBufferBytes after all buffer clears are complete.
 func (p *BufferedPolicy) clearEventBufferNext() {
 	p.eventBufferNext = make([]*types.EventEnvelope, 0)
-	p.recalculateBufferBytes()
 }
 
 // clearChunkBuffer resets the chunk buffer. Caller must hold mu.
+// Call recalculateBufferBytes after all buffer clears are complete.
 func (p *BufferedPolicy) clearChunkBuffer() {
 	p.chunkBuffer = make([]*types.ArtifactChunk, 0)
-	p.recalculateBufferBytes()
 }
 
 // clearChunkBufferNext resets the next chunk buffer (TwoPhase). Caller must hold mu.
+// Call recalculateBufferBytes after all buffer clears are complete.
 func (p *BufferedPolicy) clearChunkBufferNext() {
 	p.chunkBufferNext = make([]*types.ArtifactChunk, 0)
-	p.recalculateBufferBytes()
 }
 
 // recalculateBufferBytes recalculates bufferBytes from all buffers. Caller must hold mu.

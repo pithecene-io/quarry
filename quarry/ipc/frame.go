@@ -2,6 +2,8 @@
 package ipc
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -89,8 +91,14 @@ type FrameDecoder struct {
 }
 
 // NewFrameDecoder creates a new frame decoder.
+// Wraps the reader with bufio.Reader to reduce syscall overhead
+// on unbuffered sources (e.g., OS pipes from child processes).
 func NewFrameDecoder(r io.Reader) *FrameDecoder {
-	return &FrameDecoder{reader: r}
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
+	return &FrameDecoder{reader: br}
 }
 
 // ReadFrame reads a single frame from the stream.
@@ -140,18 +148,35 @@ func (d *FrameDecoder) ReadFrame() ([]byte, error) {
 	return payload, nil
 }
 
-// frameTypeProbe is used to peek at the type field without full decode.
-type frameTypeProbe struct {
-	Type string `msgpack:"type"`
+// probeFrameType extracts the "type" field from a msgpack map without
+// fully unmarshaling the payload. Falls back to full probe on error.
+func probeFrameType(payload []byte) (string, error) {
+	dec := msgpack.NewDecoder(bytes.NewReader(payload))
+	n, err := dec.DecodeMapLen()
+	if err != nil {
+		return "", err
+	}
+	for range n {
+		key, err := dec.DecodeString()
+		if err != nil {
+			return "", err
+		}
+		if key == "type" {
+			return dec.DecodeString()
+		}
+		if err := dec.Skip(); err != nil {
+			return "", err
+		}
+	}
+	return "", errors.New("missing type field")
 }
 
 // DecodeFrame decodes a payload and returns a typed frame.
 // Discriminates based on the type field: "artifact_chunk", "run_result",
 // "file_write", or event types.
 func DecodeFrame(payload []byte) (any, error) {
-	// Peek at type field
-	var probe frameTypeProbe
-	if err := msgpack.Unmarshal(payload, &probe); err != nil {
+	frameType, err := probeFrameType(payload)
+	if err != nil {
 		return nil, &FrameError{
 			Kind: FrameErrorDecode,
 			Msg:  "failed to decode frame type",
@@ -159,7 +184,7 @@ func DecodeFrame(payload []byte) (any, error) {
 		}
 	}
 
-	switch probe.Type {
+	switch frameType {
 	case ArtifactChunkType:
 		return DecodeArtifactChunk(payload)
 	case RunResultType:
