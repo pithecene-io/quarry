@@ -234,13 +234,37 @@ jobs:
     runs-on: ubuntu-latest
     needs: [hold]
     steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
       - name: ⬇️ Download Artifacts
         uses: actions/download-artifact@v4
         with:
           name: release-dist
           path: dist
 
-      - name: 🚀 Create Release
+      - name: 🔍 Check for existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          BODY=$(gh release view "$TAG" \
+            --json body -q '.body' 2>/dev/null || echo "")
+          if echo "$BODY" | grep -qv "TODO: Add release notes"; then
+            echo "has_notes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📎 Upload assets to existing release
+        if: steps.existing.outputs.has_notes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
+
+      - name: 🚀 Create draft release
+        if: steps.existing.outputs.has_notes != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
