@@ -66,6 +66,16 @@ export function createStorageBatcher(
   let completed = 0
   let totalAdded = 0
 
+  // Flush waiters — resolved when all items have settled
+  let flushResolve: (() => void) | null = null
+
+  function checkFlushComplete(): void {
+    if (flushResolve !== null && completed >= totalAdded) {
+      flushResolve()
+      flushResolve = null
+    }
+  }
+
   function drain(): void {
     while (inflight < concurrency && queue.length > 0 && failed === null) {
       const entry = queue.shift()!
@@ -77,6 +87,7 @@ export function createStorageBatcher(
           completed++
           entry.resolve(result)
           drain()
+          checkFlushComplete()
         })
         .catch((err: unknown) => {
           inflight--
@@ -91,6 +102,7 @@ export function createStorageBatcher(
           for (const queued of remaining) {
             queued.reject(err)
           }
+          checkFlushComplete()
         })
     }
   }
@@ -113,11 +125,17 @@ export function createStorageBatcher(
     },
 
     async flush(): Promise<void> {
-      // Wait until all added items have settled (completed or rejected),
-      // even after failure. Callers treat flush rejection as a full drain.
-      while (completed < totalAdded) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      // Already drained — nothing to wait for
+      if (completed >= totalAdded) {
+        if (failed !== null) {
+          throw failed
+        }
+        return
       }
+      // Wait for all items to settle via promise (no polling)
+      await new Promise<void>((resolve) => {
+        flushResolve = resolve
+      })
       if (failed !== null) {
         throw failed
       }
