@@ -26,24 +26,24 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.10.0
+mise install github:pithecene-io/quarry@0.12.0
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.10.0"
+"github:pithecene-io/quarry" = "0.12.0"
 ```
 
 ### Via Docker
 
 ```bash
 # Full image — includes Chrome for Testing + fonts (amd64 only, recommended)
-docker pull ghcr.io/pithecene-io/quarry:0.10.0
+docker pull ghcr.io/pithecene-io/quarry:0.12.0
 
 # Slim image — no browser, multi-arch (BYO Chromium via --browser-ws-endpoint)
-docker pull ghcr.io/pithecene-io/quarry:0.10.0-slim
+docker pull ghcr.io/pithecene-io/quarry:0.12.0-slim
 ```
 
 See [docs/guides/container.md](docs/guides/container.md) for `docker run` and Docker Compose examples.
@@ -447,6 +447,8 @@ CLI flags always override config file values.
 | `--policy <strict\|buffered\|streaming>` | `strict` | Ingestion policy |
 | `--flush-count <n>` | | Flush after N events (streaming policy) |
 | `--flush-interval <duration>` | | Flush every interval, e.g. `5s` (streaming policy) |
+| `--report <path>` | | Write structured JSON report to path on exit (use `-` for stderr) |
+| `--quiet` | `false` | Suppress non-error output |
 
 > **Note:** `--job` and `--job-json` are mutually exclusive. Using both is an error.
 > The payload **must** be a top-level JSON object. Arrays, primitives, and null are rejected.
@@ -704,14 +706,14 @@ task build
 
 Quarry ships container images via GHCR:
 
-- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.10.0` — includes Chrome for Testing + fonts
-- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.10.0-slim` — no browser (BYO via `--browser-ws-endpoint`)
+- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.12.0` — includes Chrome for Testing + fonts
+- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.12.0-slim` — no browser (BYO via `--browser-ws-endpoint`)
 
 For `docker run`, Docker Compose, and sidecar patterns, see [docs/guides/container.md](docs/guides/container.md).
 
 ---
 
-## Known Limitations (v0.10.0)
+## Known Limitations (v0.12.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -796,7 +798,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.10.0 (commit: ...)
+# 0.12.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -805,8 +807,8 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.10.0` |
-| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.10.0` |
-| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.10.0-slim` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.12.0` |
+| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.12.0` |
+| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.12.0-slim` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |
