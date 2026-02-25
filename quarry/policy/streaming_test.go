@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/policy"
 	"github.com/pithecene-io/quarry/types"
 )
@@ -17,7 +18,7 @@ func mustNewStreamingPolicy(t *testing.T, sink policy.Sink, config policy.Stream
 	if err != nil {
 		t.Fatalf("NewStreamingPolicy failed: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 	return pol
 }
 
@@ -38,7 +39,7 @@ func TestStreamingPolicy_ValidConfig_OnlyCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
-	_ = pol.Close()
+	iox.DiscardClose(pol)
 }
 
 func TestStreamingPolicy_ValidConfig_OnlyInterval(t *testing.T) {
@@ -47,7 +48,7 @@ func TestStreamingPolicy_ValidConfig_OnlyInterval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
-	_ = pol.Close()
+	iox.DiscardClose(pol)
 }
 
 func TestStreamingPolicy_ValidConfig_Both(t *testing.T) {
@@ -59,7 +60,7 @@ func TestStreamingPolicy_ValidConfig_Both(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
-	_ = pol.Close()
+	iox.DiscardClose(pol)
 }
 
 func TestStreamingPolicy_CountTrigger_FlushesAtThreshold(t *testing.T) {
@@ -324,7 +325,7 @@ func TestStreamingPolicy_EventWriteFailure_ChunksAlreadySucceeded(t *testing.T) 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 
 	// Buffer both
 	_ = pol.IngestEvent(t.Context(), &types.EventEnvelope{
@@ -711,7 +712,7 @@ func TestStreamingPolicy_Backpressure_BlocksWhenFull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 
 	// Fill buffer rapidly — we use a goroutine pool and check that
 	// the stats show bounded behavior (no unbounded growth)
@@ -808,7 +809,7 @@ func TestStreamingPolicy_ChunkOnlyCountMode_NoDeadlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 
 	ctx := t.Context()
 	done := make(chan struct{})
@@ -871,7 +872,7 @@ func TestStreamingPolicy_EventOnlyCapacity_NoDeadlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 
 	ctx := t.Context()
 	done := make(chan struct{})
@@ -924,7 +925,7 @@ func TestStreamingPolicy_OversizedEntry_AcceptedWhenBufferEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Cleanup(func() { _ = pol.Close() })
+	t.Cleanup(iox.CloseFunc(pol))
 
 	ctx := t.Context()
 

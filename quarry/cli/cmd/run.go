@@ -21,6 +21,7 @@ import (
 	"github.com/pithecene-io/quarry/adapter/webhook"
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
 	"github.com/pithecene-io/quarry/executor"
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/metrics"
 	"github.com/pithecene-io/quarry/policy"
@@ -399,7 +400,7 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child policy: %w", err)
 	}
-	defer func() { _ = childPol.Close() }()
+	defer iox.DiscardClose(childPol)
 
 	config := &runtime.RunConfig{
 		ExecutorPath:      cf.executorPath,
@@ -489,7 +490,7 @@ func (f *runFinalizer) notifyAdapter(result *runtime.RunResult, duration time.Du
 		fmt.Fprintf(os.Stderr, "Warning: adapter creation failed: %v\n", err)
 		return
 	}
-	defer func() { _ = adpt.Close() }()
+	defer iox.DiscardClose(adpt)
 
 	event := buildRunCompletedEvent(result, f.storage, f.storageDataset, f.source, f.category, lode.DeriveDay(f.startTime), duration)
 	ctx, cancel := context.WithTimeout(context.Background(), f.adapter.timeout)
@@ -675,7 +676,7 @@ func runAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
-	defer func() { _ = pol.Close() }()
+	defer iox.DiscardClose(pol)
 
 	// Resolve proxy pools from config file (inline proxies: key)
 	var configPools []types.ProxyPool
@@ -790,7 +791,7 @@ func runAction(c *cli.Context) error {
 			if err != nil {
 				return cli.Exit(fmt.Sprintf("failed to launch shared browser: %v", err), exitExecutorCrash)
 			}
-			defer func() { _ = managedBrowser.Close() }()
+			defer iox.DiscardClose(managedBrowser)
 			browserWSEndpoint = managedBrowser.WSEndpoint
 			rootConfig.BrowserWSEndpoint = browserWSEndpoint
 		}

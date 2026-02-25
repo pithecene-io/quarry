@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pithecene-io/quarry/adapter"
+	"github.com/pithecene-io/quarry/iox"
 )
 
 // DefaultTimeout is the default HTTP request timeout.
@@ -130,7 +131,7 @@ func (a *Adapter) doRequest(ctx context.Context, body []byte) error {
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer iox.DiscardClose(resp.Body)
 
 	// Drain body to allow connection reuse
 	_, _ = io.Copy(io.Discard, resp.Body)

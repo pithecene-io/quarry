@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 
 	"github.com/pithecene-io/quarry/adapter"
+	"github.com/pithecene-io/quarry/iox"
 )
 
 func testEvent() *adapter.RunCompletedEvent {
@@ -57,7 +58,7 @@ func TestPublish_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	sub := mr.NewSubscriber()
 	sub.Subscribe(DefaultChannel)
@@ -93,7 +94,7 @@ func TestPublish_DefaultChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	if a.config.Channel != DefaultChannel {
 		t.Errorf("expected default channel %q, got %q", DefaultChannel, a.config.Channel)
@@ -121,7 +122,7 @@ func TestPublish_CustomChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	if a.config.Channel != customChannel {
 		t.Errorf("expected channel %q, got %q", customChannel, a.config.Channel)
@@ -149,7 +150,7 @@ func TestPublish_RetriesOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	sub := mr.NewSubscriber()
 	sub.Subscribe(DefaultChannel)
@@ -171,7 +172,7 @@ func TestPublish_ExhaustsRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	err = a.Publish(t.Context(), testEvent())
 	if err == nil {
@@ -185,7 +186,7 @@ func TestPublish_ContextCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -224,7 +225,7 @@ func TestNew_DefaultsApplied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	if a.config.Channel != DefaultChannel {
 		t.Errorf("expected default channel %q, got %q", DefaultChannel, a.config.Channel)

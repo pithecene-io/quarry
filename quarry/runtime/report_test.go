@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/metrics"
 	"github.com/pithecene-io/quarry/policy"
 	"github.com/pithecene-io/quarry/types"
@@ -374,7 +375,7 @@ func TestWriteRunReport_Stderr(t *testing.T) {
 	writeErr := WriteRunReport(report, "-")
 
 	// Restore stderr before any assertions (so test failures print correctly)
-	_ = w.Close()
+	iox.DiscardClose(w)
 	os.Stderr = origStderr
 
 	if writeErr != nil {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/pithecene-io/lode/lode"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -119,7 +120,7 @@ func TestLodeClient_FSDirectoryCreationFailure_NonExistentParent(t *testing.T) {
 		}
 		return
 	}
-	defer func() { _ = client.Close() }()
+	defer iox.DiscardClose(client)
 
 	// Factory succeeded - write must fail
 	events := []*types.EventEnvelope{
@@ -181,7 +182,7 @@ func TestLodeClient_FSDirectoryCreationFailure_ReadOnlyParent(t *testing.T) {
 		}
 		return
 	}
-	defer func() { _ = client.Close() }()
+	defer iox.DiscardClose(client)
 
 	// Factory succeeded - write must fail with permission error
 	events := []*types.EventEnvelope{
