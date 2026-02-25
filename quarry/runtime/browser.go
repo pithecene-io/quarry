@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/pithecene-io/quarry/iox"
 )
 
 // ManagedBrowser represents a Quarry-managed browser process.
@@ -97,7 +99,7 @@ func (mb *ManagedBrowser) Close() error {
 	}
 
 	// Close stdin to signal shutdown
-	_ = mb.stdin.Close()
+	iox.DiscardClose(mb.stdin)
 
 	// Give the browser server a few seconds to shut down gracefully
 	done := make(chan error, 1)

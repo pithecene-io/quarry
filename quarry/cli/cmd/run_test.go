@@ -9,6 +9,7 @@ import (
 	"time"
 
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/metrics"
 	"github.com/pithecene-io/quarry/runtime"
@@ -1740,7 +1741,7 @@ func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildPolicy: %v", err)
 	}
-	defer func() { _ = childPol.Close() }()
+	defer iox.DiscardClose(childPol)
 
 	// Write a probe file through the FileWriter to observe the day partition
 	// that buildPolicy derived internally. The file lands at:

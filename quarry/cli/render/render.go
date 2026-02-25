@@ -24,6 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/pithecene-io/quarry/cli/tui"
+	"github.com/pithecene-io/quarry/iox"
 )
 
 // Format represents an output format.
@@ -149,7 +150,7 @@ func (r *Renderer) renderSliceTable(v reflect.Value) error {
 	}
 
 	w := tabwriter.NewWriter(r.out, 0, 0, 2, ' ', 0)
-	defer func() { _ = w.Flush() }()
+	defer iox.DiscardErr(w.Flush)
 
 	// Get headers from first element
 	first := v.Index(0)
@@ -169,7 +170,7 @@ func (r *Renderer) renderSliceTable(v reflect.Value) error {
 
 func (r *Renderer) renderStructTable(data any) error {
 	w := tabwriter.NewWriter(r.out, 0, 0, 2, ' ', 0)
-	defer func() { _ = w.Flush() }()
+	defer iox.DiscardErr(w.Flush)
 
 	v := reflect.ValueOf(data)
 	if v.Kind() == reflect.Ptr {

@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -160,7 +161,7 @@ func healthCheck(wsEndpoint string) error {
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	_ = resp.Body.Close()
+	iox.DiscardClose(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check returned %d", resp.StatusCode)

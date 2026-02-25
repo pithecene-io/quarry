@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -210,7 +211,7 @@ func TestE2E_BrowserReuse_HealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /json/version: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer iox.DiscardClose(resp.Body)
 
 	var version map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pithecene-io/quarry/adapter"
+	"github.com/pithecene-io/quarry/iox"
 )
 
 func testEvent() *adapter.RunCompletedEvent {
@@ -51,7 +52,7 @@ func TestPublish_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	event := testEvent()
 	if err := a.Publish(t.Context(), event); err != nil {
@@ -85,7 +86,7 @@ func TestPublish_CustomHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	if err := a.Publish(t.Context(), testEvent()); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -112,7 +113,7 @@ func TestPublish_RetriesOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	if err := a.Publish(t.Context(), testEvent()); err != nil {
 		t.Fatalf("publish should succeed after retries: %v", err)
@@ -135,7 +136,7 @@ func TestPublish_ExhaustsRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	err = a.Publish(t.Context(), testEvent())
 	if err == nil {
@@ -159,7 +160,7 @@ func TestPublish_ContextCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	defer func() { _ = a.Close() }()
+	defer iox.DiscardClose(a)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -219,7 +220,7 @@ func TestPublish_Accepts2xxRange(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
-			defer func() { _ = a.Close() }()
+			defer iox.DiscardClose(a)
 
 			if err := a.Publish(t.Context(), testEvent()); err != nil {
 				t.Fatalf("expected success for %d, got %v", code, err)
@@ -243,7 +244,7 @@ func TestPublish_4xxFailsImmediately(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
-			defer func() { _ = a.Close() }()
+			defer iox.DiscardClose(a)
 
 			err = a.Publish(t.Context(), testEvent())
 			if err == nil {
@@ -273,7 +274,7 @@ func TestPublish_5xxRetriesAndFails(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
-			defer func() { _ = a.Close() }()
+			defer iox.DiscardClose(a)
 
 			err = a.Publish(t.Context(), testEvent())
 			if err == nil {

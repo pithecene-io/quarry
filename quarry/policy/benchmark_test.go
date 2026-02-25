@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -290,7 +291,7 @@ func BenchmarkStreamingPolicy_IngestEvent(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { _ = pol.Close() })
+	b.Cleanup(iox.CloseFunc(pol))
 
 	ctx := b.Context()
 	env := benchEnvelope(1)
@@ -312,7 +313,7 @@ func BenchmarkStreamingPolicy_IngestArtifactChunk(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { _ = pol.Close() })
+	b.Cleanup(iox.CloseFunc(pol))
 
 	ctx := b.Context()
 	chunk := benchChunk(1)
@@ -337,7 +338,7 @@ func BenchmarkStreamingPolicy_CountTriggerFlush(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			b.Cleanup(func() { _ = pol.Close() })
+			b.Cleanup(iox.CloseFunc(pol))
 
 			ctx := b.Context()
 
@@ -361,7 +362,7 @@ func BenchmarkStreamingPolicy_ConcurrentIngest(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { _ = pol.Close() })
+	b.Cleanup(iox.CloseFunc(pol))
 
 	ctx := b.Context()
 	env := benchEnvelope(1)
@@ -389,7 +390,7 @@ func BenchmarkStreamingPolicy_SlowSink(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			b.Cleanup(func() { _ = pol.Close() })
+			b.Cleanup(iox.CloseFunc(pol))
 
 			ctx := b.Context()
 			env := benchEnvelope(1)
@@ -444,7 +445,7 @@ func BenchmarkPolicies_IngestEvent_Comparison(b *testing.B) {
 		pol, _ := NewStreamingPolicy(noopSink{}, StreamingConfig{
 			FlushCount: 1_000_000,
 		})
-		b.Cleanup(func() { _ = pol.Close() })
+		b.Cleanup(iox.CloseFunc(pol))
 		b.ResetTimer()
 		b.ReportAllocs()
 		for b.Loop() {
@@ -493,7 +494,7 @@ func BenchmarkPolicies_Stats_Comparison(b *testing.B) {
 		pol, _ := NewStreamingPolicy(noopSink{}, StreamingConfig{
 			FlushCount: 1_000_000,
 		})
-		b.Cleanup(func() { _ = pol.Close() })
+		b.Cleanup(iox.CloseFunc(pol))
 		for range 100 {
 			_ = pol.IngestEvent(ctx, env)
 		}
@@ -541,7 +542,7 @@ func BenchmarkPolicies_Concurrent_Comparison(b *testing.B) {
 		pol, _ := NewStreamingPolicy(noopSink{}, StreamingConfig{
 			FlushCount: 1_000_000,
 		})
-		b.Cleanup(func() { _ = pol.Close() })
+		b.Cleanup(iox.CloseFunc(pol))
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
@@ -555,7 +556,7 @@ func BenchmarkPolicies_Concurrent_Comparison(b *testing.B) {
 		pol, _ := NewStreamingPolicy(noopSink{}, StreamingConfig{
 			FlushCount: 100,
 		})
-		b.Cleanup(func() { _ = pol.Close() })
+		b.Cleanup(iox.CloseFunc(pol))
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
@@ -605,7 +606,7 @@ func BenchmarkPolicies_MixedWorkload(b *testing.B) {
 		pol, _ := NewStreamingPolicy(noopSink{}, StreamingConfig{
 			FlushCount: 100,
 		})
-		b.Cleanup(func() { _ = pol.Close() })
+		b.Cleanup(iox.CloseFunc(pol))
 		b.ResetTimer()
 		b.ReportAllocs()
 		for i := int64(0); b.Loop(); i++ {
@@ -627,7 +628,7 @@ func BenchmarkStreamingPolicy_FlushUnderLoad(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { _ = pol.Close() })
+	b.Cleanup(iox.CloseFunc(pol))
 
 	ctx := b.Context()
 
