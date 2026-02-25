@@ -11,8 +11,8 @@ Quarry ships two container images via GHCR:
 
 | Image | Tag | Arch | Includes |
 |-------|-----|------|----------|
-| Full | `ghcr.io/pithecene-io/quarry:0.7.3` | amd64 | Quarry CLI, Node.js, Puppeteer, Chrome for Testing, fonts |
-| Slim | `ghcr.io/pithecene-io/quarry:0.7.3-slim` | amd64, arm64 | Quarry CLI, Node.js, Puppeteer (no browser) |
+| Full | `ghcr.io/pithecene-io/quarry:0.12.0` | amd64 | Quarry CLI, Node.js, Puppeteer, Chrome for Testing, fonts |
+| Slim | `ghcr.io/pithecene-io/quarry:0.12.0-slim` | amd64, arm64 | Quarry CLI, Node.js, Puppeteer (no browser) |
 
 The **full** image is recommended for standalone usage. The **slim** image is
 for environments where Chromium is provided externally (e.g., via
@@ -34,7 +34,7 @@ and run as a non-root `quarry` user.
 docker run --rm \
   -v ./scripts:/work/scripts:ro \
   -v ./data:/work/data \
-  ghcr.io/pithecene-io/quarry:0.7.3 \
+  ghcr.io/pithecene-io/quarry:0.12.0 \
   run \
     --script ./scripts/my-script.ts \
     --run-id "run-$(date +%s)" \
@@ -50,7 +50,7 @@ docker run --rm \
 ```yaml
 services:
   quarry:
-    image: ghcr.io/pithecene-io/quarry:0.7.3
+    image: ghcr.io/pithecene-io/quarry:0.12.0
     volumes:
       - ./scripts:/work/scripts:ro
       - ./data:/work/data
@@ -71,7 +71,7 @@ services:
 ```yaml
 services:
   quarry:
-    image: ghcr.io/pithecene-io/quarry:0.7.3
+    image: ghcr.io/pithecene-io/quarry:0.12.0
     volumes:
       - ./scripts:/work/scripts:ro
     environment:
@@ -99,7 +99,7 @@ services:
       - "6379:6379"
 
   quarry:
-    image: ghcr.io/pithecene-io/quarry:0.7.3
+    image: ghcr.io/pithecene-io/quarry:0.12.0
     depends_on:
       - redis
     volumes:
@@ -135,7 +135,7 @@ executor where to find them:
 ```yaml
 services:
   quarry:
-    image: ghcr.io/pithecene-io/quarry:0.7.3
+    image: ghcr.io/pithecene-io/quarry:0.12.0
     volumes:
       - ./scripts:/work/scripts:ro
       - ./node_modules:/work/node_modules:ro
@@ -167,7 +167,7 @@ services:
       - "9222:9222"
 
   quarry:
-    image: ghcr.io/pithecene-io/quarry:0.7.3-slim
+    image: ghcr.io/pithecene-io/quarry:0.12.0-slim
     depends_on:
       - chrome
     volumes:

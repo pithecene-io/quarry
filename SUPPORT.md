@@ -1,19 +1,19 @@
-# Support Posture — Quarry v0.9.0
+# Support Posture — Quarry v0.12.0
 
-This document defines support expectations for Quarry v0.9.0.
+This document defines support expectations for Quarry v0.12.0.
 
 ---
 
 ## Maturity Level
 
-**v0.9.0 is an early release.** APIs and behaviors may change in subsequent
+**v0.12.0 is an early release.** APIs and behaviors may change in subsequent
 minor versions. Breaking changes will be documented in release notes.
 
 ---
 
 ## Known Issues
 
-_No known issues in v0.9.0._
+_No known issues in v0.12.0._
 
 ---
 
@@ -31,7 +31,11 @@ _No known issues in v0.9.0._
 | S3 storage backend | Supported |
 | SDK emit API | Supported |
 | Lifecycle hooks (`prepare`, `beforeTerminal`) | Supported |
-| Fan-out (`--depth`) | Experimental |
+| Fan-out (`--depth`) | Supported |
+| Storage batching (`createStorageBatcher`) | Supported |
+| Memory pressure API (`ctx.memory`) | Supported |
+| Structured exit reporting (`--report`) | Supported |
+| Script validation (`--dry-run`) | Supported |
 
 ### Supported Platforms
 
@@ -72,7 +76,7 @@ _No known issues in v0.9.0._
 
 The following are available but not production-hardened:
 
-- **Proxy rotation**: Advisory only; actual rotation depends on infrastructure
+- **Proxy rotation with pluggable recency backend**: In-memory recency window is supported; cross-process recency stores are not yet available
 
 ---
 
@@ -130,12 +134,12 @@ Quarry uses lockstep versioning:
 Check versions:
 ```bash
 quarry version
-# 0.7.0 (commit: ...)
+# 0.12.0 (commit: ...)
 ```
 
 ---
 
 ## No Warranty
 
-Quarry v0.9.0 is provided "as is" without warranty of any kind.
+Quarry v0.12.0 is provided "as is" without warranty of any kind.
 See LICENSE for details.
