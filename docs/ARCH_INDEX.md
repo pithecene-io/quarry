@@ -53,6 +53,7 @@ User-facing guides (informational).
 
 - `IMPLEMENTATION_PLAN.md` — staged implementation roadmap
 - `RELEASE_READINESS_v0.3.0.md` — historical release readiness (v0.3.0)
+- `RELEASE_READINESS_v1.0.md` — v1.0 release gating and gap analysis
 - `ingress-models.md` — data ingestion modeling
 - `CLI_PARITY.json` — CLI flag parity tracking
 
@@ -100,6 +101,8 @@ Defines **stable APIs** for emitting events, artifacts, and lifecycle signals.
 - `emit.ts` — public emit API
 - `context.ts` — execution context model
 - `hooks.ts` — lifecycle hooks
+- `storage-batcher.ts` — bounded-concurrency storage pipelining
+- `memory.ts` — memory pressure detection API
 - `types/` — shared domain types exposed by the SDK
 
 ### sdk/test/
