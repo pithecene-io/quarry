@@ -74,6 +74,7 @@ The context object passed to your script.
 | `browserContext` | `BrowserContext` | Puppeteer BrowserContext |
 | `emit` | `EmitAPI` | Sole output mechanism |
 | `storage` | `StorageAPI` | Sidecar file upload interface |
+| `memory` | `MemoryAPI` | Memory pressure monitoring |
 
 ### EmitAPI
 
@@ -97,10 +98,12 @@ Sidecar file upload interface available via `ctx.storage`.
 
 | Method | Description |
 |--------|-------------|
-| `put({ filename, content_type, data })` | Write a file to Hive-partitioned storage (max **8 MiB**, flat filename only) |
+| `put({ filename, content_type, data })` | Write a file to Hive-partitioned storage (max **8 MiB**, flat filename only). Returns `StoragePutResult` with the resolved `key`. |
 
 Files land under the run's `files/` prefix. Use `emit.artifact()` for larger
 payloads or when chunk-level progress tracking is needed.
+
+Promise rejects on backend write failure (v0.12.0+) — errors are recoverable.
 
 ### createBatcher
 
@@ -126,6 +129,57 @@ console.log(batcher.pending)  // 0
 | `target` | `string` | Enqueue target script (required) |
 | `source` | `string?` | Partition override |
 | `category` | `string?` | Partition override |
+
+### createStorageBatcher
+
+Dispatches multiple `storage.put()` calls with bounded concurrency — eliminating
+user-code latency between puts without creating unbounded promise counts.
+
+```typescript
+import { createStorageBatcher } from '@pithecene-io/quarry-sdk'
+
+const batch = createStorageBatcher(ctx.storage, { concurrency: 16 })
+
+for (const img of images) {
+  batch.add({
+    filename: img.name,
+    content_type: 'image/png',
+    data: img.buffer,
+  })
+}
+await batch.flush()  // wait for all writes before terminal event
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `concurrency` | `number` | Max in-flight puts (positive integer, default 16) |
+
+- `flush()` must be called before terminal events — buffered writes are lost otherwise
+- Fail-fast: first error rejects all queued writes and poisons the batcher
+
+### MemoryAPI
+
+Pull-based memory monitoring for container-constrained workloads.
+
+```typescript
+// Quick threshold check
+if (await ctx.memory.isAbove('high')) {
+  await ctx.emit.warn('Memory pressure high')
+}
+
+// Full snapshot
+const snap = await ctx.memory.snapshot()
+snap.node.ratio     // 0.0–1.0
+snap.cgroup?.ratio  // null if not in container
+snap.pressure       // 'low' | 'moderate' | 'high' | 'critical'
+```
+
+| Method | Description |
+|--------|-------------|
+| `snapshot(opts?)` | Returns `MemorySnapshot` with node, browser, cgroup sources |
+| `isAbove(level)` | Returns `true` if current pressure ≥ level |
+
+Pass `{ browser: false }` to `snapshot()` to skip the CDP call.
 
 ### Lifecycle Hooks
 
