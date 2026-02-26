@@ -20,7 +20,7 @@ export default async function storagePutScript(ctx) {
   const result = await ctx.storage.put({
     filename: 'report.json',
     content_type: 'application/json',
-    data: Buffer.from(JSON.stringify({ items: 42, status: 'ok' })),
+    data: Buffer.from(JSON.stringify({ items: 42, status: 'ok' }))
   })
 
   // 2. Emit item referencing the storage key
@@ -28,12 +28,12 @@ export default async function storagePutScript(ctx) {
     item_type: 'storage_test',
     data: {
       storage_key: result.key,
-      filename: 'report.json',
-    },
+      filename: 'report.json'
+    }
   })
 
   // 3. Complete
   await ctx.emit.runComplete({
-    summary: { files_written: 1 },
+    summary: { files_written: 1 }
   })
 }
