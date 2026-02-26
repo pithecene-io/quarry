@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/types"
 )
 
@@ -88,10 +89,9 @@ func TestE2E_FileWriteAck_Roundtrip(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start executor: %v", err)
 	}
-	// Close our copies of the child's pipe ends — errors are non-actionable
-	// since these are the child-facing ends we never read/write directly.
-	_ = stdinReader.Close()
-	_ = stdoutWriter.Close()
+	// Close our copies of the child's pipe ends.
+	iox.DiscardClose(stdinReader)
+	iox.DiscardClose(stdoutWriter)
 
 	// Write phase 1: JSON metadata
 	if _, err := stdinWriter.Write(inputJSON); err != nil {
@@ -165,7 +165,7 @@ func TestE2E_FileWriteAck_Roundtrip(t *testing.T) {
 	}
 
 	// Close stdin writer — signals EOF to AckReader
-	_ = stdinWriter.Close()
+	iox.DiscardClose(stdinWriter)
 
 	// Wait for process to exit
 	cmdErr := cmd.Wait()
