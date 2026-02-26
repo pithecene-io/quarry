@@ -1,0 +1,7 @@
+grove:
+  intent: "CLI-first web extraction runtime for browser-driven crawling and durable ingestion, designed for adversarial sites and long-lived ETL pipelines."
+  horizon: "perennial"
+  role: "infrastructure"
+  phase: "consolidating"
+  steward: "Andrew"
+  consolidation_interval_days: 90
