@@ -26,6 +26,7 @@ Do not update for internal refactors.
 - `mise.toml` — toolchain version pinning
 - `package.json` — monorepo root metadata
 - `pnpm-workspace.yaml` — monorepo layout
+- `.grove.yaml` — grove stewardship declaration (intent, horizon, phase)
 
 ---
 
@@ -113,8 +114,19 @@ Contract, unit, ordering, and property-based tests validating SDK behavior.
 
 ## examples/
 
-Example usage and integration references.
-Non-normative.
+Example usage and integration references. Non-normative.
+
+- `manifest.json` — schema-driven example registry (used by `scripts/run-examples.ts`)
+- `README.md` — example catalogue overview
+- `demo.ts` — minimal standalone executor demo
+- `static-html-list/` — static HTML scraping example
+- `toy-pagination/` — paginated crawl example
+- `artifact-snapshot/` — artifact snapshot capture example
+- `intentional-failure/` — deliberate failure mode demonstration
+- `fan-out-chain/` — fan-out execution chain example
+- `integration-patterns/` — downstream integration pattern examples
+- `hooks-prepare/` — prepare-phase hook example
+- `hooks-before-terminal/` — before-terminal hook example
 
 ---
 
@@ -165,6 +177,10 @@ Go module root. Contains runtime, CLI, and core types.
 - `adapter/redis/` — Redis pub/sub adapter with exponential backoff retry
 - `adapter/webhook/` — HTTP POST adapter with retryable and non-retriable error handling
 
+### quarry/iox/
+
+- `iox/` — I/O helpers: deferred close with cleanup registration for resource lifecycle management
+
 ### quarry/cli/
 
 - `cli/cmd/` — CLI command implementations and shared flags (run, inspect, stats, list, debug, version)
@@ -196,6 +212,10 @@ Repo-local AI governance: skill definitions for structural validation.
 - `SKILL.md` — structural enforcement validator
 - `input.schema.json` — skill input schema
 - `output.schema.json` — skill output schema
+
+### ai/out/
+
+Skill execution output directory (generated, non-authoritative).
 
 ---
 
