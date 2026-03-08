@@ -15,17 +15,17 @@ Quarry executes user-authored Puppeteer scripts under a strict runtime contract,
 ### CLI
 
 ```bash
-mise install github:pithecene-io/quarry@0.12.0
+mise install github:pithecene-io/quarry@0.12.1
 ```
 
 ### Docker
 
 ```bash
 # Full image (includes Chromium + fonts)
-docker pull ghcr.io/pithecene-io/quarry:0.12.0
+docker pull ghcr.io/pithecene-io/quarry:0.12.1
 
 # Slim image (no browser — BYO Chromium via --browser-ws-endpoint)
-docker pull ghcr.io/pithecene-io/quarry:0.12.0-slim
+docker pull ghcr.io/pithecene-io/quarry:0.12.1-slim
 ```
 
 See [docs/guides/container.md](docs/guides/container.md) for Docker Compose examples.
