@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.12.1] - 2026-03-08
+
+### Changed
+
+- **Lode**: Upgraded Lode dependency from v0.8.0 to v0.9.0 — adds opt-in CAS retry on snapshot conflict (#215)
+- **Lode**: Write-path datasets now configured with `WithRetryCount(3)` — concurrent runs to the same partition retry up to 3 times with jittered exponential backoff instead of failing terminally (#215, #213)
+- **IPC**: Reduced IPC overhead and eliminated batcher busy-wait spin loop (#205)
+- **Internal**: Extracted `iox` package for deferred-close resource cleanup helpers (#209)
+
+### Fixed
+
+- **CI**: Release workflow preserves existing release notes (#200)
+- **CI**: JSR publish step retries on transient failures (#201)
+
+---
+
 ## [0.12.0] - 2026-02-24
 
 ### Added
@@ -482,7 +498,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.1
 [0.12.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.0
 [0.11.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.11.0
 [0.10.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.10.0
