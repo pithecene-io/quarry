@@ -95,6 +95,7 @@ func NewLodeS3Client(cfg Config, s3cfg S3Config) (*LodeClient, error) {
 		s3Factory,
 		lode.WithHiveLayout("source", "category", "day", "run_id", "event_type"),
 		lode.WithCodec(lode.NewJSONLCodec()),
+		lode.WithRetryCount(3),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Lode dataset: %w", err)

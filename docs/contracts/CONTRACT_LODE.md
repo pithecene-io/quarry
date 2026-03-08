@@ -63,6 +63,20 @@ For Hive-style layouts, the preferred order is:
 
 ---
 
+## Write Retry
+
+Quarry configures Lode with bounded CAS retry (`WithRetryCount(3)`) on the
+write path. On `ErrSnapshotConflict`, the Lode commit is retried up to 3
+times with jittered exponential backoff (10ms base, 2s max).
+
+- Data files are written once; only the manifest re-parent and pointer CAS
+  are retried.
+- Non-conflict errors are fatal (no retry).
+- The `lode_write_retry_total` metric is reserved for future use and
+  remains 0 until Lode exposes a retry callback.
+
+---
+
 ## Record Types
 
 All stored records MUST include a `record_kind` discriminator field.
@@ -158,7 +172,7 @@ Field names use the `_total` suffix to match CONTRACT_METRICS.md naming.
 | `ipc_decode_errors_total`       | int64             | yes      | Executor counter                         |
 | `lode_write_success_total`      | int64             | yes      | Storage counter                          |
 | `lode_write_failure_total`      | int64             | yes      | Storage counter                          |
-| `lode_write_retry_total`        | int64             | yes      | Storage counter (reserved)               |
+| `lode_write_retry_total`        | int64             | yes      | Storage counter (reserved; always 0 until Lode exposes retry observability) |
 | `policy`                        | string            | yes      | Dimension: policy name                   |
 | `executor`                      | string            | yes      | Dimension: executor identity             |
 | `storage_backend`               | string            | yes      | Dimension: storage backend               |

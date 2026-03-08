@@ -69,6 +69,7 @@ func NewLodeClientWithFactory(cfg Config, factory lode.StoreFactory) (*LodeClien
 		factory,
 		lode.WithHiveLayout("source", "category", "day", "run_id", "event_type"),
 		lode.WithCodec(lode.NewJSONLCodec()),
+		lode.WithRetryCount(3),
 	)
 	if err != nil {
 		return nil, WrapInitError(err, cfg.Dataset)
