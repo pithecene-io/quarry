@@ -29,5 +29,7 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err)
   process.stdout.write(message + '\n')
-  process.exit(0)
+  // Use exitCode instead of process.exit() so Node drains stdout before
+  // terminating. process.exit() can race the pipe write on piped stdout.
+  process.exitCode = 0
 }
