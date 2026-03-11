@@ -59,6 +59,28 @@ function isOptionalFunction(
 }
 
 /**
+ * Annotate known import errors with actionable hints.
+ *
+ * Node ESM requires `with { type: 'json' }` on JSON imports, but many
+ * runtimes (Bun, bundlers, tsx) accept bare imports. When this surfaces
+ * as a transitive dependency crash, the raw error is opaque.
+ *
+ * @internal Exported for testing only.
+ */
+export function annotateImportError(message: string): string {
+  if (/needs an import attribute of.*type:\s*["']?json/i.test(message)) {
+    return (
+      message +
+      '\n\nHint: Node ESM requires an import attribute for JSON modules. ' +
+      'Change the import to:\n' +
+      "  import data from './file.json' with { type: 'json' }\n" +
+      'This applies to your script and all of its transitive dependencies.'
+    )
+  }
+  return message
+}
+
+/**
  * Load and validate a script module.
  *
  * @param scriptPath - Path to the script (absolute or relative to cwd)
@@ -77,7 +99,7 @@ export async function loadScript<Job = unknown>(scriptPath: string): Promise<Loa
     module = await import(fileUrl)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    throw new ScriptLoadError(scriptPath, `import failed: ${message}`)
+    throw new ScriptLoadError(scriptPath, `import failed: ${annotateImportError(message)}`)
   }
 
   // Validate module shape

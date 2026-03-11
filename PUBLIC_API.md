@@ -700,6 +700,26 @@ task build
 - **FS backend**: Path must be a writable directory
 - **S3 backend**: Format is `bucket/prefix`, credentials via AWS default chain
 
+### JSON import attribute error
+
+If the executor crashes with:
+```
+Module "file:///path/to/data.json" needs an import attribute of "type: json"
+```
+
+Node ESM requires an explicit import attribute for JSON modules:
+```ts
+// ✗ crashes under Node ESM
+import data from './data.json'
+
+// ✓ correct
+import data from './data.json' with { type: 'json' }
+```
+
+This applies to your script and all of its **transitive dependencies**. Other
+runtimes (Bun, bundlers, `tsx`) may accept bare JSON imports, but the Quarry
+executor runs under Node ESM.
+
 ---
 
 ## Container Usage
