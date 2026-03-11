@@ -11,6 +11,7 @@
  *   0 = loadScript threw expected error (stdout contains message)
  *   1 = loadScript succeeded unexpectedly or missing env
  */
+import { writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadScript } from '../../dist/loader.js'
 
@@ -28,9 +29,10 @@ try {
   process.exit(1)
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err)
-  // Explicitly end stdout and wait for the pipe to flush before exiting.
-  // When spawned with stdio: 'pipe', neither process.exit() nor
-  // process.exitCode reliably drains the write buffer.
-  await new Promise((resolve) => process.stdout.write(message + '\n', resolve))
+  // Synchronous write to fd 1 (stdout). Node's stream-based
+  // process.stdout.write() does not reliably flush to a pipe before
+  // the process exits — even when awaiting the callback or setting
+  // process.exitCode. writeSync bypasses the stream layer entirely.
+  writeSync(1, message + '\n')
   process.exitCode = 0
 }
