@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { loadScript, ScriptLoadError } from '../src/loader.js'
+import { annotateImportError, loadScript, ScriptLoadError } from '../src/loader.js'
 
 /**
  * Loader tests for hook validation of prepare and beforeTerminal hooks.
@@ -111,6 +111,27 @@ describe('loadScript hook validation', () => {
 
       await expect(loadScript(path)).rejects.toThrow(ScriptLoadError)
       await expect(loadScript(path)).rejects.toThrow('beforeTerminal hook is not a function')
+    })
+  })
+
+  describe('import error annotation', () => {
+    it('appends a hint for JSON import attribute errors', () => {
+      const nodeError =
+        'Module "file:///app/packages/shared/src/data.json" needs an import attribute of "type: json"'
+
+      const result = annotateImportError(nodeError)
+
+      expect(result).toContain(nodeError)
+      expect(result).toContain(
+        'Hint: Node ESM requires an import attribute for JSON modules.'
+      )
+      expect(result).toContain("with { type: 'json' }")
+    })
+
+    it('returns unrelated errors unchanged', () => {
+      const other = 'Cannot find module "./missing.ts"'
+
+      expect(annotateImportError(other)).toBe(other)
     })
   })
 
