@@ -28,8 +28,9 @@ try {
   process.exit(1)
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err)
-  process.stdout.write(message + '\n')
-  // Use exitCode instead of process.exit() so Node drains stdout before
-  // terminating. process.exit() can race the pipe write on piped stdout.
+  // Explicitly end stdout and wait for the pipe to flush before exiting.
+  // When spawned with stdio: 'pipe', neither process.exit() nor
+  // process.exitCode reliably drains the write buffer.
+  await new Promise((resolve) => process.stdout.write(message + '\n', resolve))
   process.exitCode = 0
 }
