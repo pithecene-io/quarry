@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.12.2] - 2026-03-11
+
+### Changed
+
+- **Executor**: Annotate bare JSON import errors with actionable hint — Node ESM requires `with { type: 'json' }` but many runtimes accept bare imports; `loadScript()` now appends a clear explanation and fix (#219, #218)
+
+### Fixed
+
+- **Docs**: Sweep stale version references remaining after v0.12.1 (#217)
+
+---
+
 ## [0.12.1] - 2026-03-08
 
 ### Changed
@@ -498,7 +510,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.2
 [0.12.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.1
 [0.12.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.0
 [0.11.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.11.0

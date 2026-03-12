@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quarry Executor Bundle v0.12.1
+// Quarry Executor Bundle v0.12.2
 // This is a bundled version for embedding in the quarry binary.
 // Do not edit directly - regenerate with: task executor:bundle
 
@@ -332,7 +332,7 @@ var CONTRACT_VERSION, TerminalEventError, SinkFailedError, StorageFilenameError,
 var init_dist = __esm({
   "../sdk/dist/index.mjs"() {
     "use strict";
-    CONTRACT_VERSION = "0.12.1";
+    CONTRACT_VERSION = "0.12.2";
     TerminalEventError = class extends Error {
       constructor() {
         super("Cannot emit: a terminal event (run_error or run_complete) has already been emitted");
@@ -2478,6 +2478,12 @@ function isFunction(value) {
 function isOptionalFunction(value) {
   return value === void 0 || isFunction(value);
 }
+function annotateImportError(message) {
+  if (/needs an import attribute of.*type:\s*["']?json/i.test(message)) {
+    return message + "\n\nHint: Node ESM requires an import attribute for JSON modules. Change the import to:\n  import data from './file.json' with { type: 'json' }\nThis applies to your script and all of its transitive dependencies.";
+  }
+  return message;
+}
 async function loadScript(scriptPath) {
   const absolutePath = isAbsolute(scriptPath) ? scriptPath : resolve(process.cwd(), scriptPath);
   const fileUrl = pathToFileURL(absolutePath).href;
@@ -2486,7 +2492,7 @@ async function loadScript(scriptPath) {
     module = await import(fileUrl);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new ScriptLoadError(scriptPath, `import failed: ${message}`);
+    throw new ScriptLoadError(scriptPath, `import failed: ${annotateImportError(message)}`);
   }
   if (module === null || typeof module !== "object") {
     throw new ScriptLoadError(scriptPath, "module is not an object");
