@@ -116,6 +116,26 @@ See `docs/guides/proxy.md` for pool configuration format and selection behavior.
 
 See `docs/guides/integration.md` for adapter usage patterns.
 
+### Event Sinks (Real-Time Event Delivery)
+
+| Flag | Type | Default | Purpose |
+|------|------|---------|---------|
+| `--event-sink` | string (repeatable) | | Event sink type (`lode`, `redis`) |
+| `--event-sink-lode-delivery` | string | `mandatory` | Delivery mode for Lode event sink |
+| `--event-sink-redis-url` | string | | Redis URL (required when `--event-sink` includes `redis`) |
+| `--event-sink-redis-stream-key` | string | `quarry:events` | Redis Streams key |
+| `--event-sink-redis-max-len` | int | `100000` | Max stream length (-1 disables trimming) |
+| `--event-sink-redis-ttl` | duration | `24h` | Stream key expiry (-1 disables) |
+| `--event-sink-redis-timeout` | duration | `2s` | Per-operation timeout |
+| `--event-sink-redis-retries` | int | `2` | Retry attempts |
+| `--event-sink-redis-delivery` | string | `mandatory` | Delivery mode for Redis event sink |
+
+Event sinks receive events in real time during a run (unlike adapters, which
+fire once after a run completes). When no `--event-sink` flags are set, events
+go to Lode only (default behavior). Each sink declares a delivery mode:
+`mandatory` (failure may fail the run) or `best_effort` (failure logged,
+run continues). See `docs/contracts/CONTRACT_INTEGRATION.md` for semantics.
+
 ### Fan-Out (Derived Work Execution)
 
 | Flag | Type | Default | Purpose |
@@ -328,6 +348,21 @@ adapter:
     Authorization: Bearer ${WEBHOOK_TOKEN}
   timeout: 10s
   retries: 3
+
+# Event sinks for real-time event delivery (v0.13.0+).
+# When absent, events go to Lode only (default behavior).
+# events:
+#   sinks:
+#     - type: lode
+#       delivery: mandatory
+#     - type: redis
+#       delivery: best_effort
+#       url: redis://localhost:6379
+#       stream_key: quarry:events
+#       max_len: 100000
+#       ttl: 24h
+#       timeout: 2s
+#       retries: 2
 ```
 
 ### Environment Variable Expansion

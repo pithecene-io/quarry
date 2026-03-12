@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.0] - 2026-03-12
+
+### Added
+
+- **Integration**: Pluggable Redis Streams event sink — publishes every event in real time via `XADD` during run execution, enabling downstream consumers to watch events across all runs on a single stream (#222, #223)
+- **CLI**: `--event-sink` repeatable flag to activate event sinks (`lode`, `redis`); multiple sinks fan out with independent delivery semantics (#223)
+- **CLI**: Redis Streams event sink flags: `--event-sink-redis-url`, `--event-sink-redis-stream-key`, `--event-sink-redis-max-len`, `--event-sink-redis-ttl`, `--event-sink-redis-timeout`, `--event-sink-redis-retries`, `--event-sink-redis-delivery` (#223)
+- **Runtime**: Fan-out event sink with per-sink delivery classification — `mandatory` sinks fail the run on error; `best_effort` sinks log warnings and continue (#223)
+- **Contracts**: CONTRACT_INTEGRATION.md updated with Event Sink Model (scope, delivery semantics, failure behavior, fan-out inheritance) (#223)
+- **Contracts**: CONTRACT_CLI.md updated with event sink flag specifications (#223)
+- **Docs**: Integration guide updated with Redis Streams event sink section, comparison table, and YAML config example (#223)
+- **Docs**: Configuration guide updated with event sink flags and YAML schema (#223)
+
+### Changed
+
+- **Docs**: PUBLIC_API.md updated with event sink flags and downstream integration references (#223)
+
+---
+
 ## [0.12.2] - 2026-03-11
 
 ### Changed
@@ -510,7 +529,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/pithecene-io/quarry/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.2
 [0.12.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.1
 [0.12.0]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.0

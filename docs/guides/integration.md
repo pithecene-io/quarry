@@ -183,6 +183,69 @@ adapter:
   retries: 3
 ```
 
+### Redis Streams Event Sink (v0.13.0+)
+
+Unlike the adapters above, which fire once after a run completes, the Redis
+Streams **event sink** publishes every event in real time as the executor
+produces it. This enables downstream consumers to watch events across all
+runs on a single stream.
+
+```bash
+quarry run \
+  --script ./script.ts \
+  --run-id run-001 \
+  --source my-source \
+  --storage-backend fs \
+  --storage-path ./data \
+  --event-sink lode \
+  --event-sink redis \
+  --event-sink-redis-url redis://localhost:6379
+```
+
+Each event is published via `XADD` with flat fields: `run_id`, `event_type`,
+`seq`, `timestamp`, `source`, `category`, and `payload` (JSON-encoded).
+
+#### Event Sink vs Adapter
+
+| | Event Sink | Adapter |
+|---|---|---|
+| **Timing** | During run (real-time) | After run completes |
+| **Events** | Every event | Single `run_completed` summary |
+| **Failure** | Configurable (`mandatory` or `best_effort`) | Always best-effort |
+| **Transport** | Redis Streams (`XADD`) | Redis Pub/Sub (`PUBLISH`) or HTTP POST |
+| **Flags** | `--event-sink` | `--adapter` |
+
+Both can be used together in the same run.
+
+#### YAML Config Example
+
+```yaml
+events:
+  sinks:
+    - type: lode
+      delivery: mandatory
+    - type: redis
+      delivery: best_effort
+      url: redis://localhost:6379
+      stream_key: quarry:events
+      max_len: 100000
+      ttl: 24h
+```
+
+#### Event Sink Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--event-sink-redis-stream-key` | `quarry:events` | Shared stream key |
+| `--event-sink-redis-max-len` | `100000` | Approximate stream cap (-1 disables) |
+| `--event-sink-redis-ttl` | `24h` | Key expiry (-1 disables) |
+| `--event-sink-redis-timeout` | `2s` | Per-operation timeout |
+| `--event-sink-redis-retries` | `2` | Retry attempts with exponential backoff |
+| `--event-sink-redis-delivery` | `mandatory` | `mandatory` or `best_effort` |
+
+See `docs/contracts/CONTRACT_INTEGRATION.md` §Event Sink Model for full
+semantics.
+
 ### Interim Pattern (v0.4.x)
 
 Before v0.5.0, use a shell wrapper to trigger downstream notifications:
