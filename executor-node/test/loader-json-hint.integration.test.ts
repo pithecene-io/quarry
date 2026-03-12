@@ -9,7 +9,7 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, dirname } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -27,11 +27,9 @@ beforeAll(() => {
   // A script with a bare JSON import (missing `with { type: 'json' }`)
   writeFileSync(
     join(tmpDir, 'bare-import.mjs'),
-    [
-      "import data from './data.json'",
-      'export default async function() { return data }',
-      ''
-    ].join('\n')
+    ["import data from './data.json'", 'export default async function() { return data }', ''].join(
+      '\n'
+    )
   )
 })
 

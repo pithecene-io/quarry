@@ -122,9 +122,7 @@ describe('loadScript hook validation', () => {
       const result = annotateImportError(nodeError)
 
       expect(result).toContain(nodeError)
-      expect(result).toContain(
-        'Hint: Node ESM requires an import attribute for JSON modules.'
-      )
+      expect(result).toContain('Hint: Node ESM requires an import attribute for JSON modules.')
       expect(result).toContain("with { type: 'json' }")
     })
 
