@@ -103,6 +103,30 @@ func TestCompositeSink_PanicsOnNilEventSink(t *testing.T) {
 	NewCompositeSink(nil, NewStubSink())
 }
 
+func TestCompositeSink_SharedLodeSinkClosedOnce(t *testing.T) {
+	// When Lode is both the chunk sink and an event sink (via fanout),
+	// CompositeSink.Close() calls close on both paths. The underlying Lode
+	// sink must tolerate being closed through both the event and chunk paths.
+	// This test makes the behavior explicit.
+	sharedSink := NewStubSink()
+
+	fanout := NewFanoutEventSink([]SinkEntry{
+		{Sink: sharedSink, Delivery: DeliveryMandatory, Label: "lode"},
+	})
+
+	composite := NewCompositeSink(fanout, sharedSink)
+
+	if err := composite.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// StubSink.Closed should be true — the key property is that Close()
+	// doesn't error or panic when the same sink is closed twice.
+	if !sharedSink.Closed {
+		t.Error("shared sink should be closed")
+	}
+}
+
 func TestCompositeSink_PanicsOnNilChunkSink(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {

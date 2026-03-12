@@ -34,6 +34,19 @@ func (s *stubEventSink) Close() error {
 	return nil
 }
 
+// closerFailSink is a test double whose Close returns an error.
+type closerFailSink struct {
+	stubEventSink
+	closeErr error
+}
+
+func (s *closerFailSink) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	return s.closeErr
+}
+
 func testEnvelopes(n int) []*types.EventEnvelope {
 	out := make([]*types.EventEnvelope, n)
 	for i := range n {
@@ -147,6 +160,79 @@ func TestFanout_CloseAll(t *testing.T) {
 	}
 	if !s2.closed {
 		t.Error("s2 not closed")
+	}
+}
+
+func TestFanout_ClosePartialFailure(t *testing.T) {
+	s1 := &stubEventSink{} // close succeeds
+	s2 := &closerFailSink{closeErr: errors.New("close failed")}
+	s3 := &stubEventSink{} // should still be closed
+
+	fanout := NewFanoutEventSink([]SinkEntry{
+		{Sink: s1, Delivery: DeliveryMandatory, Label: "s1"},
+		{Sink: s2, Delivery: DeliveryMandatory, Label: "s2"},
+		{Sink: s3, Delivery: DeliveryMandatory, Label: "s3"},
+	})
+
+	err := fanout.Close()
+	if err == nil {
+		t.Fatal("expected error from partial close failure")
+	}
+	if !s1.closed {
+		t.Error("s1 should still be closed")
+	}
+	if !s3.closed {
+		t.Error("s3 should still be closed despite s2 failure")
+	}
+}
+
+func TestFanout_BestEffortDoesNotFailPolicy(t *testing.T) {
+	// Simulate: Lode mandatory + Redis best-effort through a StrictPolicy.
+	// Redis fails → policy write should still succeed.
+	lodeSink := NewStubSink()
+	redisSink := &stubEventSink{writeErr: errors.New("redis down")}
+
+	fanout := NewFanoutEventSink([]SinkEntry{
+		{Sink: lodeSink, Delivery: DeliveryMandatory, Label: "lode"},
+		{Sink: redisSink, Delivery: DeliveryBestEffort, Label: "redis"},
+	})
+
+	composite := NewCompositeSink(fanout, lodeSink)
+	pol := NewStrictPolicy(composite)
+
+	events := testEnvelopes(2)
+	for _, ev := range events {
+		if err := pol.IngestEvent(t.Context(), ev); err != nil {
+			t.Fatalf("ingest should succeed despite best-effort failure: %v", err)
+		}
+	}
+
+	stats := pol.Stats()
+	if stats.TotalEvents != 2 {
+		t.Errorf("expected 2 events ingested, got %d", stats.TotalEvents)
+	}
+	if stats.EventsPersisted != 2 {
+		t.Errorf("expected 2 events persisted, got %d", stats.EventsPersisted)
+	}
+}
+
+func TestFanout_MandatoryFailureFailsPolicy(t *testing.T) {
+	// Mandatory Redis failure should propagate through the policy.
+	lodeSink := NewStubSink()
+	redisSink := &stubEventSink{writeErr: errors.New("redis down")}
+
+	fanout := NewFanoutEventSink([]SinkEntry{
+		{Sink: lodeSink, Delivery: DeliveryMandatory, Label: "lode"},
+		{Sink: redisSink, Delivery: DeliveryMandatory, Label: "redis"},
+	})
+
+	composite := NewCompositeSink(fanout, lodeSink)
+	pol := NewStrictPolicy(composite)
+
+	ev := testEnvelopes(1)[0]
+	err := pol.IngestEvent(t.Context(), ev)
+	if err == nil {
+		t.Fatal("expected policy failure when mandatory sink fails")
 	}
 }
 

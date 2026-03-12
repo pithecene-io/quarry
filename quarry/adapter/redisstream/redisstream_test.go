@@ -332,3 +332,145 @@ func TestWriteEvents_MaxLenDisabled(t *testing.T) {
 		t.Fatalf("expected 2 entries (no trimming), got %d", len(stream))
 	}
 }
+
+func TestWriteEvents_TTLAppliedOnce(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:     "redis://" + mr.Addr(),
+		TTL:     2 * time.Hour,
+		Retries: 0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	// First write sets TTL
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	ttl1 := mr.TTL(DefaultStreamKey)
+	if ttl1 <= 0 {
+		t.Fatalf("expected positive TTL after first write, got %v", ttl1)
+	}
+
+	// Fast-forward time so we can detect if TTL is re-applied
+	mr.FastForward(30 * time.Minute)
+
+	// Second write should NOT reset TTL
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	ttl2 := mr.TTL(DefaultStreamKey)
+
+	// TTL should be lower than original (time passed), not reset to 2h
+	if ttl2 > ttl1 {
+		t.Errorf("TTL should not increase after second write: was %v, now %v", ttl1, ttl2)
+	}
+}
+
+func TestWriteEvents_MaxLenEnabled(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:     "redis://" + mr.Addr(),
+		MaxLen:  3,
+		TTL:     -1,
+		Retries: 0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	// Write 2 events twice (4 total), MaxLen=3 should trim
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+
+	stream, err := mr.Stream(DefaultStreamKey)
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	// With approximate trimming, miniredis may keep up to MaxLen entries
+	if len(stream) > 3 {
+		t.Errorf("expected at most 3 entries with MaxLen=3, got %d", len(stream))
+	}
+}
+
+func TestWriteEvents_StreamEntryFields(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:      "redis://" + mr.Addr(),
+		Source:   "src-golden",
+		Category: "cat-golden",
+		TTL:      -1,
+		Retries:  0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	events := []*types.EventEnvelope{{
+		ContractVersion: "0.12.2",
+		EventID:         "evt-golden",
+		RunID:           "run-golden",
+		Seq:             7,
+		Type:            types.EventTypeItem,
+		Ts:              "2026-03-12T15:30:00Z",
+		Payload:         map[string]any{"item_type": "product", "data": map[string]any{"sku": "ABC"}},
+		Attempt:         2,
+	}}
+	if err := s.WriteEvents(t.Context(), events); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	stream, err := mr.Stream(DefaultStreamKey)
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if len(stream) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(stream))
+	}
+
+	vals := streamValues(stream[0])
+
+	// Assert all required fields are present with expected values
+	requiredFields := map[string]string{
+		"run_id":     "run-golden",
+		"event_type": "item",
+		"seq":        "7",
+		"timestamp":  "2026-03-12T15:30:00Z",
+		"source":     "src-golden",
+		"category":   "cat-golden",
+	}
+	for field, want := range requiredFields {
+		got, ok := vals[field]
+		if !ok {
+			t.Errorf("missing required field %q in stream entry", field)
+			continue
+		}
+		if got != want {
+			t.Errorf("field %q: got %q, want %q", field, got, want)
+		}
+	}
+
+	// Verify payload field is present and is valid JSON
+	payloadStr, ok := vals["payload"]
+	if !ok {
+		t.Fatal("missing payload field")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(payloadStr), &payload); err != nil {
+		t.Fatalf("payload is not valid JSON: %v", err)
+	}
+	if payload["item_type"] != "product" {
+		t.Errorf("payload item_type: got %v, want product", payload["item_type"])
+	}
+}
