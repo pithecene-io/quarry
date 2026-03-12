@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/adapter/redisstream"
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
 	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/lode"
@@ -1885,6 +1886,37 @@ func TestParseEventSinkFromConfig_InvalidDeliveryRejected(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid delivery mode")
+	}
+}
+
+func TestParseEventSinkFromConfig_RedisRetriesDefault(t *testing.T) {
+	// When retries is omitted from config, the default (2) should be applied,
+	// not the Go zero value (0 = no retries).
+	choices, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis", URL: "redis://localhost:6379"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(choices) != 1 {
+		t.Fatalf("expected 1 choice, got %d", len(choices))
+	}
+	if choices[0].retries != redisstream.DefaultRetries {
+		t.Errorf("expected default retries %d, got %d", redisstream.DefaultRetries, choices[0].retries)
+	}
+}
+
+func TestParseEventSinkFromConfig_RedisRetriesExplicitZero(t *testing.T) {
+	// Explicit retries: 0 means "no retries" — must not be overridden to default.
+	zero := 0
+	choices, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis", URL: "redis://localhost:6379", Retries: &zero},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if choices[0].retries != 0 {
+		t.Errorf("expected 0 retries, got %d", choices[0].retries)
 	}
 }
 

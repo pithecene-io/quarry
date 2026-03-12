@@ -1428,26 +1428,14 @@ Quarry could not locate the executor. To fix:
 }
 
 func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector, eventSinkConfigs []eventSinkChoice) (policy.Policy, lode.Client, lode.FileWriter, error) {
-	// Build storage sink (always needed for artifact chunks and optionally for events)
 	lodeSink, client, fw, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
 
-	// Determine the effective sink: if event sink config is present, wrap with CompositeSink.
-	// Otherwise, use the Lode sink directly (backward compatible).
-	var sink policy.Sink
-
-	if len(eventSinkConfigs) == 0 {
-		// No event sink config → Lode handles everything (default behavior)
-		sink = lodeSink
-	} else {
-		entries, buildErr := buildEventSinkEntries(eventSinkConfigs, lodeSink, source, category)
-		if buildErr != nil {
-			return nil, nil, nil, fmt.Errorf("failed to create event sinks: %w", buildErr)
-		}
-		fanout := policy.NewFanoutEventSink(entries)
-		sink = policy.NewCompositeSink(fanout, lodeSink)
+	sink, err := buildEffectiveSink(eventSinkConfigs, lodeSink, source, category)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	switch choice.name {
@@ -1624,52 +1612,55 @@ func parseEventSinkConfig(c *cli.Context, cfg *quarryconfig.Config) ([]eventSink
 
 func parseEventSinkFromCLI(c *cli.Context, sinkTypes []string) ([]eventSinkChoice, error) {
 	var choices []eventSinkChoice
-	hasRedis := false
-	hasLode := false
+	seen := make(map[string]bool)
 
 	for _, st := range sinkTypes {
-		switch st {
-		case "lode":
-			if hasLode {
-				return nil, errors.New("duplicate event sink type: lode")
-			}
-			hasLode = true
-			delivery, err := parseDeliveryMode(c.String("event-sink-lode-delivery"))
-			if err != nil {
-				return nil, fmt.Errorf("event-sink-lode-delivery: %w", err)
-			}
-			choices = append(choices, eventSinkChoice{
-				sinkType: "lode",
-				delivery: delivery,
-			})
-		case "redis":
-			if hasRedis {
-				return nil, errors.New("duplicate event sink type: redis")
-			}
-			hasRedis = true
-			url := c.String("event-sink-redis-url")
-			if url == "" {
-				return nil, errors.New("--event-sink-redis-url is required when --event-sink includes redis")
-			}
-			delivery, err := parseDeliveryMode(c.String("event-sink-redis-delivery"))
-			if err != nil {
-				return nil, fmt.Errorf("event-sink-redis-delivery: %w", err)
-			}
-			choices = append(choices, eventSinkChoice{
-				sinkType:  "redis",
-				delivery:  delivery,
-				url:       url,
-				streamKey: c.String("event-sink-redis-stream-key"),
-				maxLen:    c.Int64("event-sink-redis-max-len"),
-				ttl:       c.Duration("event-sink-redis-ttl"),
-				timeout:   c.Duration("event-sink-redis-timeout"),
-				retries:   c.Int("event-sink-redis-retries"),
-			})
-		default:
-			return nil, fmt.Errorf("unknown event sink type: %q (valid: lode, redis)", st)
+		if seen[st] {
+			return nil, fmt.Errorf("duplicate event sink type: %s", st)
 		}
+		seen[st] = true
+
+		ch, err := parseSingleCLISink(c, st)
+		if err != nil {
+			return nil, err
+		}
+		choices = append(choices, ch)
 	}
 	return choices, nil
+}
+
+func parseSingleCLISink(c *cli.Context, sinkType string) (eventSinkChoice, error) {
+	switch sinkType {
+	case "lode":
+		delivery, err := parseDeliveryMode(c.String("event-sink-lode-delivery"))
+		if err != nil {
+			return eventSinkChoice{}, fmt.Errorf("event-sink-lode-delivery: %w", err)
+		}
+		return eventSinkChoice{sinkType: "lode", delivery: delivery}, nil
+
+	case "redis":
+		url := c.String("event-sink-redis-url")
+		if url == "" {
+			return eventSinkChoice{}, errors.New("--event-sink-redis-url is required when --event-sink includes redis")
+		}
+		delivery, err := parseDeliveryMode(c.String("event-sink-redis-delivery"))
+		if err != nil {
+			return eventSinkChoice{}, fmt.Errorf("event-sink-redis-delivery: %w", err)
+		}
+		return eventSinkChoice{
+			sinkType:  "redis",
+			delivery:  delivery,
+			url:       url,
+			streamKey: c.String("event-sink-redis-stream-key"),
+			maxLen:    c.Int64("event-sink-redis-max-len"),
+			ttl:       c.Duration("event-sink-redis-ttl"),
+			timeout:   c.Duration("event-sink-redis-timeout"),
+			retries:   c.Int("event-sink-redis-retries"),
+		}, nil
+
+	default:
+		return eventSinkChoice{}, fmt.Errorf("unknown event sink type: %q (valid: lode, redis)", sinkType)
+	}
 }
 
 func parseEventSinkFromConfig(sinks []quarryconfig.EventSinkConfig) ([]eventSinkChoice, error) {
@@ -1681,41 +1672,52 @@ func parseEventSinkFromConfig(sinks []quarryconfig.EventSinkConfig) ([]eventSink
 		}
 		seen[s.Type] = true
 
-		delivery, err := parseDeliveryMode(s.Delivery)
+		ch, err := parseSingleConfigSink(s)
 		if err != nil {
-			return nil, fmt.Errorf("event sink %q delivery: %w", s.Type, err)
+			return nil, err
 		}
-
-		switch s.Type {
-		case "lode":
-			choices = append(choices, eventSinkChoice{
-				sinkType: "lode",
-				delivery: delivery,
-			})
-		case "redis":
-			if s.URL == "" {
-				return nil, errors.New("event sink redis requires a url")
-			}
-			ch := eventSinkChoice{
-				sinkType:  "redis",
-				delivery:  delivery,
-				url:       s.URL,
-				streamKey: s.StreamKey,
-				timeout:   s.Timeout.Duration,
-				ttl:       s.TTL.Duration,
-			}
-			if s.MaxLen != nil {
-				ch.maxLen = *s.MaxLen
-			}
-			if s.Retries != nil {
-				ch.retries = *s.Retries
-			}
-			choices = append(choices, ch)
-		default:
-			return nil, fmt.Errorf("unknown event sink type: %q", s.Type)
-		}
+		choices = append(choices, ch)
 	}
 	return choices, nil
+}
+
+func parseSingleConfigSink(s quarryconfig.EventSinkConfig) (eventSinkChoice, error) {
+	delivery, err := parseDeliveryMode(s.Delivery)
+	if err != nil {
+		return eventSinkChoice{}, fmt.Errorf("event sink %q delivery: %w", s.Type, err)
+	}
+
+	switch s.Type {
+	case "lode":
+		return eventSinkChoice{sinkType: "lode", delivery: delivery}, nil
+
+	case "redis":
+		if s.URL == "" {
+			return eventSinkChoice{}, errors.New("event sink redis requires a url")
+		}
+		ch := eventSinkChoice{
+			sinkType:  "redis",
+			delivery:  delivery,
+			url:       s.URL,
+			streamKey: s.StreamKey,
+			timeout:   s.Timeout.Duration,
+			ttl:       s.TTL.Duration,
+		}
+		if s.MaxLen != nil {
+			ch.maxLen = *s.MaxLen
+		}
+		// Nil means "not specified" → apply default. Zero is a valid explicit
+		// value meaning "no retries", so the pointer distinguishes the two.
+		if s.Retries != nil {
+			ch.retries = *s.Retries
+		} else {
+			ch.retries = redisstream.DefaultRetries
+		}
+		return ch, nil
+
+	default:
+		return eventSinkChoice{}, fmt.Errorf("unknown event sink type: %q", s.Type)
+	}
 }
 
 func parseDeliveryMode(s string) (policy.DeliveryMode, error) {
@@ -1729,6 +1731,21 @@ func parseDeliveryMode(s string) (policy.DeliveryMode, error) {
 	}
 }
 
+// buildEffectiveSink wraps the Lode sink with fan-out and composite routing
+// when event sinks are configured. Returns lodeSink unchanged when no event
+// sink config is present (backward compatible default).
+func buildEffectiveSink(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) (policy.Sink, error) {
+	if len(configs) == 0 {
+		return lodeSink, nil
+	}
+	entries, err := buildEventSinkEntries(configs, lodeSink, source, category)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create event sinks: %w", err)
+	}
+	fanout := policy.NewFanoutEventSink(entries)
+	return policy.NewCompositeSink(fanout, lodeSink), nil
+}
+
 // buildEventSinkEntries creates EventSink instances from parsed config.
 // If the config includes a "lode" entry, the provided lodeSink is reused
 // (no duplicate Lode client).
@@ -1738,7 +1755,8 @@ func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, sour
 	for _, cfg := range configs {
 		switch cfg.sinkType {
 		case "lode":
-			// Reuse the existing Lode sink (which also handles chunks)
+			// Safe: lode.Sink and lode.InstrumentedSink both implement EventSink
+			// (verified by compile-time assertions in lode/sink.go).
 			entries = append(entries, policy.SinkEntry{
 				Sink:     lodeSink.(policy.EventSink),
 				Delivery: cfg.delivery,
@@ -1763,6 +1781,9 @@ func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, sour
 				Delivery: cfg.delivery,
 				Label:    "redis",
 			})
+		default:
+			// Unreachable: parse functions validate sink types upstream.
+			return nil, fmt.Errorf("unknown event sink type in build: %q", cfg.sinkType)
 		}
 	}
 

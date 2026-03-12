@@ -23,7 +23,7 @@ type SinkEntry struct {
 //   - DeliveryMandatory: write failure propagates to the caller.
 //   - DeliveryBestEffort: write failure is logged, not propagated.
 //
-// If multiple mandatory sinks fail, the first error is returned.
+// If multiple mandatory sinks fail, all errors are joined and returned.
 type FanoutEventSink struct {
 	sinks []SinkEntry
 }
