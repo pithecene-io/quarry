@@ -18,6 +18,20 @@ type SinkEntry struct {
 	Label string
 }
 
+// classifyError returns nil if the error should be swallowed (best-effort),
+// or the original error if it should propagate (mandatory).
+// Best-effort failures are logged with the sink label.
+func (e SinkEntry) classifyError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if e.Delivery == DeliveryBestEffort {
+		log.Printf("Warning: best-effort event sink %q: %v", e.Label, err)
+		return nil
+	}
+	return err
+}
+
 // FanoutEventSink dispatches WriteEvents to multiple EventSink implementations
 // concurrently. Delivery mode per sink controls error propagation:
 //   - DeliveryMandatory: write failure propagates to the caller.
@@ -51,15 +65,7 @@ func (f *FanoutEventSink) WriteEvents(ctx context.Context, events []*types.Event
 // writeSingle is the fast path for a single sink — no goroutines.
 func (f *FanoutEventSink) writeSingle(ctx context.Context, events []*types.EventEnvelope) error {
 	entry := f.sinks[0]
-	err := entry.Sink.WriteEvents(ctx, events)
-	if err == nil {
-		return nil
-	}
-	if entry.Delivery == DeliveryBestEffort {
-		log.Printf("Warning: best-effort event sink %q: %v", entry.Label, err)
-		return nil
-	}
-	return err
+	return entry.classifyError(entry.Sink.WriteEvents(ctx, events))
 }
 
 // writeFanout dispatches to multiple sinks concurrently.
@@ -83,15 +89,9 @@ func (f *FanoutEventSink) writeFanout(ctx context.Context, events []*types.Event
 
 	var mandatoryErrs []string
 	for i, r := range results {
-		if r.err == nil {
-			continue
+		if classified := f.sinks[i].classifyError(r.err); classified != nil {
+			mandatoryErrs = append(mandatoryErrs, fmt.Sprintf("%s: %v", f.sinks[i].Label, classified))
 		}
-		entry := f.sinks[i]
-		if entry.Delivery == DeliveryBestEffort {
-			log.Printf("Warning: best-effort event sink %q: %v", entry.Label, r.err)
-			continue
-		}
-		mandatoryErrs = append(mandatoryErrs, fmt.Sprintf("%s: %v", entry.Label, r.err))
 	}
 
 	if len(mandatoryErrs) == 0 {

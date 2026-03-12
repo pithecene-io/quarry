@@ -141,35 +141,40 @@ func (s *Sink) WriteEvents(ctx context.Context, events []*types.EventEnvelope) e
 // xaddBatch pipelines XADD commands for the event batch.
 func (s *Sink) xaddBatch(ctx context.Context, events []*types.EventEnvelope) error {
 	pipe := s.client.Pipeline()
-
 	for _, ev := range events {
-		payload, err := json.Marshal(ev.Payload)
+		args, err := s.buildXAddArgs(ev)
 		if err != nil {
-			return fmt.Errorf("redis stream: marshal payload: %w", err)
-		}
-
-		args := &goredis.XAddArgs{
-			Stream: s.config.StreamKey,
-			Values: map[string]any{
-				"run_id":     ev.RunID,
-				"event_type": string(ev.Type),
-				"seq":        strconv.FormatInt(ev.Seq, 10),
-				"timestamp":  ev.Ts,
-				"payload":    string(payload),
-				"source":     s.config.Source,
-				"category":   s.config.Category,
-			},
-		}
-		// MaxLen > 0 enables approximate trimming; -1 disables it.
-		if s.config.MaxLen > 0 {
-			args.MaxLen = s.config.MaxLen
-			args.Approx = true
+			return err
 		}
 		pipe.XAdd(ctx, args)
 	}
-
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// buildXAddArgs constructs the XADD arguments for a single event envelope.
+func (s *Sink) buildXAddArgs(ev *types.EventEnvelope) (*goredis.XAddArgs, error) {
+	payload, err := json.Marshal(ev.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("redis stream: marshal payload: %w", err)
+	}
+	args := &goredis.XAddArgs{
+		Stream: s.config.StreamKey,
+		Values: map[string]any{
+			"run_id":     ev.RunID,
+			"event_type": string(ev.Type),
+			"seq":        strconv.FormatInt(ev.Seq, 10),
+			"timestamp":  ev.Ts,
+			"payload":    string(payload),
+			"source":     s.config.Source,
+			"category":   s.config.Category,
+		},
+	}
+	if s.config.MaxLen > 0 {
+		args.MaxLen = s.config.MaxLen
+		args.Approx = true
+	}
+	return args, nil
 }
 
 // applyTTLOnce sets EXPIRE on the stream key exactly once per sink lifetime.

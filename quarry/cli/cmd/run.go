@@ -1746,47 +1746,56 @@ func buildEffectiveSink(configs []eventSinkChoice, lodeSink policy.Sink, source,
 	return policy.NewCompositeSink(fanout, lodeSink), nil
 }
 
-// buildEventSinkEntries creates EventSink instances from parsed config.
-// If the config includes a "lode" entry, the provided lodeSink is reused
-// (no duplicate Lode client).
-func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) ([]policy.SinkEntry, error) {
-	var entries []policy.SinkEntry
+// buildEntry constructs a SinkEntry from the parsed config.
+// lodeSink is reused when sinkType is "lode" (no duplicate Lode client).
+// source and category are injected into Redis stream entries.
+func (esc eventSinkChoice) buildEntry(lodeSink policy.Sink, source, category string) (policy.SinkEntry, error) {
+	switch esc.sinkType {
+	case "lode":
+		// Safe: lode.Sink and lode.InstrumentedSink both implement EventSink
+		// (verified by compile-time assertions in lode/sink.go).
+		return policy.SinkEntry{
+			Sink:     lodeSink.(policy.EventSink),
+			Delivery: esc.delivery,
+			Label:    "lode",
+		}, nil
 
-	for _, cfg := range configs {
-		switch cfg.sinkType {
-		case "lode":
-			// Safe: lode.Sink and lode.InstrumentedSink both implement EventSink
-			// (verified by compile-time assertions in lode/sink.go).
-			entries = append(entries, policy.SinkEntry{
-				Sink:     lodeSink.(policy.EventSink),
-				Delivery: cfg.delivery,
-				Label:    "lode",
-			})
-		case "redis":
-			rs, err := redisstream.New(redisstream.Config{
-				URL:       cfg.url,
-				StreamKey: cfg.streamKey,
-				MaxLen:    cfg.maxLen,
-				TTL:       cfg.ttl,
-				Timeout:   cfg.timeout,
-				Retries:   cfg.retries,
-				Source:    source,
-				Category:  category,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("redis event sink: %w", err)
-			}
-			entries = append(entries, policy.SinkEntry{
-				Sink:     rs,
-				Delivery: cfg.delivery,
-				Label:    "redis",
-			})
-		default:
-			// Unreachable: parse functions validate sink types upstream.
-			return nil, fmt.Errorf("unknown event sink type in build: %q", cfg.sinkType)
+	case "redis":
+		rs, err := redisstream.New(redisstream.Config{
+			URL:       esc.url,
+			StreamKey: esc.streamKey,
+			MaxLen:    esc.maxLen,
+			TTL:       esc.ttl,
+			Timeout:   esc.timeout,
+			Retries:   esc.retries,
+			Source:    source,
+			Category:  category,
+		})
+		if err != nil {
+			return policy.SinkEntry{}, fmt.Errorf("redis event sink: %w", err)
 		}
-	}
+		return policy.SinkEntry{
+			Sink:     rs,
+			Delivery: esc.delivery,
+			Label:    "redis",
+		}, nil
 
+	default:
+		// Unreachable: parse functions validate sink types upstream.
+		return policy.SinkEntry{}, fmt.Errorf("unknown event sink type in build: %q", esc.sinkType)
+	}
+}
+
+// buildEventSinkEntries creates SinkEntry instances from parsed configs.
+func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) ([]policy.SinkEntry, error) {
+	entries := make([]policy.SinkEntry, 0, len(configs))
+	for _, cfg := range configs {
+		entry, err := cfg.buildEntry(lodeSink, source, category)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
 	return entries, nil
 }
 
