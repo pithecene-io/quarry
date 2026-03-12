@@ -1674,7 +1674,13 @@ func parseEventSinkFromCLI(c *cli.Context, sinkTypes []string) ([]eventSinkChoic
 
 func parseEventSinkFromConfig(sinks []quarryconfig.EventSinkConfig) ([]eventSinkChoice, error) {
 	var choices []eventSinkChoice
+	seen := make(map[string]bool)
 	for _, s := range sinks {
+		if seen[s.Type] {
+			return nil, fmt.Errorf("duplicate event sink type: %s", s.Type)
+		}
+		seen[s.Type] = true
+
 		delivery, err := parseDeliveryMode(s.Delivery)
 		if err != nil {
 			return nil, fmt.Errorf("event sink %q delivery: %w", s.Type, err)
