@@ -12,27 +12,28 @@ import (
 // All values are optional and act as defaults for quarry run flags.
 // CLI flags always override config values.
 type Config struct {
-	Source   string                       `yaml:"source"`
-	Category string                      `yaml:"category"`
-	Executor          string                      `yaml:"executor"`
-	BrowserWSEndpoint string                      `yaml:"browser_ws_endpoint"`
-	NoBrowserReuse    bool                        `yaml:"no_browser_reuse"`
-	ResolveFrom       string                      `yaml:"resolve_from"`
-	Storage           StorageConfig               `yaml:"storage"`
-	Policy   PolicyConfig                `yaml:"policy"`
-	Proxies  map[string]ProxyPoolConfig  `yaml:"proxies"`
-	Proxy    ProxySelection              `yaml:"proxy"`
-	Adapter  AdapterConfig               `yaml:"adapter"`
+	Source            string                     `yaml:"source"`
+	Category          string                     `yaml:"category"`
+	Executor          string                     `yaml:"executor"`
+	BrowserWSEndpoint string                     `yaml:"browser_ws_endpoint"`
+	NoBrowserReuse    bool                       `yaml:"no_browser_reuse"`
+	ResolveFrom       string                     `yaml:"resolve_from"`
+	Storage           StorageConfig              `yaml:"storage"`
+	Policy            PolicyConfig               `yaml:"policy"`
+	Proxies           map[string]ProxyPoolConfig `yaml:"proxies"`
+	Proxy             ProxySelection             `yaml:"proxy"`
+	Adapter           AdapterConfig              `yaml:"adapter"`
+	Events            EventSinksConfig           `yaml:"events"`
 }
 
 // StorageConfig holds storage defaults from the config file.
 type StorageConfig struct {
-	Dataset    string `yaml:"dataset"`
-	Backend    string `yaml:"backend"`
-	Path       string `yaml:"path"`
-	Region     string `yaml:"region"`
-	Endpoint   string `yaml:"endpoint"`
-	S3PathStyle bool  `yaml:"s3_path_style"`
+	Dataset     string `yaml:"dataset"`
+	Backend     string `yaml:"backend"`
+	Path        string `yaml:"path"`
+	Region      string `yaml:"region"`
+	Endpoint    string `yaml:"endpoint"`
+	S3PathStyle bool   `yaml:"s3_path_style"`
 }
 
 // PolicyConfig holds policy defaults from the config file.
@@ -68,6 +69,32 @@ type AdapterConfig struct {
 	Headers map[string]string `yaml:"headers,omitempty"`
 	Timeout Duration          `yaml:"timeout,omitempty"`
 	Retries *int              `yaml:"retries,omitempty"`
+}
+
+// EventSinksConfig holds the optional events.sinks configuration.
+// When absent, defaults to a single Lode sink (backward compatible).
+type EventSinksConfig struct {
+	Sinks []EventSinkConfig `yaml:"sinks"`
+}
+
+// EventSinkConfig configures a single event sink.
+type EventSinkConfig struct {
+	// Type is the sink type: "lode" or "redis".
+	Type string `yaml:"type"`
+	// Delivery controls failure handling: "mandatory" (default) or "best_effort".
+	Delivery string `yaml:"delivery,omitempty"`
+	// URL is the Redis connection URL (required for type=redis).
+	URL string `yaml:"url,omitempty"`
+	// StreamKey is the Redis Stream key (default: quarry:events, type=redis only).
+	StreamKey string `yaml:"stream_key,omitempty"`
+	// MaxLen is the approximate MAXLEN for stream trimming (type=redis only).
+	MaxLen *int64 `yaml:"max_len,omitempty"`
+	// TTL is the stream key expiry (type=redis only).
+	TTL Duration `yaml:"ttl,omitempty"`
+	// Timeout is the per-write timeout (type=redis only).
+	Timeout Duration `yaml:"timeout,omitempty"`
+	// Retries is the number of retry attempts (type=redis only).
+	Retries *int `yaml:"retries,omitempty"`
 }
 
 // Duration wraps time.Duration for YAML string parsing (e.g. "10s", "5m").

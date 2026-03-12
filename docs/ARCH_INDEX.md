@@ -175,6 +175,7 @@ Go module root. Contains runtime, CLI, and core types.
 
 - `adapter/` — event-bus adapter boundary for publishing run completion notifications
 - `adapter/redis/` — Redis pub/sub adapter with exponential backoff retry
+- `adapter/redisstream/` — Redis Streams event sink for real-time event publishing during runs
 - `adapter/webhook/` — HTTP POST adapter with retryable and non-retriable error handling
 
 ### quarry/iox/

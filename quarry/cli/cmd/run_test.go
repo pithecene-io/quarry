@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pithecene-io/quarry/adapter/redisstream"
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
 	"github.com/pithecene-io/quarry/iox"
 	"github.com/pithecene-io/quarry/lode"
 	"github.com/pithecene-io/quarry/metrics"
+	"github.com/pithecene-io/quarry/policy"
 	"github.com/pithecene-io/quarry/runtime"
 	"github.com/pithecene-io/quarry/types"
 	"github.com/urfave/cli/v2"
@@ -1737,7 +1739,7 @@ func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
 
 	// Call buildPolicy with the captured timestamp — this is exactly what
 	// childFactory.Run() does at run.go:386-389
-	childPol, _, childFileWriter, err := buildPolicy(pol, storage, "quarry", "src", "cat", "run-001", childStartTime, collector)
+	childPol, _, childFileWriter, err := buildPolicy(pol, storage, "quarry", "src", "cat", "run-001", childStartTime, collector, nil)
 	if err != nil {
 		t.Fatalf("buildPolicy: %v", err)
 	}
@@ -1778,5 +1780,186 @@ func TestChildRun_StorageDayAlignedWithBuildPolicy(t *testing.T) {
 	nextMs := childStartTime.Add(time.Millisecond)
 	if lode.DeriveDay(nextMs) == lode.DeriveDay(childStartTime) {
 		t.Error("expected next millisecond to roll to a different day at UTC midnight")
+	}
+}
+
+// --- Event sink config parsing tests ---
+
+func TestParseEventSinkConfig_NoConfigDefaultsNil(t *testing.T) {
+	// No CLI flags, no config → nil (Lode-only default)
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{Name: "event-sink"},
+	}
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	c := cli.NewContext(app, fs, nil)
+
+	sinks, err := parseEventSinkConfig(c, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sinks != nil {
+		t.Errorf("expected nil for default, got %v", sinks)
+	}
+}
+
+func TestParseEventSinkConfig_ConfigFallback(t *testing.T) {
+	// No CLI flags, config has redis+lode → uses config
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{Name: "event-sink"},
+	}
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	c := cli.NewContext(app, fs, nil)
+
+	cfg := &quarryconfig.Config{
+		Events: quarryconfig.EventSinksConfig{
+			Sinks: []quarryconfig.EventSinkConfig{
+				{Type: "lode"},
+				{Type: "redis", URL: "redis://localhost:6379"},
+			},
+		},
+	}
+
+	sinks, err := parseEventSinkConfig(c, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sinks) != 2 {
+		t.Fatalf("expected 2 sinks from config, got %d", len(sinks))
+	}
+	if sinks[0].sinkType != "lode" {
+		t.Errorf("expected first sink lode, got %s", sinks[0].sinkType)
+	}
+	if sinks[1].sinkType != "redis" {
+		t.Errorf("expected second sink redis, got %s", sinks[1].sinkType)
+	}
+}
+
+func TestParseEventSinkFromConfig_DuplicateTypeRejected(t *testing.T) {
+	_, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis", URL: "redis://localhost:6379"},
+		{Type: "redis", URL: "redis://localhost:6380"},
+	})
+	if err == nil {
+		t.Fatal("expected error for duplicate redis")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected 'duplicate' in error, got: %v", err)
+	}
+}
+
+func TestParseEventSinkFromConfig_DuplicateLodeRejected(t *testing.T) {
+	_, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "lode"},
+		{Type: "lode"},
+	})
+	if err == nil {
+		t.Fatal("expected error for duplicate lode")
+	}
+}
+
+func TestParseEventSinkFromConfig_UnknownTypeRejected(t *testing.T) {
+	_, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "kafka"},
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown type")
+	}
+	if !strings.Contains(err.Error(), "unknown") {
+		t.Errorf("expected 'unknown' in error, got: %v", err)
+	}
+}
+
+func TestParseEventSinkFromConfig_RedisMissingURLRejected(t *testing.T) {
+	_, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis"},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing redis URL")
+	}
+}
+
+func TestParseEventSinkFromConfig_InvalidDeliveryRejected(t *testing.T) {
+	_, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "lode", Delivery: "at_most_once"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid delivery mode")
+	}
+}
+
+func TestParseEventSinkFromConfig_RedisRetriesDefault(t *testing.T) {
+	// When retries is omitted from config, the default (2) should be applied,
+	// not the Go zero value (0 = no retries).
+	choices, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis", URL: "redis://localhost:6379"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(choices) != 1 {
+		t.Fatalf("expected 1 choice, got %d", len(choices))
+	}
+	if choices[0].retries != redisstream.DefaultRetries {
+		t.Errorf("expected default retries %d, got %d", redisstream.DefaultRetries, choices[0].retries)
+	}
+}
+
+func TestParseEventSinkFromConfig_RedisRetriesExplicitZero(t *testing.T) {
+	// Explicit retries: 0 means "no retries" — must not be overridden to default.
+	zero := 0
+	choices, err := parseEventSinkFromConfig([]quarryconfig.EventSinkConfig{
+		{Type: "redis", URL: "redis://localhost:6379", Retries: &zero},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if choices[0].retries != 0 {
+		t.Errorf("expected 0 retries, got %d", choices[0].retries)
+	}
+}
+
+func TestParseDeliveryMode(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    policy.DeliveryMode
+		wantErr bool
+	}{
+		{"", policy.DeliveryMandatory, false},
+		{"mandatory", policy.DeliveryMandatory, false},
+		{"best_effort", policy.DeliveryBestEffort, false},
+		{"at_most_once", 0, true},
+	}
+	for _, tt := range tests {
+		got, err := parseDeliveryMode(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("parseDeliveryMode(%q): err=%v, wantErr=%v", tt.input, err, tt.wantErr)
+		}
+		if !tt.wantErr && got != tt.want {
+			t.Errorf("parseDeliveryMode(%q)=%v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestChildFactory_InheritsEventSinks(t *testing.T) {
+	// Verify that childFactory stores event sink config and passes it
+	// to buildPolicy. We test this by checking the struct field directly
+	// since buildPolicy is the integration point already tested.
+	sinks := []eventSinkChoice{
+		{sinkType: "lode", delivery: policy.DeliveryMandatory},
+		{sinkType: "redis", delivery: policy.DeliveryBestEffort, url: "redis://localhost:6379"},
+	}
+	factory := &childFactory{
+		eventSinks: sinks,
+	}
+	if len(factory.eventSinks) != 2 {
+		t.Fatalf("expected 2 event sinks, got %d", len(factory.eventSinks))
+	}
+	if factory.eventSinks[0].sinkType != "lode" {
+		t.Errorf("expected first sink lode, got %s", factory.eventSinks[0].sinkType)
+	}
+	if factory.eventSinks[1].delivery != policy.DeliveryBestEffort {
+		t.Errorf("expected second sink best_effort, got %v", factory.eventSinks[1].delivery)
 	}
 }

@@ -427,6 +427,66 @@ func TestLoad_BrowserWSEndpointOmitted(t *testing.T) {
 	assertEqual(t, "browser_ws_endpoint", cfg.BrowserWSEndpoint, "")
 }
 
+func TestLoad_EventSinksConfig(t *testing.T) {
+	yaml := `events:
+  sinks:
+    - type: lode
+      delivery: mandatory
+    - type: redis
+      url: redis://localhost:6379
+      stream_key: myapp:events
+      delivery: best_effort
+      max_len: 50000
+      ttl: 12h
+      timeout: 3s
+      retries: 1
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if len(cfg.Events.Sinks) != 2 {
+		t.Fatalf("expected 2 sinks, got %d", len(cfg.Events.Sinks))
+	}
+
+	lode := cfg.Events.Sinks[0]
+	assertEqual(t, "lode.type", lode.Type, "lode")
+	assertEqual(t, "lode.delivery", lode.Delivery, "mandatory")
+
+	redis := cfg.Events.Sinks[1]
+	assertEqual(t, "redis.type", redis.Type, "redis")
+	assertEqual(t, "redis.url", redis.URL, "redis://localhost:6379")
+	assertEqual(t, "redis.stream_key", redis.StreamKey, "myapp:events")
+	assertEqual(t, "redis.delivery", redis.Delivery, "best_effort")
+	if redis.MaxLen == nil || *redis.MaxLen != 50000 {
+		t.Errorf("redis.max_len: got %v, want 50000", redis.MaxLen)
+	}
+	if redis.TTL.Duration != 12*time.Hour {
+		t.Errorf("redis.ttl: got %v, want 12h", redis.TTL.Duration)
+	}
+	if redis.Timeout.Duration != 3*time.Second {
+		t.Errorf("redis.timeout: got %v, want 3s", redis.Timeout.Duration)
+	}
+	if redis.Retries == nil || *redis.Retries != 1 {
+		t.Errorf("redis.retries: got %v, want 1", redis.Retries)
+	}
+}
+
+func TestLoad_EventSinksNoConfig(t *testing.T) {
+	yaml := `source: test
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(cfg.Events.Sinks) != 0 {
+		t.Errorf("expected 0 sinks when unconfigured, got %d", len(cfg.Events.Sinks))
+	}
+}
+
 // writeTemp writes content to a temp file and returns the path.
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
