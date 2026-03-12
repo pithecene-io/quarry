@@ -224,6 +224,35 @@ See CONTRACT_INTEGRATION.md for semantics.
 Adapter invocation is best-effort. Failures are logged to stderr.
 The run exit code is determined by execution outcome, never by adapter status.
 
+### Event Sink Flags (v0.13.0+)
+
+`quarry run` supports optional event sink configuration for real-time
+event delivery during a run. See CONTRACT_INTEGRATION.md §Event Sink Model
+for semantics.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--event-sink` | string (repeatable) | | Event sink type (`lode`, `redis`) |
+| `--event-sink-lode-delivery` | string | `mandatory` | Delivery mode for Lode event sink |
+| `--event-sink-redis-url` | string | | Redis URL (required when `--event-sink redis`) |
+| `--event-sink-redis-stream-key` | string | `quarry:events` | Redis Streams key |
+| `--event-sink-redis-max-len` | int | `100000` | Max stream length (-1 disables) |
+| `--event-sink-redis-ttl` | duration | `24h` | Stream key TTL (-1 disables) |
+| `--event-sink-redis-timeout` | duration | `2s` | Per-operation timeout |
+| `--event-sink-redis-retries` | int | `2` | Retry attempts |
+| `--event-sink-redis-delivery` | string | `mandatory` | Delivery mode for Redis event sink |
+
+Semantics:
+- `--event-sink` is repeatable. Each value adds a sink to the fan-out.
+- When no `--event-sink` flags are set, events go to Lode only (backward
+  compatible).
+- Duplicate sink types are rejected.
+- `--event-sink-redis-*` flags require `--event-sink redis`.
+- Delivery modes: `mandatory` (failure may fail the run) or `best_effort`
+  (failure logged, run continues).
+- Config file: `events.sinks[]` array in YAML.
+- Fan-out child runs inherit the parent's event sink configuration.
+
 ### Fan-Out Flags (v0.6.0+)
 
 `quarry run` supports optional derived work execution via enqueue events.

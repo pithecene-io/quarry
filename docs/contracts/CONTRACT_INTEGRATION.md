@@ -9,8 +9,9 @@ This is a contract document. Implementations must conform.
 
 ## Scope
 
-- Defines the distinction between notification adapters and orchestration integrations.
+- Defines the distinction between notification adapters, event sinks, and orchestration integrations.
 - Defines the adapter boundary and ownership.
+- Defines the event sink boundary, delivery semantics, and failure behavior.
 - Defines CLI/config selection rules.
 - Defines delivery semantics and required observability.
 
@@ -24,12 +25,19 @@ Non-goals:
 
 ## Integration Paradigms
 
-Quarry supports two distinct integration paradigms:
+Quarry supports three distinct integration paradigms:
 
-| Paradigm | Relationship to Runtime | Direction | Examples |
-|----------|------------------------|-----------|----------|
-| Notification Adapter | Invoked **by** runtime after a run | Runtime → External | Webhook, Redis, NATS, SNS |
-| Orchestration Integration | **Wraps** the runtime as embedded activity | External → Runtime | Temporal |
+| Paradigm | Relationship to Runtime | Timing | Direction | Examples |
+|----------|------------------------|--------|-----------|----------|
+| Event Sink | Receives events **during** a run | In-run | Runtime → External | Redis Streams, Lode |
+| Notification Adapter | Invoked **by** runtime after a run | Post-run | Runtime → External | Webhook, Redis Pub/Sub, NATS, SNS |
+| Orchestration Integration | **Wraps** the runtime as embedded activity | External | External → Runtime | Temporal |
+
+**Event sinks** receive events in real time as the executor produces them.
+They implement the `EventSink` interface, are selected via `--event-sink`
+flags, and support per-sink delivery semantics (`mandatory` or
+`best_effort`). The runtime owns their lifecycle. Event sinks are NOT
+adapters and are NOT selected via `--adapter` flags.
 
 **Notification adapters** are in-process modules that fire after a run
 completes. They implement the `Adapter` interface, are selected via
@@ -68,20 +76,101 @@ are separate binaries that depend on the runtime as a library.
 
 ---
 
+## Event Sink Model (v0.13.0+)
+
+Event sinks receive events **during** the run through the ingestion policy
+path. They are structurally distinct from notification adapters:
+
+- Adapters fire once, after a run completes and data is persisted.
+- Event sinks receive every event as it is ingested, in real time.
+
+Event sinks are in-repo modules that implement the `EventSink` interface
+(`WriteEvents`, `Close`). The runtime owns their lifecycle and selection.
+
+### Scope Boundary
+
+- Event sinks handle **events only**. Artifact chunks always go to Lode
+  regardless of event sink configuration.
+- Event sinks are not adapters. They are not selected via `--adapter` flags.
+- Event sinks are selected via `--event-sink` and related flags.
+- When no event sinks are configured, events are written to Lode only
+  (identical to pre-v0.13.0 behavior).
+
+### Delivery Semantics
+
+Each event sink declares a **delivery mode**:
+
+| Mode | Behavior |
+|------|----------|
+| `mandatory` | Write failure propagates through the policy and may fail the run. |
+| `best_effort` | Write failure is logged to stderr and swallowed. The run continues. |
+
+Default delivery mode is `mandatory`.
+
+The runtime dispatches events to all configured sinks concurrently via a
+fan-out dispatcher. Mandatory failures from any sink are collected and
+returned as a combined error. Best-effort failures are observable but do
+not contribute to the error result.
+
+### Failure Behavior
+
+- A `mandatory` sink failure propagates through the ingestion policy. Under
+  `StrictPolicy`, this fails the run with `policy_failure`.
+- A `best_effort` sink failure is logged to stderr with the sink label and
+  error. The run continues unaffected.
+- Close errors from any sink are collected; close always attempts all sinks.
+
+### Fan-Out Inheritance
+
+Child runs (via `--depth > 0`) inherit the parent run's event sink
+configuration. All configured sinks are propagated to child runs.
+
+### Available Event Sinks
+
+| Sink | Package | Description |
+|------|---------|-------------|
+| Lode | `quarry/lode` | Default event persistence (always available) |
+| Redis Streams | `quarry/adapter/redisstream` | Real-time event streaming via XADD |
+
+### Redis Streams Sink
+
+The Redis Streams sink publishes events to a shared Redis Stream key using
+pipelined XADD commands.
+
+Configuration defaults:
+- Stream key: `quarry:events`
+- Max length: `100000` (approximate trimming via `MAXLEN~`)
+- TTL: `24h` (applied once on first successful write via EXPIRE)
+- Timeout: `2s` per operation
+- Retries: `2` with exponential backoff (500ms × 2^attempt)
+
+Sentinel values:
+- `max_len: -1` disables stream trimming.
+- `ttl: -1` disables key expiry.
+- `max_len: 0` and `ttl: 0` apply defaults.
+
+Each stream entry contains flat fields: `run_id`, `event_type`, `seq`,
+`timestamp`, `source`, `category`, and `payload` (JSON-encoded).
+
+---
+
 ## Selection and Configuration
 
 ### Selection
-- Adapter selection is runtime-owned and CLI/config-driven.
-- Per-run selection via `quarry run --adapter <type>` flags is the baseline.
+- Adapter and event sink selection is runtime-owned and CLI/config-driven.
+- Per-run selection via `quarry run --adapter <type>` or `--event-sink <type>`
+  flags is the baseline.
 - Global defaults via config are optional and additive.
-- No silent fallback to a different adapter is permitted.
+- No silent fallback to a different adapter or event sink is permitted.
 - If `--adapter` is not set, no notification is sent.
+- If `--event-sink` is not set, events are written to Lode only.
 
 ### Configuration
-- Adapters must accept configuration only from CLI/config inputs.
+- Adapters and event sinks must accept configuration only from CLI/config inputs.
 - Sensitive fields must be redacted from logs and output.
+- Duplicate sink types are rejected (at most one sink of each type).
 
-### CLI Flags
+### Adapter CLI Flags
 
 | Flag | Description |
 |------|-------------|
@@ -92,11 +181,41 @@ are separate binaries that depend on the runtime as a library.
 | `--adapter-timeout <duration>` | Notification timeout (default `10s`) |
 | `--adapter-retries <n>` | Retry attempts (default `3`) |
 
+### Event Sink CLI Flags (v0.13.0+)
+
+| Flag | Description |
+|------|-------------|
+| `--event-sink <type>` | Event sink type (`lode`, `redis`); repeatable |
+| `--event-sink-lode-delivery <mode>` | Delivery mode for Lode sink (default `mandatory`) |
+| `--event-sink-redis-url <url>` | Redis URL (required when `--event-sink redis` is set) |
+| `--event-sink-redis-stream-key <key>` | Stream key (default `quarry:events`) |
+| `--event-sink-redis-max-len <n>` | Max stream length; -1 disables (default `100000`) |
+| `--event-sink-redis-ttl <duration>` | Key TTL; -1 disables (default `24h`) |
+| `--event-sink-redis-timeout <duration>` | Per-operation timeout (default `2s`) |
+| `--event-sink-redis-retries <n>` | Retry attempts (default `2`) |
+| `--event-sink-redis-delivery <mode>` | Delivery mode for Redis sink (default `mandatory`) |
+
+Config file equivalent (`events.sinks[]` array in YAML):
+```yaml
+events:
+  sinks:
+    - type: lode
+      delivery: mandatory
+    - type: redis
+      delivery: best_effort
+      url: redis://localhost:6379
+      stream_key: quarry:events
+      max_len: 100000
+      ttl: 24h
+      timeout: 2s
+      retries: 2
+```
+
 ---
 
-## Delivery Semantics
+## Adapter Delivery Semantics
 
-- Delivery is **best-effort with retries**. The adapter retries on
+- Adapter delivery is **best-effort with retries**. The adapter retries on
   transient failures (5xx, network errors) but may ultimately fail.
   A failed publish is logged to stderr; the run outcome is unaffected.
 - On success, delivery may be duplicated (retries after ambiguous
@@ -105,6 +224,9 @@ are separate binaries that depend on the runtime as a library.
 Adapters must not:
 - alter the event payload,
 - silently drop events without observable failure.
+
+Event sink delivery semantics are defined per-sink; see
+[Event Sink Model](#event-sink-model-v0130).
 
 ---
 
