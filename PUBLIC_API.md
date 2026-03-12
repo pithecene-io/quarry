@@ -26,24 +26,24 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.12.2
+mise install github:pithecene-io/quarry@0.13.0
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.12.2"
+"github:pithecene-io/quarry" = "0.13.0"
 ```
 
 ### Via Docker
 
 ```bash
 # Full image — includes Chrome for Testing + fonts (amd64 only, recommended)
-docker pull ghcr.io/pithecene-io/quarry:0.12.2
+docker pull ghcr.io/pithecene-io/quarry:0.13.0
 
 # Slim image — no browser, multi-arch (BYO Chromium via --browser-ws-endpoint)
-docker pull ghcr.io/pithecene-io/quarry:0.12.2-slim
+docker pull ghcr.io/pithecene-io/quarry:0.13.0-slim
 ```
 
 See [docs/guides/container.md](docs/guides/container.md) for `docker run` and Docker Compose examples.
@@ -468,6 +468,25 @@ CLI flags always override config file values.
 | `--adapter-timeout <duration>` | `10s` | Notification timeout |
 | `--adapter-retries <n>` | `3` | Retry attempts |
 
+**Event sink flags (real-time event delivery, v0.13.0+):**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--event-sink <type>` | | Event sink type (`lode`, `redis`); repeatable |
+| `--event-sink-lode-delivery` | `mandatory` | Delivery mode for Lode event sink |
+| `--event-sink-redis-url <url>` | | Redis URL (required when `--event-sink` includes `redis`) |
+| `--event-sink-redis-stream-key` | `quarry:events` | Redis Streams key |
+| `--event-sink-redis-max-len` | `100000` | Max stream length (-1 disables) |
+| `--event-sink-redis-ttl` | `24h` | Stream key expiry (-1 disables) |
+| `--event-sink-redis-timeout` | `2s` | Per-operation timeout |
+| `--event-sink-redis-retries` | `2` | Retry attempts |
+| `--event-sink-redis-delivery` | `mandatory` | Delivery mode for Redis event sink |
+
+> **Event sinks vs adapters:** Event sinks deliver events in real time during a
+> run. Adapters fire once after a run completes. Both can be used together.
+> When no `--event-sink` flags are set, events go to Lode only (default).
+> See `docs/contracts/CONTRACT_INTEGRATION.md` and `docs/guides/integration.md`.
+
 **Fan-out flags (derived work execution):**
 
 | Flag | Default | Description |
@@ -726,14 +745,14 @@ executor runs under Node ESM.
 
 Quarry ships container images via GHCR:
 
-- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.12.2` — includes Chrome for Testing + fonts
-- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.12.2-slim` — no browser (BYO via `--browser-ws-endpoint`)
+- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.13.0` — includes Chrome for Testing + fonts
+- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.13.0-slim` — no browser (BYO via `--browser-ws-endpoint`)
 
 For `docker run`, Docker Compose, and sidecar patterns, see [docs/guides/container.md](docs/guides/container.md).
 
 ---
 
-## Known Limitations (v0.12.2)
+## Known Limitations (v0.13.0)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -741,7 +760,7 @@ For `docker run`, Docker Compose, and sidecar patterns, see [docs/guides/contain
 4. **No transactional storage writes**: S3 and S3-compatible providers (R2, MinIO) do not provide transactional guarantees across writes
 5. **No job scheduling**: Quarry supports in-process derived work via `--depth` but is not a scheduler; external orchestration is the caller's responsibility
 6. **Puppeteer required**: All scripts run in a browser context
-7. **Event bus adapters**: Webhook and Redis pub/sub adapters are available. Temporal, NATS, and SNS adapters are planned. See `docs/guides/integration.md`.
+7. **Integration adapters and sinks**: Webhook, Redis Pub/Sub, and Redis Streams are available. Temporal, NATS, and SNS adapters are planned. Event sink read-side interfaces are tabled for future work. See `docs/guides/integration.md`.
 8. **Fan-out partition defaults**: Child runs inherit the root run's `--source` and `--category` unless overridden via `emit.enqueue({ source, category })`. Overrides apply to individual child runs only and do not propagate to grandchildren.
 9. **Fan-out target resolution**: `target` in `emit.enqueue()` is resolved as a file path relative to CWD (same as `--script`). Target resolution semantics may change in a future release; config-based logical names are under consideration.
 
@@ -810,6 +829,10 @@ processing after runs complete, see [docs/guides/integration.md](docs/guides/int
 `--adapter redis` publishes to a Redis pub/sub channel after each run completes.
 See adapter flags above.
 
+**Event sinks** (v0.13.0+): `--event-sink redis` streams every event to a Redis
+Stream in real time during the run. Can be combined with adapters for both
+real-time event streaming and post-run notification.
+
 **Fallback pattern**: Polling-based triggers with idempotent checkpoints.
 
 ---
@@ -818,7 +841,7 @@ See adapter flags above.
 
 ```bash
 quarry version
-# 0.12.2 (commit: ...)
+# 0.13.0 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -827,8 +850,8 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.12.2` |
-| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.12.2` |
-| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.12.2-slim` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.13.0` |
+| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.0` |
+| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.0-slim` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |
