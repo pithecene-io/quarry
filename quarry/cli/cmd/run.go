@@ -18,6 +18,7 @@ import (
 
 	"github.com/pithecene-io/quarry/adapter"
 	redisadapter "github.com/pithecene-io/quarry/adapter/redis"
+	"github.com/pithecene-io/quarry/adapter/redisstream"
 	"github.com/pithecene-io/quarry/adapter/webhook"
 	quarryconfig "github.com/pithecene-io/quarry/cli/config"
 	"github.com/pithecene-io/quarry/executor"
@@ -285,6 +286,50 @@ ADVANCED:
 				Name:  "adapter-channel",
 				Usage: "Pub/sub channel name for Redis adapter (default: quarry:run_completed)",
 			},
+			// Event sink flags
+			&cli.StringSliceFlag{
+				Name:  "event-sink",
+				Usage: "Event sink type (repeatable: lode, redis). Default: lode only",
+			},
+			&cli.StringFlag{
+				Name:  "event-sink-redis-url",
+				Usage: "Redis URL for event sink (required when --event-sink includes redis)",
+			},
+			&cli.StringFlag{
+				Name:  "event-sink-redis-stream-key",
+				Usage: "Redis Stream key for events",
+				Value: redisstream.DefaultStreamKey,
+			},
+			&cli.Int64Flag{
+				Name:  "event-sink-redis-max-len",
+				Usage: "Approximate MAXLEN for Redis Stream trimming",
+				Value: redisstream.DefaultMaxLen,
+			},
+			&cli.DurationFlag{
+				Name:  "event-sink-redis-ttl",
+				Usage: "Redis Stream key expiry",
+				Value: redisstream.DefaultTTL,
+			},
+			&cli.DurationFlag{
+				Name:  "event-sink-redis-timeout",
+				Usage: "Per-write timeout for Redis event sink",
+				Value: redisstream.DefaultTimeout,
+			},
+			&cli.IntFlag{
+				Name:  "event-sink-redis-retries",
+				Usage: "Retry attempts for Redis event sink",
+				Value: redisstream.DefaultRetries,
+			},
+			&cli.StringFlag{
+				Name:  "event-sink-redis-delivery",
+				Usage: "Delivery mode for Redis event sink (mandatory, best_effort)",
+				Value: "mandatory",
+			},
+			&cli.StringFlag{
+				Name:  "event-sink-lode-delivery",
+				Usage: "Delivery mode for Lode event sink (mandatory, best_effort)",
+				Value: "mandatory",
+			},
 		},
 		Action: runAction,
 	}
@@ -327,6 +372,18 @@ type adapterChoice struct {
 	headers     map[string]string
 	timeout     time.Duration
 	retries     int
+}
+
+// eventSinkChoice holds parsed event sink configuration.
+type eventSinkChoice struct {
+	sinkType  string // "lode" or "redis"
+	delivery  policy.DeliveryMode
+	url       string        // redis only
+	streamKey string        // redis only
+	maxLen    int64         // redis only
+	ttl       time.Duration // redis only
+	timeout   time.Duration // redis only
+	retries   int           // redis only
 }
 
 // fanOutChoice holds parsed fan-out configuration.
@@ -392,10 +449,10 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 	)
 
 	childStartTime := time.Now()
-	childPol, childLodeClient, childFileWriter, err := buildPolicy(
+	childPol, childLodeClient, childFileWriter, _, err := buildPolicy(
 		cf.policyChoice, cf.storage, cf.storageDataset,
 		childSource, childCategory, item.RunID,
-		childStartTime, childCollector,
+		childStartTime, childCollector, nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child policy: %w", err)
@@ -449,6 +506,7 @@ type runFinalizer struct {
 	lodeClient     lode.Client
 	collector      *metrics.Collector
 	adapter        *adapterChoice
+	redisEventSink *redisstream.Sink // non-nil when Redis event sink is configured
 	storage        storageChoice
 	storageDataset string
 	source         string
@@ -459,11 +517,13 @@ type runFinalizer struct {
 	reportPath     string
 }
 
-// Finalize persists metrics, notifies the adapter, writes the report, and prints results.
+// Finalize persists metrics, notifies the adapter, publishes run_completed
+// to the Redis event stream (if configured), writes the report, and prints results.
 // duration is computed from startTime internally.
 func (f *runFinalizer) Finalize(result *runtime.RunResult) {
 	duration := time.Since(f.startTime)
 	f.persistMetrics(duration)
+	f.publishTerminalToStream(result, duration)
 	f.notifyAdapter(result, duration)
 	f.writeReport(result)
 	f.printResults(result, duration)
@@ -478,6 +538,18 @@ func (f *runFinalizer) persistMetrics(duration time.Duration) {
 	defer cancel()
 	if err := f.lodeClient.WriteMetrics(ctx, f.collector.Snapshot(), completedAt); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", err)
+	}
+}
+
+func (f *runFinalizer) publishTerminalToStream(result *runtime.RunResult, duration time.Duration) {
+	if f.redisEventSink == nil {
+		return
+	}
+	terminalEvent := buildTerminalEnvelope(result, f.source, f.category, duration)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := f.redisEventSink.WriteEvents(ctx, []*types.EventEnvelope{terminalEvent}); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to publish run_completed to Redis stream: %v\n", err)
 	}
 }
 
@@ -642,6 +714,12 @@ func runAction(c *cli.Context) error {
 		adptConfig = &ac
 	}
 
+	// Parse and validate event sink config
+	eventSinks, err := parseEventSinkConfig(c, cfg)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("invalid event sink config: %v", err), exitConfigError)
+	}
+
 	// Parse and validate fan-out config
 	fanOut := fanOutChoice{
 		depth:    c.Int("depth"),
@@ -669,10 +747,10 @@ func runAction(c *cli.Context) error {
 	// Use basename for stable executor identity (avoids high-cardinality from absolute paths)
 	collector := metrics.NewCollector(choice.name, filepath.Base(executorPath), storageConfig.backend, runMeta.RunID, jobID)
 
-	// Build policy with storage sink
+	// Build policy with storage sink and optional event sinks
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, lodeClient, fileWriter, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector)
+	pol, lodeClient, fileWriter, redisEventSink, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector, eventSinks)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -754,6 +832,7 @@ func runAction(c *cli.Context) error {
 		lodeClient:     lodeClient,
 		collector:      collector,
 		adapter:        adptConfig,
+		redisEventSink: redisEventSink,
 		storage:        storageConfig,
 		storageDataset: storageDataset,
 		source:         source,
@@ -1359,16 +1438,34 @@ Quarry could not locate the executor. To fix:
   3. Or add quarry-executor to your PATH`)
 }
 
-func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector) (policy.Policy, lode.Client, lode.FileWriter, error) {
-	// Build storage sink
-	sink, client, fw, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
+func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector, eventSinkConfigs []eventSinkChoice) (policy.Policy, lode.Client, lode.FileWriter, *redisstream.Sink, error) {
+	// Build storage sink (always needed for artifact chunks and optionally for events)
+	lodeSink, client, fw, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
+	}
+
+	// Determine the effective sink: if event sink config is present, wrap with CompositeSink.
+	// Otherwise, use the Lode sink directly (backward compatible).
+	var sink policy.Sink
+	var redisSink *redisstream.Sink
+
+	if len(eventSinkConfigs) == 0 {
+		// No event sink config → Lode handles everything (default behavior)
+		sink = lodeSink
+	} else {
+		entries, rs, buildErr := buildEventSinkEntries(eventSinkConfigs, lodeSink, source, category)
+		if buildErr != nil {
+			return nil, nil, nil, nil, fmt.Errorf("failed to create event sinks: %w", buildErr)
+		}
+		redisSink = rs
+		fanout := policy.NewFanoutEventSink(entries)
+		sink = policy.NewCompositeSink(fanout, lodeSink)
 	}
 
 	switch choice.name {
 	case "strict":
-		return policy.NewStrictPolicy(sink), client, fw, nil
+		return policy.NewStrictPolicy(sink), client, fw, redisSink, nil
 
 	case "buffered":
 		config := policy.BufferedConfig{
@@ -1377,7 +1474,7 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushMode:       policy.FlushMode(choice.flushMode),
 		}
 		p, err := policy.NewBufferedPolicy(sink, config)
-		return p, client, fw, err
+		return p, client, fw, redisSink, err
 
 	case "streaming":
 		config := policy.StreamingConfig{
@@ -1385,10 +1482,10 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushInterval: choice.flushInterval,
 		}
 		p, err := policy.NewStreamingPolicy(sink, config)
-		return p, client, fw, err
+		return p, client, fw, redisSink, err
 
 	default:
-		return nil, nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
+		return nil, nil, nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
 	}
 }
 
@@ -1514,6 +1611,204 @@ func buildStoragePath(storageConfig storageChoice, dataset, source, category, da
 	default:
 		return partitions
 	}
+}
+
+// parseEventSinkConfig resolves event sink configuration from CLI flags and config file.
+// Returns nil (not empty) when no event sinks are explicitly configured, which signals
+// buildPolicy to use the default Lode-only path.
+func parseEventSinkConfig(c *cli.Context, cfg *quarryconfig.Config) ([]eventSinkChoice, error) {
+	cliSinks := c.StringSlice("event-sink")
+	var configSinks []quarryconfig.EventSinkConfig
+	if cfg != nil {
+		configSinks = cfg.Events.Sinks
+	}
+
+	// No CLI flags and no config → nil (default Lode-only behavior)
+	if len(cliSinks) == 0 && len(configSinks) == 0 {
+		return nil, nil
+	}
+
+	// CLI flags take precedence over config file
+	if len(cliSinks) > 0 {
+		return parseEventSinkFromCLI(c, cliSinks)
+	}
+	return parseEventSinkFromConfig(configSinks)
+}
+
+func parseEventSinkFromCLI(c *cli.Context, sinkTypes []string) ([]eventSinkChoice, error) {
+	var choices []eventSinkChoice
+	hasRedis := false
+	hasLode := false
+
+	for _, st := range sinkTypes {
+		switch st {
+		case "lode":
+			if hasLode {
+				return nil, errors.New("duplicate event sink type: lode")
+			}
+			hasLode = true
+			delivery, err := parseDeliveryMode(c.String("event-sink-lode-delivery"))
+			if err != nil {
+				return nil, fmt.Errorf("event-sink-lode-delivery: %w", err)
+			}
+			choices = append(choices, eventSinkChoice{
+				sinkType: "lode",
+				delivery: delivery,
+			})
+		case "redis":
+			if hasRedis {
+				return nil, errors.New("duplicate event sink type: redis")
+			}
+			hasRedis = true
+			url := c.String("event-sink-redis-url")
+			if url == "" {
+				return nil, errors.New("--event-sink-redis-url is required when --event-sink includes redis")
+			}
+			delivery, err := parseDeliveryMode(c.String("event-sink-redis-delivery"))
+			if err != nil {
+				return nil, fmt.Errorf("event-sink-redis-delivery: %w", err)
+			}
+			choices = append(choices, eventSinkChoice{
+				sinkType:  "redis",
+				delivery:  delivery,
+				url:       url,
+				streamKey: c.String("event-sink-redis-stream-key"),
+				maxLen:    c.Int64("event-sink-redis-max-len"),
+				ttl:       c.Duration("event-sink-redis-ttl"),
+				timeout:   c.Duration("event-sink-redis-timeout"),
+				retries:   c.Int("event-sink-redis-retries"),
+			})
+		default:
+			return nil, fmt.Errorf("unknown event sink type: %q (valid: lode, redis)", st)
+		}
+	}
+	return choices, nil
+}
+
+func parseEventSinkFromConfig(sinks []quarryconfig.EventSinkConfig) ([]eventSinkChoice, error) {
+	var choices []eventSinkChoice
+	for _, s := range sinks {
+		delivery, err := parseDeliveryMode(s.Delivery)
+		if err != nil {
+			return nil, fmt.Errorf("event sink %q delivery: %w", s.Type, err)
+		}
+
+		switch s.Type {
+		case "lode":
+			choices = append(choices, eventSinkChoice{
+				sinkType: "lode",
+				delivery: delivery,
+			})
+		case "redis":
+			if s.URL == "" {
+				return nil, errors.New("event sink redis requires a url")
+			}
+			ch := eventSinkChoice{
+				sinkType:  "redis",
+				delivery:  delivery,
+				url:       s.URL,
+				streamKey: s.StreamKey,
+				timeout:   s.Timeout.Duration,
+				ttl:       s.TTL.Duration,
+			}
+			if s.MaxLen != nil {
+				ch.maxLen = *s.MaxLen
+			}
+			if s.Retries != nil {
+				ch.retries = *s.Retries
+			}
+			choices = append(choices, ch)
+		default:
+			return nil, fmt.Errorf("unknown event sink type: %q", s.Type)
+		}
+	}
+	return choices, nil
+}
+
+func parseDeliveryMode(s string) (policy.DeliveryMode, error) {
+	switch s {
+	case "", "mandatory":
+		return policy.DeliveryMandatory, nil
+	case "best_effort":
+		return policy.DeliveryBestEffort, nil
+	default:
+		return 0, fmt.Errorf("unknown delivery mode: %q (valid: mandatory, best_effort)", s)
+	}
+}
+
+// buildEventSinkEntries creates EventSink instances from parsed config.
+// If the config includes a "lode" entry, the provided lodeSink is reused
+// (no duplicate Lode client). Returns sink entries for the fanout, plus
+// the Redis stream sink if one was created (for run_completed unification).
+func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) ([]policy.SinkEntry, *redisstream.Sink, error) {
+	var entries []policy.SinkEntry
+	var redisSink *redisstream.Sink
+
+	for _, cfg := range configs {
+		switch cfg.sinkType {
+		case "lode":
+			// Reuse the existing Lode sink (which also handles chunks)
+			entries = append(entries, policy.SinkEntry{
+				Sink:     lodeSink.(policy.EventSink),
+				Delivery: cfg.delivery,
+				Label:    "lode",
+			})
+		case "redis":
+			rs, err := redisstream.New(redisstream.Config{
+				URL:       cfg.url,
+				StreamKey: cfg.streamKey,
+				MaxLen:    cfg.maxLen,
+				TTL:       cfg.ttl,
+				Timeout:   cfg.timeout,
+				Retries:   cfg.retries,
+				Source:    source,
+				Category:  category,
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("redis event sink: %w", err)
+			}
+			redisSink = rs
+			entries = append(entries, policy.SinkEntry{
+				Sink:     rs,
+				Delivery: cfg.delivery,
+				Label:    "redis",
+			})
+		}
+	}
+
+	return entries, redisSink, nil
+}
+
+// buildTerminalEnvelope constructs a synthetic EventEnvelope for the run_completed
+// event, suitable for publishing to the Redis event stream. This unifies run_completed
+// with granular events in a single stream.
+func buildTerminalEnvelope(result *runtime.RunResult, source, category string, duration time.Duration) *types.EventEnvelope {
+	payload := map[string]any{
+		"outcome":     string(result.Outcome.Status),
+		"event_count": result.EventCount,
+		"duration_ms": duration.Milliseconds(),
+	}
+	if result.Outcome.Message != "" {
+		payload["message"] = result.Outcome.Message
+	}
+
+	env := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         fmt.Sprintf("%s-terminal", result.RunMeta.RunID),
+		RunID:           result.RunMeta.RunID,
+		Seq:             result.EventCount + 1,
+		Type:            types.EventTypeRunComplete,
+		Ts:              time.Now().UTC().Format(time.RFC3339),
+		Payload:         payload,
+		Attempt:         result.RunMeta.Attempt,
+	}
+	if result.RunMeta.JobID != nil {
+		env.JobID = result.RunMeta.JobID
+	}
+	if result.RunMeta.ParentRunID != nil {
+		env.ParentRunID = result.RunMeta.ParentRunID
+	}
+	return env
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {

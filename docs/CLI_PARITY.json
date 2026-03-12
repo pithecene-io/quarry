@@ -230,6 +230,69 @@
           "description": "Pub/sub channel name for Redis adapter (default: quarry:run_completed)",
           "dependsOn": ["adapter=redis"]
         },
+        "event-sink": {
+          "type": "string_slice",
+          "required": false,
+          "description": "Event sink type (repeatable: lode, redis). Default: lode only",
+          "validation": "Each value must be one of: lode, redis"
+        },
+        "event-sink-redis-url": {
+          "type": "string",
+          "required": false,
+          "description": "Redis URL for event sink (required when --event-sink includes redis)",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-stream-key": {
+          "type": "string",
+          "required": false,
+          "default": "quarry:events",
+          "description": "Redis Stream key for events",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-max-len": {
+          "type": "int64",
+          "required": false,
+          "default": 100000,
+          "description": "Approximate MAXLEN for Redis Stream trimming",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-ttl": {
+          "type": "duration",
+          "required": false,
+          "default": "24h0m0s",
+          "description": "Redis Stream key expiry",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-timeout": {
+          "type": "duration",
+          "required": false,
+          "default": "2s",
+          "description": "Per-write timeout for Redis event sink",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-retries": {
+          "type": "int",
+          "required": false,
+          "default": 2,
+          "description": "Retry attempts for Redis event sink",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-redis-delivery": {
+          "type": "string",
+          "required": false,
+          "default": "mandatory",
+          "description": "Delivery mode for Redis event sink (mandatory, best_effort)",
+          "validation": "Must be one of: mandatory, best_effort",
+          "dependsOn": ["event-sink=redis"]
+        },
+        "event-sink-lode-delivery": {
+          "type": "string",
+          "required": false,
+          "default": "mandatory",
+          "description": "Delivery mode for Lode event sink (mandatory, best_effort)",
+          "validation": "Must be one of: mandatory, best_effort",
+          "dependsOn": ["event-sink=lode"]
+        },
         "depth": {
           "type": "int",
           "required": false,
