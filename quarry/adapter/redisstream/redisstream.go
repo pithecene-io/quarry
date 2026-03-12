@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -42,10 +43,10 @@ type Config struct {
 	// StreamKey is the Redis Stream key (default: quarry:events).
 	StreamKey string
 	// MaxLen is the approximate MAXLEN for stream trimming (default: 100000).
-	// Set to 0 to disable trimming.
+	// Set to -1 to disable trimming. Zero applies the default.
 	MaxLen int64
 	// TTL is the stream key expiry duration (default: 24h).
-	// Set to 0 to disable expiry.
+	// Set to -1 to disable expiry. Zero applies the default.
 	TTL time.Duration
 	// Timeout is the per-write timeout (default: 2s).
 	Timeout time.Duration
@@ -60,8 +61,9 @@ type Config struct {
 
 // Sink publishes events to a Redis Stream via XADD.
 type Sink struct {
-	config Config
-	client *goredis.Client
+	config  Config
+	client  *goredis.Client
+	ttlOnce atomic.Bool // ensures TTL is set at most once per sink lifetime
 }
 
 // New creates a Redis Streams event sink from the given config.
@@ -128,6 +130,7 @@ func (s *Sink) WriteEvents(ctx context.Context, events []*types.EventEnvelope) e
 		cancel()
 
 		if lastErr == nil {
+			s.applyTTLOnce(ctx)
 			return nil
 		}
 	}
@@ -147,8 +150,6 @@ func (s *Sink) xaddBatch(ctx context.Context, events []*types.EventEnvelope) err
 
 		args := &goredis.XAddArgs{
 			Stream: s.config.StreamKey,
-			MaxLen: s.config.MaxLen,
-			Approx: true,
 			Values: map[string]any{
 				"run_id":     ev.RunID,
 				"event_type": string(ev.Type),
@@ -159,11 +160,32 @@ func (s *Sink) xaddBatch(ctx context.Context, events []*types.EventEnvelope) err
 				"category":   s.config.Category,
 			},
 		}
+		// MaxLen > 0 enables approximate trimming; -1 disables it.
+		if s.config.MaxLen > 0 {
+			args.MaxLen = s.config.MaxLen
+			args.Approx = true
+		}
 		pipe.XAdd(ctx, args)
 	}
 
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// applyTTLOnce sets EXPIRE on the stream key exactly once per sink lifetime.
+// Called after the first successful write so the key exists.
+// TTL failures are best-effort — the stream still works without expiry.
+func (s *Sink) applyTTLOnce(ctx context.Context) {
+	if s.config.TTL < 0 {
+		return // TTL disabled
+	}
+	if !s.ttlOnce.CompareAndSwap(false, true) {
+		return // already applied
+	}
+	ttlCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
+	defer cancel()
+	// Best-effort: EXPIRE failure doesn't affect event delivery.
+	_ = s.client.Expire(ttlCtx, s.config.StreamKey, s.config.TTL).Err()
 }
 
 // Close releases sink resources.

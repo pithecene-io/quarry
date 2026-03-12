@@ -256,3 +256,79 @@ func TestClose_ClosesConnection(t *testing.T) {
 		t.Fatal("expected error after close")
 	}
 }
+
+func TestWriteEvents_AppliesTTL(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:     "redis://" + mr.Addr(),
+		TTL:     1 * time.Hour,
+		Retries: 0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// Verify TTL was set on the stream key
+	ttl := mr.TTL(DefaultStreamKey)
+	if ttl <= 0 {
+		t.Errorf("expected positive TTL on stream key, got %v", ttl)
+	}
+}
+
+func TestWriteEvents_TTLDisabled(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:     "redis://" + mr.Addr(),
+		TTL:     -1, // disabled
+		Retries: 0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// No TTL should be set
+	ttl := mr.TTL(DefaultStreamKey)
+	if ttl > 0 {
+		t.Errorf("expected no TTL when disabled, got %v", ttl)
+	}
+}
+
+func TestWriteEvents_MaxLenDisabled(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	s, err := New(Config{
+		URL:     "redis://" + mr.Addr(),
+		MaxLen:  -1, // disabled
+		TTL:     -1,
+		Retries: 0,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer iox.DiscardClose(s)
+
+	if err := s.WriteEvents(t.Context(), testEvents()); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// All entries should be present (no trimming)
+	stream, err := mr.Stream(DefaultStreamKey)
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if len(stream) != 2 {
+		t.Fatalf("expected 2 entries (no trimming), got %d", len(stream))
+	}
+}

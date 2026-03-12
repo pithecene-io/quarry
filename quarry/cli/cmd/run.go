@@ -422,6 +422,7 @@ type childFactory struct {
 	proxy             *types.ProxyEndpoint
 	browserWSEndpoint string
 	resolveFrom       string
+	eventSinks        []eventSinkChoice
 }
 
 // Run constructs and executes a single child run for the fan-out operator.
@@ -449,10 +450,10 @@ func (cf *childFactory) Run(ctx context.Context, item runtime.WorkItem, observer
 	)
 
 	childStartTime := time.Now()
-	childPol, childLodeClient, childFileWriter, _, err := buildPolicy(
+	childPol, childLodeClient, childFileWriter, err := buildPolicy(
 		cf.policyChoice, cf.storage, cf.storageDataset,
 		childSource, childCategory, item.RunID,
-		childStartTime, childCollector, nil,
+		childStartTime, childCollector, cf.eventSinks,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child policy: %w", err)
@@ -506,7 +507,6 @@ type runFinalizer struct {
 	lodeClient     lode.Client
 	collector      *metrics.Collector
 	adapter        *adapterChoice
-	redisEventSink *redisstream.Sink // non-nil when Redis event sink is configured
 	storage        storageChoice
 	storageDataset string
 	source         string
@@ -517,13 +517,14 @@ type runFinalizer struct {
 	reportPath     string
 }
 
-// Finalize persists metrics, notifies the adapter, publishes run_completed
-// to the Redis event stream (if configured), writes the report, and prints results.
+// Finalize persists metrics, notifies the adapter, writes the report, and prints results.
 // duration is computed from startTime internally.
+//
+// Note: run_completed events reach all configured event sinks (including Redis Streams)
+// through the normal policy path — no separate terminal publish is needed.
 func (f *runFinalizer) Finalize(result *runtime.RunResult) {
 	duration := time.Since(f.startTime)
 	f.persistMetrics(duration)
-	f.publishTerminalToStream(result, duration)
 	f.notifyAdapter(result, duration)
 	f.writeReport(result)
 	f.printResults(result, duration)
@@ -538,18 +539,6 @@ func (f *runFinalizer) persistMetrics(duration time.Duration) {
 	defer cancel()
 	if err := f.lodeClient.WriteMetrics(ctx, f.collector.Snapshot(), completedAt); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to persist metrics: %v\n", err)
-	}
-}
-
-func (f *runFinalizer) publishTerminalToStream(result *runtime.RunResult, duration time.Duration) {
-	if f.redisEventSink == nil {
-		return
-	}
-	terminalEvent := buildTerminalEnvelope(result, f.source, f.category, duration)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := f.redisEventSink.WriteEvents(ctx, []*types.EventEnvelope{terminalEvent}); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to publish run_completed to Redis stream: %v\n", err)
 	}
 }
 
@@ -750,7 +739,7 @@ func runAction(c *cli.Context) error {
 	// Build policy with storage sink and optional event sinks
 	// Start time is "now" - used to derive partition day
 	startTime := time.Now()
-	pol, lodeClient, fileWriter, redisEventSink, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector, eventSinks)
+	pol, lodeClient, fileWriter, err := buildPolicy(choice, storageConfig, storageDataset, source, category, runMeta.RunID, startTime, collector, eventSinks)
 	if err != nil {
 		return fmt.Errorf("failed to create policy: %w", err)
 	}
@@ -832,7 +821,6 @@ func runAction(c *cli.Context) error {
 		lodeClient:     lodeClient,
 		collector:      collector,
 		adapter:        adptConfig,
-		redisEventSink: redisEventSink,
 		storage:        storageConfig,
 		storageDataset: storageDataset,
 		source:         source,
@@ -885,6 +873,7 @@ func runAction(c *cli.Context) error {
 			proxy:             resolvedProxy,
 			browserWSEndpoint: browserWSEndpoint,
 			resolveFrom:       resolveFrom,
+			eventSinks:        eventSinks,
 		}
 		return runWithFanOut(ctx, fanOut, rootConfig, factory, finalizer)
 	}
@@ -1438,34 +1427,32 @@ Quarry could not locate the executor. To fix:
   3. Or add quarry-executor to your PATH`)
 }
 
-func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector, eventSinkConfigs []eventSinkChoice) (policy.Policy, lode.Client, lode.FileWriter, *redisstream.Sink, error) {
+func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, source, category, runID string, startTime time.Time, collector *metrics.Collector, eventSinkConfigs []eventSinkChoice) (policy.Policy, lode.Client, lode.FileWriter, error) {
 	// Build storage sink (always needed for artifact chunks and optionally for events)
 	lodeSink, client, fw, err := buildStorageSink(storageConfig, dataset, source, category, runID, choice.name, startTime, collector)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create storage sink: %w", err)
 	}
 
 	// Determine the effective sink: if event sink config is present, wrap with CompositeSink.
 	// Otherwise, use the Lode sink directly (backward compatible).
 	var sink policy.Sink
-	var redisSink *redisstream.Sink
 
 	if len(eventSinkConfigs) == 0 {
 		// No event sink config → Lode handles everything (default behavior)
 		sink = lodeSink
 	} else {
-		entries, rs, buildErr := buildEventSinkEntries(eventSinkConfigs, lodeSink, source, category)
+		entries, buildErr := buildEventSinkEntries(eventSinkConfigs, lodeSink, source, category)
 		if buildErr != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to create event sinks: %w", buildErr)
+			return nil, nil, nil, fmt.Errorf("failed to create event sinks: %w", buildErr)
 		}
-		redisSink = rs
 		fanout := policy.NewFanoutEventSink(entries)
 		sink = policy.NewCompositeSink(fanout, lodeSink)
 	}
 
 	switch choice.name {
 	case "strict":
-		return policy.NewStrictPolicy(sink), client, fw, redisSink, nil
+		return policy.NewStrictPolicy(sink), client, fw, nil
 
 	case "buffered":
 		config := policy.BufferedConfig{
@@ -1474,7 +1461,7 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushMode:       policy.FlushMode(choice.flushMode),
 		}
 		p, err := policy.NewBufferedPolicy(sink, config)
-		return p, client, fw, redisSink, err
+		return p, client, fw, err
 
 	case "streaming":
 		config := policy.StreamingConfig{
@@ -1482,10 +1469,10 @@ func buildPolicy(choice policyChoice, storageConfig storageChoice, dataset, sour
 			FlushInterval: choice.flushInterval,
 		}
 		p, err := policy.NewStreamingPolicy(sink, config)
-		return p, client, fw, redisSink, err
+		return p, client, fw, err
 
 	default:
-		return nil, nil, nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
+		return nil, nil, nil, fmt.Errorf("unknown policy: %s", choice.name)
 	}
 }
 
@@ -1738,11 +1725,9 @@ func parseDeliveryMode(s string) (policy.DeliveryMode, error) {
 
 // buildEventSinkEntries creates EventSink instances from parsed config.
 // If the config includes a "lode" entry, the provided lodeSink is reused
-// (no duplicate Lode client). Returns sink entries for the fanout, plus
-// the Redis stream sink if one was created (for run_completed unification).
-func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) ([]policy.SinkEntry, *redisstream.Sink, error) {
+// (no duplicate Lode client).
+func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, source, category string) ([]policy.SinkEntry, error) {
 	var entries []policy.SinkEntry
-	var redisSink *redisstream.Sink
 
 	for _, cfg := range configs {
 		switch cfg.sinkType {
@@ -1765,9 +1750,8 @@ func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, sour
 				Category:  category,
 			})
 			if err != nil {
-				return nil, nil, fmt.Errorf("redis event sink: %w", err)
+				return nil, fmt.Errorf("redis event sink: %w", err)
 			}
-			redisSink = rs
 			entries = append(entries, policy.SinkEntry{
 				Sink:     rs,
 				Delivery: cfg.delivery,
@@ -1776,39 +1760,7 @@ func buildEventSinkEntries(configs []eventSinkChoice, lodeSink policy.Sink, sour
 		}
 	}
 
-	return entries, redisSink, nil
-}
-
-// buildTerminalEnvelope constructs a synthetic EventEnvelope for the run_completed
-// event, suitable for publishing to the Redis event stream. This unifies run_completed
-// with granular events in a single stream.
-func buildTerminalEnvelope(result *runtime.RunResult, source, category string, duration time.Duration) *types.EventEnvelope {
-	payload := map[string]any{
-		"outcome":     string(result.Outcome.Status),
-		"event_count": result.EventCount,
-		"duration_ms": duration.Milliseconds(),
-	}
-	if result.Outcome.Message != "" {
-		payload["message"] = result.Outcome.Message
-	}
-
-	env := &types.EventEnvelope{
-		ContractVersion: types.ContractVersion,
-		EventID:         fmt.Sprintf("%s-terminal", result.RunMeta.RunID),
-		RunID:           result.RunMeta.RunID,
-		Seq:             result.EventCount + 1,
-		Type:            types.EventTypeRunComplete,
-		Ts:              time.Now().UTC().Format(time.RFC3339),
-		Payload:         payload,
-		Attempt:         result.RunMeta.Attempt,
-	}
-	if result.RunMeta.JobID != nil {
-		env.JobID = result.RunMeta.JobID
-	}
-	if result.RunMeta.ParentRunID != nil {
-		env.ParentRunID = result.RunMeta.ParentRunID
-	}
-	return env
+	return entries, nil
 }
 
 func outcomeToExitCode(status types.OutcomeStatus) int {
