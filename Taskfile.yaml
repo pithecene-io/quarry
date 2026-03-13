@@ -2,6 +2,8 @@ version: '3'
 
 vars:
   TS_PACKAGES: sdk executor-node
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
 
 tasks:
   # ====================
@@ -88,7 +90,7 @@ tasks:
     deps: [executor:bundle]
     dir: quarry
     cmds:
-      - go build -o quarry ./cmd/quarry
+      - go build -ldflags "-X main.commit={{.COMMIT}}" -o quarry ./cmd/quarry
 
   executor:bundle:
     desc: Bundle executor for embedding
@@ -105,7 +107,7 @@ tasks:
         mkdir -p dist
         for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
           GOOS="${pair%/*}" GOARCH="${pair#*/}" CGO_ENABLED=0 \
-            go build -o "dist/quarry_${GOOS}_${GOARCH}" ./cmd/quarry
+            go build -ldflags "-X main.commit={{.COMMIT}}" -o "dist/quarry_${GOOS}_${GOARCH}" ./cmd/quarry
           echo "✅ ${pair}"
         done
 
@@ -142,6 +144,15 @@ tasks:
     dir: quarry
     cmds:
       - golangci-lint run --fix ./...
+
+  # ==================
+  # Docker tasks
+  # ==================
+
+  docker:build:
+    desc: Build container image with commit SHA
+    cmds:
+      - docker build --build-arg COMMIT={{.COMMIT}} -t quarry:local .
 
   # ==================
   # TypeScript tasks

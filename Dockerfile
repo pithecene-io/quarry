@@ -9,6 +9,8 @@ FROM node:24.13.0-bookworm-slim AS build
 ARG GO_VERSION=1.25.6
 # TARGETARCH is injected by BuildKit for multi-platform builds (e.g. amd64, arm64).
 ARG TARGETARCH
+# Commit SHA for version embedding (.git is excluded from Docker context).
+ARG COMMIT=unknown
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git \
@@ -52,7 +54,7 @@ RUN pnpm -C sdk run build \
 WORKDIR /src/quarry
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -o /usr/local/bin/quarry ./cmd/quarry
+    CGO_ENABLED=0 go build -ldflags "-X main.commit=${COMMIT}" -o /usr/local/bin/quarry ./cmd/quarry
 
 # =============================================================================
 # Stage 2: deps — install runtime Node.js dependencies
