@@ -157,7 +157,7 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -o quarry ./cmd/quarry
+        run: go build -ldflags "-X main.commit=$(git rev-parse --short HEAD)" -o quarry ./cmd/quarry
 
       - name: 📦 Archive
         run: |
@@ -393,9 +393,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Extract version
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: 🏷️ Extract metadata
+        id: meta
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: 🐳 Build & push (slim)
         uses: docker/build-push-action@v6
@@ -404,8 +406,9 @@ jobs:
           target: slim
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: COMMIT=${{ steps.meta.outputs.commit }}
           tags: |
-            ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}-slim
+            ghcr.io/pithecene-io/quarry:${{ steps.meta.outputs.version }}-slim
             ghcr.io/pithecene-io/quarry:slim
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -417,8 +420,9 @@ jobs:
           target: full
           push: true
           platforms: linux/amd64
+          build-args: COMMIT=${{ steps.meta.outputs.commit }}
           tags: |
-            ghcr.io/pithecene-io/quarry:${{ steps.version.outputs.version }}
+            ghcr.io/pithecene-io/quarry:${{ steps.meta.outputs.version }}
             ghcr.io/pithecene-io/quarry:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
