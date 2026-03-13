@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.1] - 2026-03-13
+
+### Fixed
+
+- **Build**: Embed git commit SHA in binary via ldflags — `quarry --version` now shows the short commit hash instead of `unknown` across all build paths (Taskfile, CI release, Dockerfile) (#225)
+- **Docs**: Sweep stale v0.12.2 version references in README.md, SUPPORT.md, and IMPLEMENTATION_PLAN.md that were missed in the v0.13.0 release
+- **Tests**: Update hardcoded `ContractVersion` in Redis Streams adapter test fixtures to match current release
+
+### Changed
+
+- **Build**: Add `docker:build` Taskfile task — local Docker builds now automatically embed the commit SHA via `--build-arg`
+- **Build**: Extract `COMMIT` var in Taskfile — single resolution point for all Go and Docker build paths
+
+---
+
 ## [0.13.0] - 2026-03-12
 
 ### Added
@@ -529,7 +544,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/pithecene-io/quarry/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/pithecene-io/quarry/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.2
 [0.12.1]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.1
