@@ -80,6 +80,84 @@ tasks:
         fi
         echo "✅ Versions match"
 
+  version:bump:
+    desc: Bump lockstep version across all components
+    summary: |
+      Usage: task version:bump V=X.Y.Z
+
+      Updates every lockstep version target, rebuilds SDK and executor
+      bundle, and verifies the result. Does NOT commit or edit CHANGELOG.
+
+      Targets updated:
+        - quarry/types/version.go          (canonical)
+        - sdk/package.json                 (npm)
+        - sdk/src/types/events.ts          (CONTRACT_VERSION)
+        - sdk/test/emit/06-golden/*.json   (golden fixtures)
+        - quarry/adapter/redisstream/*_test.go (Go test fixtures)
+        - docs/CLI_PARITY.json             (parity artifact)
+        - docs/guides/container.md         (image tags)
+
+      After running, you still need to:
+        1. Update CHANGELOG.md (promote Unreleased → dated section)
+        2. Commit as a single version bump
+    requires:
+      vars: [V]
+    cmds:
+      - |
+        set -euo pipefail
+        NEW="{{.V}}"
+        OLD=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
+        echo "🔖 Bumping $OLD → $NEW"
+        echo ""
+
+        # 1. Go canonical version
+        sed -i "s/const Version = \"${OLD}\"/const Version = \"${NEW}\"/" \
+          quarry/types/version.go
+        echo "  ✅ quarry/types/version.go"
+
+        # 2. SDK package.json
+        sed -i "s/\"version\": \"${OLD}\"/\"version\": \"${NEW}\"/" sdk/package.json
+        echo "  ✅ sdk/package.json"
+
+        # 3. CONTRACT_VERSION in events.ts
+        sed -i "s/export const CONTRACT_VERSION = '${OLD}'/export const CONTRACT_VERSION = '${NEW}'/" \
+          sdk/src/types/events.ts
+        echo "  ✅ sdk/src/types/events.ts"
+
+        # 4. Golden test fixtures
+        for f in sdk/test/emit/06-golden/*.json; do
+          sed -i "s/\"contract_version\": \"${OLD}\"/\"contract_version\": \"${NEW}\"/g" "$f"
+          echo "  ✅ $f"
+        done
+
+        # 5. Go test fixtures (redisstream)
+        for f in quarry/adapter/redisstream/*_test.go; do
+          sed -i "s/ContractVersion: \"${OLD}\"/ContractVersion: \"${NEW}\"/g" "$f"
+          echo "  ✅ $f"
+        done
+
+        # 6. CLI parity artifact
+        sed -i "s/\"version\": \"${OLD}\"/\"version\": \"${NEW}\"/" docs/CLI_PARITY.json
+        echo "  ✅ docs/CLI_PARITY.json"
+
+        # 7. Container guide image tags
+        sed -i "s/quarry:${OLD}/quarry:${NEW}/g" docs/guides/container.md
+        sed -i "s/quarry:${OLD}-slim/quarry:${NEW}-slim/g" docs/guides/container.md
+        echo "  ✅ docs/guides/container.md"
+
+        echo ""
+        echo "🏗️  Rebuilding SDK and executor bundle..."
+      - task: ts:build
+      - task: executor:bundle
+      - task: version:lockstep
+      - |
+        echo ""
+        echo "✅ All lockstep targets updated to {{.V}}"
+        echo ""
+        echo "Remaining manual steps:"
+        echo "  1. Update CHANGELOG.md (promote [Unreleased] → [{{.V}}])"
+        echo "  2. Commit as a single version bump"
+
   # ==========
   # Go tasks
   # ==========
