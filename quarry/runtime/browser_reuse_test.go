@@ -221,7 +221,7 @@ func TestHealthCheck_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := healthCheck(tt.endpoint); err == nil {
+			if err := HealthCheckBrowser(tt.endpoint); err == nil {
 				t.Error("expected error")
 			}
 		})

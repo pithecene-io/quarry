@@ -127,8 +127,9 @@ ADVANCED:
 				Usage: "Path to executor binary (advanced: auto-resolved by default)",
 			},
 			&cli.StringFlag{
-				Name:  "browser-ws-endpoint",
-				Usage: "WebSocket URL of an externally managed browser (connect instead of launch)",
+				Name:    "browser-ws-endpoint",
+				Usage:   "WebSocket URL of an externally managed browser (connect instead of launch)",
+				EnvVars: []string{"QUARRY_BROWSER_ENDPOINT"},
 			},
 			&cli.BoolFlag{
 				Name:  "quiet",

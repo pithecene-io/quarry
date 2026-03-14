@@ -203,7 +203,7 @@ func TestE2E_BrowserReuse_HealthCheck(t *testing.T) {
 		t.Fatalf("acquire: %v", err)
 	}
 
-	if err := healthCheck(ws); err != nil {
+	if err := HealthCheckBrowser(ws); err != nil {
 		t.Fatalf("health check failed: %v", err)
 	}
 
@@ -234,7 +234,7 @@ func TestE2E_BrowserReuse_IdleShutdown(t *testing.T) {
 		t.Fatalf("acquire: %v", err)
 	}
 
-	if err := healthCheck(ws); err != nil {
+	if err := HealthCheckBrowser(ws); err != nil {
 		t.Fatalf("browser not alive after launch: %v", err)
 	}
 
@@ -242,7 +242,7 @@ func TestE2E_BrowserReuse_IdleShutdown(t *testing.T) {
 	deadline := time.Now().Add(25 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
-		if err := healthCheck(ws); err != nil {
+		if err := HealthCheckBrowser(ws); err != nil {
 			return // Shut down as expected
 		}
 	}

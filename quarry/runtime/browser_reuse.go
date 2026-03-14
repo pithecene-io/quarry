@@ -93,7 +93,7 @@ func AcquireReusableBrowser(ctx context.Context, cfg ReusableBrowserConfig) (str
 			cleanupStaleProcess(disc.PID)
 			_ = os.Remove(discoveryPath)
 		default:
-			if err := healthCheck(disc.WSEndpoint); err == nil {
+			if err := HealthCheckBrowser(disc.WSEndpoint); err == nil {
 				age := time.Since(parseTimeOrZero(disc.StartedAt))
 				fmt.Fprintf(os.Stderr, "Reusing browser server (pid=%d, age=%s)\n", disc.PID, age.Round(time.Second))
 				return disc.WSEndpoint, nil
@@ -147,8 +147,9 @@ func discoveryDir() (string, error) {
 	return dir, nil
 }
 
-// healthCheck verifies a browser server is alive by hitting /json/version.
-func healthCheck(wsEndpoint string) error {
+// HealthCheckBrowser verifies a browser server is alive by hitting /json/version.
+// Exported for use as a pre-run gate when --browser-ws-endpoint is set.
+func HealthCheckBrowser(wsEndpoint string) error {
 	u, err := url.Parse(wsEndpoint)
 	if err != nil {
 		return fmt.Errorf("parse ws endpoint: %w", err)
