@@ -149,13 +149,22 @@ func discoveryDir() (string, error) {
 
 // HealthCheckBrowser verifies a browser server is alive by hitting /json/version.
 // Exported for use as a pre-run gate when --browser-ws-endpoint is set.
+//
+// Uses the hostname from the WebSocket URL so it works for both local browsers
+// (ws://127.0.0.1:9222) and remote/container endpoints (ws://chrome:9222,
+// ws://browser-pool:3000).
 func HealthCheckBrowser(wsEndpoint string) error {
 	u, err := url.Parse(wsEndpoint)
 	if err != nil {
 		return fmt.Errorf("parse ws endpoint: %w", err)
 	}
 
-	healthURL := fmt.Sprintf("http://127.0.0.1:%s/json/version", u.Port())
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		port = "9222"
+	}
+	healthURL := fmt.Sprintf("http://%s:%s/json/version", host, port)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(healthURL)

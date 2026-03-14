@@ -96,6 +96,7 @@ tasks:
         - quarry/adapter/redisstream/*_test.go (Go test fixtures)
         - docs/CLI_PARITY.json             (parity artifact)
         - docs/guides/container.md         (image tags)
+        - README.md, PUBLIC_API.md, SUPPORT.md, docs/IMPLEMENTATION_PLAN.md
 
       After running, you still need to:
         1. Update CHANGELOG.md (promote Unreleased → dated section)
@@ -144,6 +145,12 @@ tasks:
         sed -i "s/quarry:${OLD}/quarry:${NEW}/g" docs/guides/container.md
         sed -i "s/quarry:${OLD}-slim/quarry:${NEW}-slim/g" docs/guides/container.md
         echo "  ✅ docs/guides/container.md"
+
+        # 8. Public-facing docs (install commands, image tags, version refs)
+        for f in README.md PUBLIC_API.md SUPPORT.md docs/IMPLEMENTATION_PLAN.md; do
+          sed -i "s/${OLD}/${NEW}/g" "$f"
+          echo "  ✅ $f"
+        done
 
         echo ""
         echo "🏗️  Rebuilding SDK and executor bundle..."
