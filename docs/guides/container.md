@@ -159,6 +159,12 @@ directory when they cannot be found from the script's own location.
 
 ## Slim image with external browser
 
+Use the slim image when Chromium is provided externally — via a sidecar
+container, a shared browser pool, or a host-level browser.
+
+The `QUARRY_BROWSER_ENDPOINT` environment variable (or `--browser-ws-endpoint`
+flag) tells Quarry to connect instead of launching its own Chromium.
+
 ```yaml
 services:
   chrome:
@@ -173,6 +179,8 @@ services:
     volumes:
       - ./scripts:/work/scripts:ro
       - ./data:/work/data
+    environment:
+      QUARRY_BROWSER_ENDPOINT: "ws://chrome:9222"
     command:
       - run
       - --script=./scripts/my-script.ts
@@ -180,5 +188,83 @@ services:
       - --source=my-source
       - --storage-backend=fs
       - --storage-path=./data
-      - --browser-ws-endpoint=ws://chrome:9222
 ```
+
+> **Health gate:** Quarry verifies the browser endpoint is reachable before
+> launching the executor. If the browser is down, the run fails immediately
+> with a clear error instead of timing out inside the script.
+
+---
+
+## Multi-crawler with shared browser pool
+
+When running multiple crawlers on the same host, a shared browser pool
+avoids bundling Chromium in every crawler image (~1 GB savings each) and
+lets you scale crawlers and browsers independently.
+
+On the same Docker network, the CDP WebSocket stays on the bridge
+(loopback-equivalent) — no external network hop.
+
+```yaml
+services:
+  browser-pool:
+    image: browserless/chrome
+    shm_size: "2gb"
+    environment:
+      MAX_CONCURRENT_SESSIONS: "10"
+
+  crawler-products:
+    image: ghcr.io/pithecene-io/quarry:0.13.1-slim
+    depends_on:
+      - browser-pool
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./data:/work/data
+    environment:
+      QUARRY_BROWSER_ENDPOINT: "ws://browser-pool:3000"
+    command:
+      - run
+      - --script=./scripts/products.ts
+      - --run-id=products-run
+      - --source=products
+      - --storage-backend=fs
+      - --storage-path=./data
+
+  crawler-reviews:
+    image: ghcr.io/pithecene-io/quarry:0.13.1-slim
+    depends_on:
+      - browser-pool
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./data:/work/data
+    environment:
+      QUARRY_BROWSER_ENDPOINT: "ws://browser-pool:3000"
+    command:
+      - run
+      - --script=./scripts/reviews.ts
+      - --run-id=reviews-run
+      - --source=reviews
+      - --storage-backend=fs
+      - --storage-path=./data
+```
+
+Each crawler gets an isolated `BrowserContext` within the shared browser —
+cookies, storage, and sessions do not leak between crawlers.
+
+### When to use which pattern
+
+| Pattern | Use when |
+|---------|----------|
+| **Full image** (bundled Chromium) | Single crawler, simplest setup, no external dependencies |
+| **Slim + sidecar** (1 crawler, 1 browser) | arm64, or you want browser lifecycle control |
+| **Slim + shared pool** (N crawlers, 1 pool) | Multiple crawlers on the same host, want smaller images and shared memory |
+| **Full image per crawler** (N independent) | Crawlers on different hosts, or need full isolation |
+
+### Limitations
+
+- **Stealth/adblocker plugins are skipped** when connecting to an external
+  browser (vanilla Puppeteer `connect()` is used). If detection evasion is
+  critical, use the full image with per-crawler Chromium.
+- **Cross-host CDP is not recommended.** The CDP protocol is chatty; even
+  moderate latency degrades performance. Keep crawlers and browser pools
+  co-located (same host or same availability zone).

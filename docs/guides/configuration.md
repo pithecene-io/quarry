@@ -172,10 +172,10 @@ parse time. See `docs/contracts/CONTRACT_CLI.md` for semantics.
 
 ### Browser Reuse
 
-| Flag | Type | Purpose |
-|------|------|---------|
-| `--browser-ws-endpoint` | string | Connect to an externally managed browser via WebSocket URL instead of launching Chromium per run |
-| `--no-browser-reuse` | bool | Disable transparent browser reuse across runs (per-run Chromium launch) |
+| Flag | Env Var | Type | Purpose |
+|------|--------|------|---------|
+| `--browser-ws-endpoint` | `QUARRY_BROWSER_ENDPOINT` | string | Connect to an externally managed browser via WebSocket URL instead of launching Chromium per run |
+| `--no-browser-reuse` | — | bool | Disable transparent browser reuse across runs (per-run Chromium launch) |
 
 **Explicit browser (`--browser-ws-endpoint`):** The executor uses
 `puppeteer.connect()` (vanilla, no plugins) and creates an isolated
@@ -210,6 +210,7 @@ by the Node executor process, not the Go runtime.
 | `QUARRY_STEALTH` | enabled | Puppeteer stealth plugin (evades bot detection). Set to `0` to disable. |
 | `QUARRY_ADBLOCKER` | disabled | Puppeteer adblocker plugin. Set to `1` to enable. |
 | `QUARRY_NO_SANDBOX` | disabled | Disable Chromium sandbox (required in containers/CI). Set to `1` to enable. |
+| `QUARRY_BROWSER_ENDPOINT` | — | WebSocket URL of an externally managed browser (equivalent to `--browser-ws-endpoint` flag). Preferred for container deployments. |
 | `QUARRY_BROWSER_IDLE_TIMEOUT` | `60` | Seconds before the reusable browser server self-terminates after all pages close. Read by both the Go runtime (to pass to the browser server) and the executor (as its idle timer). |
 | `QUARRY_RESOLVE_FROM` | — | Absolute path to `node_modules` for ESM resolution fallback. Set automatically by the Go runtime when `--resolve-from` is specified; not typically set manually. |
 
@@ -267,6 +268,7 @@ source: my-source
 category: default
 
 # Connect to an externally managed browser instead of launching one per run.
+# Also settable via QUARRY_BROWSER_ENDPOINT env var (preferred in containers).
 # browser_ws_endpoint: ws://localhost:9222/devtools/browser/...
 
 # Disable transparent browser reuse across runs.

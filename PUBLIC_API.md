@@ -497,14 +497,16 @@ CLI flags always override config file values.
 
 **Browser reuse:**
 
-| Flag | Description |
-|------|-------------|
-| `--browser-ws-endpoint <url>` | Connect to an externally managed browser via WebSocket URL (skips per-run Chromium launch; see `docs/guides/cli.md`) |
-| `--no-browser-reuse` | Disable transparent browser reuse across runs (forces per-run Chromium launch) |
+| Flag | Env Var | Description |
+|------|---------|-------------|
+| `--browser-ws-endpoint <url>` | `QUARRY_BROWSER_ENDPOINT` | Connect to an externally managed browser via WebSocket URL (skips per-run Chromium launch; see `docs/guides/cli.md`) |
+| `--no-browser-reuse` | — | Disable transparent browser reuse across runs (forces per-run Chromium launch) |
 
 By default, Quarry transparently reuses a persistent Chromium process across sequential runs.
 The browser auto-terminates after idle timeout (default 60s, configurable via `QUARRY_BROWSER_IDLE_TIMEOUT`).
-`--browser-ws-endpoint` takes priority over transparent reuse when set.
+`--browser-ws-endpoint` / `QUARRY_BROWSER_ENDPOINT` takes priority over transparent reuse when set.
+When an external endpoint is configured, a pre-run health check verifies the browser is reachable.
+See [Container Usage](docs/guides/container.md) for multi-crawler deployment patterns.
 
 **Module resolution:**
 

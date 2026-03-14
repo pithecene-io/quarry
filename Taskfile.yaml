@@ -80,6 +80,17 @@ tasks:
         fi
         echo "✅ Versions match"
 
+  version:bump:
+    desc: Bump lockstep version across all components
+    requires:
+      vars: [V]
+    cmds:
+      - scripts/version-bump.sh {{.V}}
+      - task: ts:build
+      - task: executor:bundle
+      - task: version:lockstep
+      - echo "✅ All lockstep targets updated to {{.V}}"
+
   # ==========
   # Go tasks
   # ==========

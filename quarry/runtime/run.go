@@ -139,6 +139,24 @@ func (r *RunOrchestrator) Execute(ctx context.Context) (*RunResult, error) {
 		"executor": r.config.ExecutorPath,
 	})
 
+	// Pre-run health gate: verify external browser is reachable before launching
+	// the executor. Catches "pool is down" early instead of wasting an executor start.
+	if r.config.BrowserWSEndpoint != "" {
+		if err := HealthCheckBrowser(r.config.BrowserWSEndpoint); err != nil {
+			r.logger.Error("external browser health check failed", map[string]any{
+				"endpoint": r.config.BrowserWSEndpoint,
+				"error":    err.Error(),
+			})
+			return r.buildResult(&types.RunOutcome{
+				Status:  types.OutcomeExecutorCrash,
+				Message: fmt.Sprintf("external browser unreachable: %v", err),
+			}, "", nil, nil), nil
+		}
+		r.logger.Info("external browser health check passed", map[string]any{
+			"endpoint": r.config.BrowserWSEndpoint,
+		})
+	}
+
 	// Create executor
 	execConfig := &ExecutorConfig{
 		ExecutorPath:      r.config.ExecutorPath,
