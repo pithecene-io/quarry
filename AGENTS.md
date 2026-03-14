@@ -178,10 +178,8 @@ When releasing:
 
 **Do not skip steps. Do not split across commits.**
 
-The `version:bump` task updates: `quarry/types/version.go`, `sdk/package.json`,
-`sdk/src/types/events.ts`, golden test fixtures, Go test fixtures,
-`docs/CLI_PARITY.json`, `docs/guides/container.md`, and rebuilds the SDK
-and executor bundle. See `task version:bump --summary` for the full target list.
+The `version:bump` task runs `scripts/version-bump.sh` (see that file for the
+full target list), then rebuilds the SDK and executor bundle.
 
 ---
 
