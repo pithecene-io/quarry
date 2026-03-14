@@ -154,6 +154,7 @@ Scripts are imperative, explicit, and boring by design.
 - **Streaming** — chunked artifacts with backpressure → [docs/guides/streaming.md](docs/guides/streaming.md)
 - **Configuration** — YAML project defaults via `--config` → [docs/guides/cli.md](docs/guides/cli.md)
 - **Browser Reuse** — transparent Chromium persistence across sequential runs → [docs/guides/configuration.md](docs/guides/configuration.md)
+- **Container Deployment** — full/slim images, shared browser pools, multi-crawler topologies → [docs/guides/container.md](docs/guides/container.md)
 - **Integration** — webhook and Redis adapters for downstream triggers → [docs/guides/integration.md](docs/guides/integration.md)
 - **Fan-Out** — derived work execution via `emit.enqueue()` → [docs/guides/emit.md](docs/guides/emit.md)
 - **Run Lifecycle** — terminal states and exit codes → [docs/guides/run.md](docs/guides/run.md)

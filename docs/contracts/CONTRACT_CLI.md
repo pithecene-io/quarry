@@ -324,13 +324,18 @@ on the first run and self-terminates after an idle timeout (default: 60s).
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
+| `QUARRY_BROWSER_ENDPOINT` | — | WebSocket URL of an externally managed browser (equivalent to `--browser-ws-endpoint`) |
 | `QUARRY_BROWSER_IDLE_TIMEOUT` | `60` | Idle timeout in seconds before browser self-terminates |
 
 **Semantics:**
 - The browser server is a **transparent optimization**, analogous to
   `git credential-cache`. It self-terminates and requires no user management.
-- `--browser-ws-endpoint` (explicit) takes absolute priority. Browser reuse
-  is bypassed entirely when set.
+- `--browser-ws-endpoint` / `QUARRY_BROWSER_ENDPOINT` (explicit) takes
+  absolute priority. Browser reuse is bypassed entirely when set.
+- When an external endpoint is configured, the runtime performs a health
+  check (`/json/version`) before launching the executor. If the browser is
+  unreachable, the run fails with `OutcomeExecutorCrash` and a descriptive
+  message.
 - Fan-out (`--depth > 0`) uses the reusable browser if available; falls back
   to `LaunchManagedBrowser` when reuse is disabled.
 - Proxy mismatch between runs causes a graceful fallback to per-run browser

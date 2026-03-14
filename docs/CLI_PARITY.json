@@ -59,7 +59,8 @@
           "type": "string",
           "required": false,
           "description": "WebSocket URL of an externally managed browser (connect instead of launch)",
-          "notes": "When set, executor connects via puppeteer.connect() instead of launching a new browser. Proxy launch args are ignored; page.authenticate() still applies."
+          "envVar": "QUARRY_BROWSER_ENDPOINT",
+          "notes": "When set, executor connects via puppeteer.connect() instead of launching a new browser. Proxy launch args are ignored; page.authenticate() still applies. A pre-run health check verifies the endpoint is reachable."
         },
         "quiet": {
           "type": "bool",
