@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.2] - 2026-03-14
+
+### Added
+
+- **Runtime**: `QUARRY_BROWSER_ENDPOINT` env var — binds to `--browser-ws-endpoint` flag, enabling container Compose configs to set external browser endpoints via environment instead of mounting YAML config files (#229)
+- **Runtime**: Pre-run browser health gate — verifies external browser reachability via `/json/version` before launching the executor; warns on failure but does not block the run, preserving compatibility with tokenized and path-prefixed browser services (#229)
+- **Build**: `task version:bump V=X.Y.Z` — single command updates all lockstep version targets, rebuilds SDK and executor bundle, and verifies lockstep (#229)
+- **Docs**: Multi-crawler deployment topology and browser endpoint documentation in container guide (#229)
+
+### Fixed
+
+- **Runtime**: Browser health gate no longer hard-fails on external WS endpoints with non-root paths or query parameters — downgraded from fatal to warning to avoid false-rejecting tokenized browser pool services
+- **Build**: Release tarball now includes built SDK — added `pnpm run build` before `pnpm pack` in release workflow (#228)
+- **Build**: `scripts/version-bump.sh` and `Taskfile.yaml` version tasks now use portable sed/grep — replaces GNU-specific `grep -P` and `sed -i` with POSIX-compatible alternatives for macOS support
+
+### Changed
+
+- **CI**: New `sdk-lockstep` job verifies built `CONTRACT_VERSION` matches source at PR time (#228)
+- **Docs**: Updated cli.md, configuration.md, CONTRACT_CLI.md, PUBLIC_API.md, CLI_PARITY.json with browser endpoint and health gate semantics (#229)
+
+---
+
 ## [0.13.1] - 2026-03-13
 
 ### Fixed
@@ -545,6 +567,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 [Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.1...HEAD
+[0.13.2]: https://github.com/pithecene-io/quarry/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/pithecene-io/quarry/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/pithecene-io/quarry/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/pithecene-io/quarry/releases/tag/v0.12.2
