@@ -109,6 +109,35 @@ jobs:
           fi
           echo "✅ Bundle is fresh"
 
+  sdk-lockstep:
+    name: 🔒 SDK Build Lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🧰 Setup
+        uses: jdx/mise-action@v2
+
+      - name: 📦 Install dependencies
+        run: pnpm install
+
+      - name: 🏗️ Build SDK
+        run: pnpm -C sdk run build
+
+      - name: 🔍 Verify CONTRACT_VERSION matches source
+        run: |
+          SOURCE_VERSION=$(grep -oP "export const CONTRACT_VERSION = '\K[^']+" sdk/src/types/events.ts)
+          BUILT_VERSION=$(grep -oP 'const CONTRACT_VERSION = "\K[^"]+' sdk/dist/index.mjs)
+          echo "Source CONTRACT_VERSION: $SOURCE_VERSION"
+          echo "Built CONTRACT_VERSION:  $BUILT_VERSION"
+          if [ "$SOURCE_VERSION" != "$BUILT_VERSION" ]; then
+            echo "::error::SDK build CONTRACT_VERSION mismatch!" \
+              "Source ($SOURCE_VERSION) != Built ($BUILT_VERSION)"
+            exit 1
+          fi
+          echo "✅ SDK build lockstep verified"
+
   build:
     name: 🏗️ Build
     runs-on: ubuntu-latest

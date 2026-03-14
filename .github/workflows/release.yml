@@ -187,6 +187,10 @@ jobs:
       - name: 📦 Install dependencies
         run: pnpm install
 
+      - name: 🏗️ Build SDK
+        working-directory: sdk
+        run: pnpm run build
+
       - name: 📦 Package source & SDK
         run: |
           mkdir -p dist
