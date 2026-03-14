@@ -70,7 +70,7 @@ tasks:
     desc: Verify version lockstep (Go == SDK)
     cmds:
       - |
-        GO_VERSION=$(grep -oP 'const Version = "\K[^"]+' quarry/types/version.go)
+        GO_VERSION=$(sed -n 's/^const Version = "\([^"]*\)".*/\1/p' quarry/types/version.go)
         SDK_VERSION=$(jq -r '.version' sdk/package.json)
         echo "Go version:  $GO_VERSION"
         echo "SDK version: $SDK_VERSION"
