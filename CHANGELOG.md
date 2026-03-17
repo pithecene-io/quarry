@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.3] - 2026-03-17
+
+### Fixed
+
+- **Security**: Harden CI workflow permissions — add explicit `permissions: contents: read` to `ci.yml`, `nightly.yml`, and `release-dry-run.yml`, enforcing least-privilege GITHUB_TOKEN scope (resolves 19 CodeQL code-scanning alerts) (#232)
+- **Security**: Patch vulnerable transitive devDependencies via `pnpm.overrides` — `flatted` 3.4.0 (DoS), `minimatch` 3.1.4 (ReDoS), `rollup` 4.59.0 (path traversal), `basic-ftp` 5.2.0 (path traversal) (#232)
+
+---
+
 ## [0.13.2] - 2026-03-14
 
 ### Added
@@ -566,7 +575,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.3...HEAD
+[0.13.3]: https://github.com/pithecene-io/quarry/compare/v0.13.2...v0.13.3
 [0.13.2]: https://github.com/pithecene-io/quarry/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/pithecene-io/quarry/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/pithecene-io/quarry/compare/v0.12.2...v0.13.0
