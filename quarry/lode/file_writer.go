@@ -10,6 +10,16 @@ import (
 	"github.com/pithecene-io/lode/lode"
 )
 
+// SidecarFileRef describes a sidecar file written via PutFile.
+// Accumulated by LodeClient and flushed into snapshot Metadata so
+// downstream consumers can enumerate files without prefix-scanning storage.
+type SidecarFileRef struct {
+	Path        string `json:"path"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+}
+
 // FileWriter writes sidecar files to Lode Store.
 // Files land at Hive-partitioned paths under files/, bypassing Dataset
 // segment/manifest machinery entirely.
@@ -44,7 +54,21 @@ func (c *LodeClient) PutFile(ctx context.Context, filename, contentType string, 
 		return fmt.Errorf("file write metadata marshal failed: %w", err)
 	}
 	metaPath := path + ".meta.json"
-	return store.Put(ctx, metaPath, bytes.NewReader(meta))
+	if err := store.Put(ctx, metaPath, bytes.NewReader(meta)); err != nil {
+		return err
+	}
+
+	// Track the written file for inclusion in snapshot Metadata.
+	c.mu.Lock()
+	c.pendingFiles = append(c.pendingFiles, SidecarFileRef{
+		Path:        path,
+		Filename:    filename,
+		ContentType: contentType,
+		Size:        int64(len(data)),
+	})
+	c.mu.Unlock()
+
+	return nil
 }
 
 // fileMetadata is the companion metadata written alongside sidecar files.
