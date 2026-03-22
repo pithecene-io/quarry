@@ -169,8 +169,10 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 		localOffsets[chunk.ArtifactID] = offset + int64(len(chunk.Data))
 	}
 
-	// Write to storage
-	_, err := c.dataset.Write(ctx, records, c.snapshotMetadata())
+	// Write to storage.
+	// Chunk writes use empty metadata — sidecar file refs are only flushed
+	// on event and metrics writes, which are the consumer-facing boundaries.
+	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
 	if err != nil {
 		return WrapWriteError(err, buildPartitionPath(c.config, "artifact"))
 	}
@@ -180,7 +182,6 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 		c.offsets[chunk.ArtifactID] = localOffsets[chunk.ArtifactID]
 		c.chunksSeen[chunk.ArtifactID] = struct{}{}
 	}
-	c.drainPendingFiles()
 
 	return nil
 }
@@ -212,7 +213,9 @@ func (c *LodeClient) Close() error {
 const MetadataKeySidecarFiles = "sidecar_files"
 
 // snapshotMetadata returns Metadata containing any pending sidecar file refs.
-// Returns nil (empty metadata) if no files are pending.
+// Returns empty metadata if no files are pending.
+// Only called from WriteEvents and WriteMetrics — chunk writes do not flush
+// file refs because chunks are not consumer-facing commit boundaries.
 // Must be called under c.mu.
 func (c *LodeClient) snapshotMetadata() lode.Metadata {
 	if len(c.pendingFiles) == 0 {

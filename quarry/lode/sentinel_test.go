@@ -156,70 +156,6 @@ func TestQueryLatestMetrics_ErrNotFound_StaleSnapshotID(t *testing.T) {
 	}
 }
 
-// TestQueryLatestMetrics_ReadError_Propagation verifies that when the
-// underlying ds.Read() fails (e.g. snapshot deleted between list and read),
-// QueryLatestMetrics wraps it as a StorageError via WrapReadError.
-func TestQueryLatestMetrics_ReadError_Propagation(t *testing.T) {
-	// Use a FailingStore that succeeds on writes but fails on reads
-	// after the initial snapshot list succeeds.
-	// We need a real store for the write, then sabotage the read.
-	//
-	// Strategy: write metrics to a real memory store, then use a dataset
-	// backed by a store where Get fails for snapshot data files.
-	store := lode.NewMemory()
-	factory := sharedFactory(store)
-
-	cfg := Config{
-		Dataset:  "quarry",
-		Source:   "test-source",
-		Category: "test-category",
-		Day:      "2026-02-03",
-		RunID:    "run-001",
-	}
-
-	client, err := NewLodeClientWithFactory(cfg, factory)
-	if err != nil {
-		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
-	}
-
-	snap := metrics.Snapshot{
-		RunsStarted:   1,
-		RunID:          "run-001",
-		Policy:         "strict",
-		Executor:       "executor.js",
-		StorageBackend: "memory",
-	}
-
-	completedAt := time.Date(2026, 2, 3, 15, 0, 0, 0, time.UTC)
-	if err := client.WriteMetrics(t.Context(), snap, completedAt); err != nil {
-		t.Fatalf("WriteMetrics failed: %v", err)
-	}
-
-	// Verify the snapshot exists and is readable first
-	ds, err := NewReadDataset("quarry", factory)
-	if err != nil {
-		t.Fatalf("NewReadDataset failed: %v", err)
-	}
-
-	snapshots, err := ds.Snapshots(t.Context())
-	if err != nil {
-		t.Fatalf("Snapshots failed: %v", err)
-	}
-	if len(snapshots) == 0 {
-		t.Fatal("expected at least one snapshot after write")
-	}
-
-	// Now try to read with a fabricated snapshot ID via QueryLatestMetrics
-	// This goes through the WrapReadError path in metrics_query.go
-	record, err := QueryLatestMetrics(t.Context(), ds, "", "")
-	if err != nil {
-		t.Fatalf("QueryLatestMetrics for valid data failed: %v", err)
-	}
-	if toString(record["run_id"]) != "run-001" {
-		t.Errorf("expected run_id=run-001, got %q", toString(record["run_id"]))
-	}
-}
-
 // =============================================================================
 // Sidecar File Metadata Inventory (V1_READINESS §9)
 //
@@ -510,5 +446,99 @@ func TestPutFile_MetadataInventory_IncludedInWriteMetrics(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("no snapshot contains sidecar_files metadata after WriteMetrics")
+	}
+}
+
+// TestPutFile_MetadataInventory_SurvivesChunkWrite verifies that chunk writes
+// do NOT drain pending sidecar file refs. Quarry's persistence order is
+// chunks-first (both buffered and strict policy), so file refs written via
+// PutFile before a chunk flush must survive to appear in the subsequent
+// event or metrics snapshot — the consumer-facing boundaries.
+func TestPutFile_MetadataInventory_SurvivesChunkWrite(t *testing.T) {
+	store := lode.NewMemory()
+	factory := sharedFactory(store)
+
+	cfg := Config{
+		Dataset:  "quarry",
+		Source:   "test-source",
+		Category: "test-category",
+		Day:      "2026-02-03",
+		RunID:    "run-001",
+		Policy:   "strict",
+	}
+
+	client, err := NewLodeClientWithFactory(cfg, factory)
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	ctx := t.Context()
+
+	// Write a sidecar file
+	if err := client.PutFile(ctx, "screenshot.png", "image/png", []byte("png-data")); err != nil {
+		t.Fatalf("PutFile failed: %v", err)
+	}
+
+	// Write chunks — this must NOT drain pending files
+	chunks := []*types.ArtifactChunk{
+		{ArtifactID: "art-1", Seq: 1, Data: []byte("chunk-data")},
+	}
+	if err := client.WriteChunks(ctx, cfg.Dataset, cfg.RunID, chunks); err != nil {
+		t.Fatalf("WriteChunks failed: %v", err)
+	}
+
+	// Verify pending files are still present after chunk write
+	client.mu.Lock()
+	pending := len(client.pendingFiles)
+	client.mu.Unlock()
+	if pending != 1 {
+		t.Fatalf("pendingFiles after WriteChunks = %d, want 1 (must survive chunk writes)", pending)
+	}
+
+	// Now flush via WriteEvents — file refs should appear here
+	events := []*types.EventEnvelope{
+		{Type: types.EventTypeItem, Seq: 1, Payload: map[string]any{"url": "http://example.com"}},
+	}
+	if err := client.WriteEvents(ctx, cfg.Dataset, cfg.RunID, events); err != nil {
+		t.Fatalf("WriteEvents failed: %v", err)
+	}
+
+	// Verify pending files are now drained
+	client.mu.Lock()
+	pending = len(client.pendingFiles)
+	client.mu.Unlock()
+	if pending != 0 {
+		t.Errorf("pendingFiles after WriteEvents = %d, want 0", pending)
+	}
+
+	// Verify the event snapshot (not the chunk snapshot) has the file refs
+	ds, err := NewReadDataset("quarry", factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	snapshots, err := ds.Snapshots(ctx)
+	if err != nil {
+		t.Fatalf("Snapshots failed: %v", err)
+	}
+
+	// Count snapshots with sidecar_files — must be exactly 1 (the event snapshot)
+	filesSnapshots := 0
+	for _, snap := range snapshots {
+		if raw, ok := snap.Manifest.Metadata[MetadataKeySidecarFiles]; ok {
+			if files, ok := raw.([]any); ok && len(files) > 0 {
+				filesSnapshots++
+				ref, ok := files[0].(map[string]any)
+				if !ok {
+					t.Fatalf("file ref is %T, want map[string]any", files[0])
+				}
+				if ref["filename"] != "screenshot.png" {
+					t.Errorf("filename = %v, want screenshot.png", ref["filename"])
+				}
+			}
+		}
+	}
+	if filesSnapshots != 1 {
+		t.Errorf("snapshots with sidecar_files = %d, want 1 (event snapshot only, not chunk snapshot)", filesSnapshots)
 	}
 }
