@@ -37,6 +37,9 @@ var (
 
 	// ErrNetwork indicates a network-level failure (connection refused, DNS).
 	ErrNetwork = errors.New("network error")
+
+	// ErrPathExists indicates a write to an existing immutable path.
+	ErrPathExists = errors.New("path already exists")
 )
 
 // StorageError wraps an underlying error with storage classification.
@@ -123,6 +126,7 @@ type errorPattern struct {
 var classifierTable = []errorPattern{
 	{[]string{"AccessDenied", "access denied", "Forbidden", "403"}, ErrAccessDenied},
 	{[]string{"permission denied", "EACCES"}, ErrPermissionDenied},
+	{[]string{"path already exists", "path exists", "already exists", "file exists", "EEXIST"}, ErrPathExists},
 	{[]string{"no such file", "does not exist", "not found", "ENOENT", "404", "NoSuchKey"}, ErrNotFound},
 	{[]string{"no space left", "disk full", "ENOSPC", "quota exceeded"}, ErrDiskFull},
 	{[]string{"timeout", "timed out", "deadline exceeded"}, ErrTimeout},

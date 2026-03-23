@@ -79,6 +79,18 @@ func TestClassifyError(t *testing.T) {
 			wantKind: ErrDiskFull,
 		},
 
+		// path_exists (immutability violation)
+		{
+			name:     "path already exists",
+			errMsg:   "path already exists: datasets/quarry/files/report.pdf",
+			wantKind: ErrPathExists,
+		},
+		{
+			name:     "file exists errno",
+			errMsg:   "open /data/report.pdf: file exists (EEXIST)",
+			wantKind: ErrPathExists,
+		},
+
 		// not_found
 		{
 			name:     "no such file",

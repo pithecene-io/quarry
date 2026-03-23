@@ -43,7 +43,7 @@ func (c *LodeClient) PutFile(ctx context.Context, filename, contentType string, 
 
 	path := c.buildFilePath(filename)
 	if err := store.Put(ctx, path, bytes.NewReader(data)); err != nil {
-		return err
+		return WrapWriteError(err, path)
 	}
 
 	// Write companion metadata file preserving content type.
@@ -55,7 +55,7 @@ func (c *LodeClient) PutFile(ctx context.Context, filename, contentType string, 
 	}
 	metaPath := path + ".meta.json"
 	if err := store.Put(ctx, metaPath, bytes.NewReader(meta)); err != nil {
-		return err
+		return WrapWriteError(err, metaPath)
 	}
 
 	// Track the written file for inclusion in snapshot Metadata.

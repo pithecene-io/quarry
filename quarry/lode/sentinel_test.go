@@ -59,6 +59,21 @@ func TestPutFile_ErrPathExists_DoubleWrite(t *testing.T) {
 	if !errors.Is(err, lode.ErrPathExists) {
 		t.Errorf("expected errors.Is(err, lode.ErrPathExists), got: %v", err)
 	}
+
+	// PutFile errors must be wrapped as StorageError with classification
+	var storageErr *StorageError
+	if !errors.As(err, &storageErr) {
+		t.Fatalf("expected *StorageError, got %T: %v", err, err)
+	}
+	if storageErr.Op != "write" {
+		t.Errorf("Op = %q, want \"write\"", storageErr.Op)
+	}
+	if storageErr.Path == "" {
+		t.Error("expected non-empty path in StorageError")
+	}
+	if !errors.Is(err, ErrPathExists) {
+		t.Errorf("expected errors.Is(err, ErrPathExists) via classifier, got kind: %v", storageErr.Kind)
+	}
 }
 
 // TestPutFile_ErrPathExists_MetaSidecar verifies that the companion .meta.json
