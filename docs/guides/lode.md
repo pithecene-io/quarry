@@ -134,6 +134,36 @@ Validation is a downstream consumer responsibility.
 
 ---
 
+## Sidecar File Inventory
+
+Files written via `ctx.storage.put()` are tracked in Lode snapshot metadata
+so downstream consumers can discover them without scanning storage.
+
+Each snapshot that includes sidecar file writes will have a `sidecar_files`
+entry in `Manifest.Metadata` containing an array of file references:
+
+```json
+{
+  "sidecar_files": [
+    {
+      "path": "datasets/quarry/partitions/source=my-source/category=default/day=2026-03-22/run_id=run-001/files/product-image.png",
+      "filename": "product-image.png",
+      "content_type": "image/png",
+      "size": 14230
+    }
+  ]
+}
+```
+
+**Key behaviors:**
+- File refs only appear on event and metrics snapshots — not on chunk snapshots
+- If multiple event flushes occur during a run, file refs appear on the
+  first event snapshot after each batch of file writes
+- To enumerate all files for a run, union `sidecar_files` across all
+  snapshots for that `run_id`
+
+---
+
 ## Design Non-Goals
 
 The following behaviors are explicitly **out of scope**:

@@ -26,24 +26,24 @@ Quarry is **TypeScript-first** and **ESM-only**.
 ### Via mise (recommended)
 
 ```bash
-mise install github:pithecene-io/quarry@0.13.3
+mise install github:pithecene-io/quarry@0.13.4
 ```
 
 Or pin in your `mise.toml`:
 
 ```toml
 [tools]
-"github:pithecene-io/quarry" = "0.13.3"
+"github:pithecene-io/quarry" = "0.13.4"
 ```
 
 ### Via Docker
 
 ```bash
 # Full image — includes Chrome for Testing + fonts (amd64 only, recommended)
-docker pull ghcr.io/pithecene-io/quarry:0.13.3
+docker pull ghcr.io/pithecene-io/quarry:0.13.4
 
 # Slim image — no browser, multi-arch (BYO Chromium via --browser-ws-endpoint)
-docker pull ghcr.io/pithecene-io/quarry:0.13.3-slim
+docker pull ghcr.io/pithecene-io/quarry:0.13.4-slim
 ```
 
 See [docs/guides/container.md](docs/guides/container.md) for `docker run` and Docker Compose examples.
@@ -342,6 +342,21 @@ Files land at Hive-partitioned paths under the storage root:
 ```
 <storage-path>/datasets/<dataset>/partitions/source=<s>/category=<c>/day=<d>/run_id=<r>/files/<filename>
 ```
+
+#### Sidecar File Inventory (v0.13.4+)
+
+Files written via `storage.put()` are automatically tracked in Lode snapshot
+`Metadata` under the `sidecar_files` key. Downstream consumers can enumerate
+files for a run via `snapshot.Manifest.Metadata["sidecar_files"]` instead of
+prefix-scanning storage.
+
+Each entry includes `path`, `filename`, `content_type`, and `size`. File refs
+are flushed into the snapshot on event and metrics writes only (not chunk
+writes). To reconstruct the full file inventory for a run, union
+`sidecar_files` from all snapshots for that `run_id`.
+
+See `docs/contracts/CONTRACT_LODE.md` § Sidecar File Inventory for the
+normative specification.
 
 ### Batching File Uploads
 
@@ -747,14 +762,14 @@ executor runs under Node ESM.
 
 Quarry ships container images via GHCR:
 
-- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.13.3` — includes Chrome for Testing + fonts
-- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.13.3-slim` — no browser (BYO via `--browser-ws-endpoint`)
+- **Full** (amd64 only): `ghcr.io/pithecene-io/quarry:0.13.4` — includes Chrome for Testing + fonts
+- **Slim** (amd64 + arm64): `ghcr.io/pithecene-io/quarry:0.13.4-slim` — no browser (BYO via `--browser-ws-endpoint`)
 
 For `docker run`, Docker Compose, and sidecar patterns, see [docs/guides/container.md](docs/guides/container.md).
 
 ---
 
-## Known Limitations (v0.13.3)
+## Known Limitations (v0.13.4)
 
 1. **Single executor type**: Only Node.js executor supported
 2. **No built-in retries**: Retry logic is caller's responsibility
@@ -843,7 +858,7 @@ real-time event streaming and post-run notification.
 
 ```bash
 quarry version
-# 0.13.3 (commit: ...)
+# 0.13.4 (commit: ...)
 ```
 
 SDK and runtime versions must match (lockstep versioning).
@@ -852,8 +867,8 @@ SDK and runtime versions must match (lockstep versioning).
 
 | Component | Channel | Install |
 |-----------|---------|---------|
-| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.13.3` |
-| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.3` |
-| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.3-slim` |
+| CLI binary | GitHub Releases | `mise install github:pithecene-io/quarry@0.13.4` |
+| Container (full, amd64) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.4` |
+| Container (slim, multi-arch) | GHCR | `docker pull ghcr.io/pithecene-io/quarry:0.13.4-slim` |
 | SDK | JSR | `npx jsr add @pithecene-io/quarry-sdk` |
 | SDK | GitHub Packages | `pnpm add @pithecene-io/quarry-sdk` |

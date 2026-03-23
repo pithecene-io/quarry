@@ -227,3 +227,44 @@ via custom endpoint and path-style addressing options.
 
 These are runtime configuration options passed via CLI flags (`--storage-endpoint`,
 `--storage-s3-path-style`). They do not affect partition layout or record format.
+
+---
+
+## Sidecar File Inventory
+
+Sidecar files written via `storage.put()` land at Hive-partitioned paths
+under `files/`, bypassing the Dataset segment/manifest machinery. These files
+are **not** tracked by Lode's `Manifest.Files` — they are the caller's
+responsibility.
+
+Quarry tracks sidecar files in Lode snapshot `Metadata` under the
+`sidecar_files` key. Each entry is a `SidecarFileRef`:
+
+| Field          | Type   | Description                              |
+|----------------|--------|------------------------------------------|
+| `path`         | string | Full Hive-partitioned storage path       |
+| `filename`     | string | Flat filename (no path separators)       |
+| `content_type` | string | MIME content type                        |
+| `size`         | int64  | File size in bytes                       |
+
+### Flush Semantics
+
+- File refs accumulate in the client as files are written via `PutFile`.
+- Refs are flushed into snapshot `Metadata` on `WriteEvents` and
+  `WriteMetrics` calls only — these are consumer-facing commit boundaries.
+- Chunk writes (`WriteChunks`) do **not** flush file refs, because chunk
+  snapshots are intermediate and not inspected by downstream consumers.
+- On successful write, pending refs are drained. On write failure, pending
+  refs are preserved for the next successful write.
+
+### Consumer Access
+
+Downstream consumers enumerate sidecar files via:
+
+```
+snapshot.Manifest.Metadata["sidecar_files"]
+```
+
+File refs may be spread across multiple snapshots within a run. To
+reconstruct the full inventory, union `sidecar_files` from all snapshots
+for the run.

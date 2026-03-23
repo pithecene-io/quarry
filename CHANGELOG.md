@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.4] - 2026-03-22
+
+### Added
+
+- **Storage**: Sidecar file metadata inventory — files written via `storage.put()` are now tracked in Lode snapshot `Metadata` under the `sidecar_files` key. Downstream consumers can enumerate files for a run via `snapshot.Manifest.Metadata["sidecar_files"]` instead of prefix-scanning storage (#234)
+- **Storage**: `SidecarFileRef` type — each tracked file includes `path`, `filename`, `content_type`, and `size` fields
+- **Tests**: Lode sentinel error path validation — targeted integration tests for `lode.ErrPathExists` (immutability enforcement on double-write) and `lode.ErrNotFound` (stale snapshot ID), providing evidence for Lode V1_READINESS §5 (#234)
+- **Tests**: End-to-end test for `file_write` → event flush → `sidecar_files` metadata pipeline, proving the full ingestion path from IPC frame to consumer-visible snapshot (#235)
+
+### Fixed
+
+- **Storage**: File inventory is only flushed on event and metrics writes (consumer-facing commit boundaries), not on chunk writes. Prevents file refs from being drained into artifact snapshots that consumers don't inspect for metadata (#234)
+
+---
+
 ## [0.13.3] - 2026-03-17
 
 ### Fixed
@@ -575,7 +590,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.3...HEAD
+[Unreleased]: https://github.com/pithecene-io/quarry/compare/v0.13.4...HEAD
+[0.13.4]: https://github.com/pithecene-io/quarry/compare/v0.13.3...v0.13.4
 [0.13.3]: https://github.com/pithecene-io/quarry/compare/v0.13.2...v0.13.3
 [0.13.2]: https://github.com/pithecene-io/quarry/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/pithecene-io/quarry/compare/v0.13.0...v0.13.1
