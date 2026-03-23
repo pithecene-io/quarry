@@ -34,9 +34,10 @@ type LodeClient struct { //nolint:revive // intentional naming for clarity
 	config       Config
 	storeFactory lode.StoreFactory // for sidecar file writes via FileWriter
 
-	mu         sync.Mutex          // guards offsets and chunksSeen
-	offsets    map[string]int64    // cumulative offset per artifact across batches
-	chunksSeen map[string]struct{} // tracks artifacts that have had chunks written
+	mu           sync.Mutex          // guards offsets, chunksSeen, and pendingFiles
+	offsets      map[string]int64    // cumulative offset per artifact across batches
+	chunksSeen   map[string]struct{} // tracks artifacts that have had chunks written
+	pendingFiles []SidecarFileRef    // sidecar files written since last snapshot flush
 
 	storeOnce sync.Once  // lazy store initialization for FileWriter
 	store     lode.Store // lazily created from storeFactory
@@ -117,7 +118,7 @@ func (c *LodeClient) WriteEvents(ctx context.Context, _, _ string, events []*typ
 		records = append(records, record)
 	}
 
-	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
+	_, err := c.dataset.Write(ctx, records, c.snapshotMetadata())
 	if err != nil {
 		return WrapWriteError(err, buildPartitionPath(c.config, string(events[0].Type)))
 	}
@@ -127,6 +128,7 @@ func (c *LodeClient) WriteEvents(ctx context.Context, _, _ string, events []*typ
 		delete(c.offsets, artifactID)
 		delete(c.chunksSeen, artifactID)
 	}
+	c.drainPendingFiles()
 
 	return nil
 }
@@ -167,7 +169,9 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 		localOffsets[chunk.ArtifactID] = offset + int64(len(chunk.Data))
 	}
 
-	// Write to storage
+	// Write to storage.
+	// Chunk writes use empty metadata — sidecar file refs are only flushed
+	// on event and metrics writes, which are the consumer-facing boundaries.
 	_, err := c.dataset.Write(ctx, records, lode.Metadata{})
 	if err != nil {
 		return WrapWriteError(err, buildPartitionPath(c.config, "artifact"))
@@ -186,11 +190,15 @@ func (c *LodeClient) WriteChunks(ctx context.Context, _, _ string, chunks []*typ
 // Written to event_type=metrics partition with record_kind=metrics.
 // This is a standalone write (not part of the event/chunk pipeline).
 func (c *LodeClient) WriteMetrics(ctx context.Context, snap metrics.Snapshot, completedAt time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	record := toMetricsRecordMap(snap, c.config, completedAt)
-	_, err := c.dataset.Write(ctx, []any{record}, lode.Metadata{})
+	_, err := c.dataset.Write(ctx, []any{record}, c.snapshotMetadata())
 	if err != nil {
 		return WrapWriteError(err, buildPartitionPath(c.config, "metrics"))
 	}
+	c.drainPendingFiles()
 	return nil
 }
 
@@ -198,6 +206,31 @@ func (c *LodeClient) WriteMetrics(ctx context.Context, snap metrics.Snapshot, co
 func (c *LodeClient) Close() error {
 	// Dataset doesn't require explicit close in current Lode API
 	return nil
+}
+
+// MetadataKeySidecarFiles is the Metadata key for sidecar file inventory.
+// Downstream consumers read this to enumerate files without prefix-scanning.
+const MetadataKeySidecarFiles = "sidecar_files"
+
+// snapshotMetadata returns Metadata containing any pending sidecar file refs.
+// Returns empty metadata if no files are pending.
+// Only called from WriteEvents and WriteMetrics — chunk writes do not flush
+// file refs because chunks are not consumer-facing commit boundaries.
+// Must be called under c.mu.
+func (c *LodeClient) snapshotMetadata() lode.Metadata {
+	if len(c.pendingFiles) == 0 {
+		return lode.Metadata{}
+	}
+	// Copy pending files into metadata value to decouple from mutable state.
+	refs := make([]SidecarFileRef, len(c.pendingFiles))
+	copy(refs, c.pendingFiles)
+	return lode.Metadata{MetadataKeySidecarFiles: refs}
+}
+
+// drainPendingFiles clears accumulated sidecar file refs after a successful write.
+// Must be called under c.mu.
+func (c *LodeClient) drainPendingFiles() {
+	c.pendingFiles = c.pendingFiles[:0]
 }
 
 // computeMD5 returns the hex-encoded MD5 digest of data.
