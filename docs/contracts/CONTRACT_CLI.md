@@ -411,7 +411,18 @@ InspectRunResponse:
   policy: string
   started_at: time
   ended_at: time | null
+  sidecar_files: SidecarFileSummary[] | null  # omitted when empty
+
+SidecarFileSummary:
+  filename: string
+  content_type: string
+  size: number
+  path: string
 ```
+
+The `sidecar_files` field lists files written via `storage.put()` during the
+run. File refs are collected from Lode snapshot metadata (see CONTRACT_LODE.md
+§ Sidecar File Inventory). The field is omitted when no sidecar files exist.
 
 ### `inspect job <job-id>`
 
