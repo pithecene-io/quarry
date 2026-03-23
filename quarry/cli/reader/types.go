@@ -9,16 +9,25 @@ package reader
 
 import "time"
 
+// SidecarFileSummary describes a sidecar file discovered from snapshot metadata.
+type SidecarFileSummary struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	Path        string `json:"path"`
+}
+
 // InspectRunResponse per CONTRACT_CLI.md.
 type InspectRunResponse struct {
-	RunID     string     `json:"run_id"`
-	JobID     string     `json:"job_id"`
-	State     string     `json:"state"`
-	Attempt   int        `json:"attempt"`
-	ParentRun *string    `json:"parent_run"`
-	Policy    string     `json:"policy"`
-	StartedAt time.Time  `json:"started_at"`
-	EndedAt   *time.Time `json:"ended_at"`
+	RunID        string               `json:"run_id"`
+	JobID        string               `json:"job_id"`
+	State        string               `json:"state"`
+	Attempt      int                  `json:"attempt"`
+	ParentRun    *string              `json:"parent_run"`
+	Policy       string               `json:"policy"`
+	StartedAt    time.Time            `json:"started_at"`
+	EndedAt      *time.Time           `json:"ended_at"`
+	SidecarFiles []SidecarFileSummary `json:"sidecar_files,omitempty"`
 }
 
 // InspectJobResponse per CONTRACT_CLI.md.

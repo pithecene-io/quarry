@@ -27,6 +27,20 @@ func (r *StubReader) InspectRun(runID string) *InspectRunResponse {
 		Policy:    "strict",
 		StartedAt: now.Add(-5 * time.Minute),
 		EndedAt:   &ended,
+		SidecarFiles: []SidecarFileSummary{
+			{
+				Filename:    "product-image.png",
+				ContentType: "image/png",
+				Size:        14230,
+				Path:        "datasets/quarry/partitions/source=stub-source/category=default/day=2026-03-22/run_id=" + runID + "/files/product-image.png",
+			},
+			{
+				Filename:    "page-snapshot.html",
+				ContentType: "text/html",
+				Size:        85412,
+				Path:        "datasets/quarry/partitions/source=stub-source/category=default/day=2026-03-22/run_id=" + runID + "/files/page-snapshot.html",
+			},
+		},
 	}
 }
 
