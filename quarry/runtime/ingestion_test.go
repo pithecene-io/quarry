@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	lodepkg "github.com/pithecene-io/lode/lode"
 	"github.com/vmihailenco/msgpack/v5"
 
 	"github.com/pithecene-io/quarry/lode"
@@ -1130,5 +1131,173 @@ func TestIngestionEngine_PipeCloseBeforeTerminal(t *testing.T) {
 	}
 	if !IsStreamError(err) {
 		t.Errorf("expected stream error, got: %v", err)
+	}
+}
+
+// =============================================================================
+// End-to-End: file_write → event flush → sidecar_files in snapshot Metadata
+//
+// This test verifies the full pipeline: executor emits file_write frame,
+// ingestion engine calls PutFile on a real LodeClient, strict policy
+// flushes events via the same client's WriteEvents, and the resulting
+// snapshot contains sidecar_files metadata.
+// =============================================================================
+
+func TestIngestionEngine_FileWrite_MetadataInventory_EndToEnd(t *testing.T) {
+	runMeta := &types.RunMeta{
+		RunID:   "run-e2e",
+		Attempt: 1,
+	}
+
+	// Set up a real LodeClient backed by in-memory storage.
+	// This is both the FileWriter (for PutFile) and the sink client
+	// (for WriteEvents), so pending file refs flow through correctly.
+	store := lodepkg.NewMemory()
+	factory := func() (lodepkg.Store, error) { return store, nil }
+
+	cfg := lode.Config{
+		Dataset:  "quarry",
+		Source:   "e2e-source",
+		Category: "e2e-category",
+		Day:      "2026-03-22",
+		RunID:    "run-e2e",
+		Policy:   "strict",
+	}
+
+	client, err := lode.NewLodeClientWithFactory(cfg, factory)
+	if err != nil {
+		t.Fatalf("NewLodeClientWithFactory failed: %v", err)
+	}
+
+	// StrictPolicy writes each event immediately via the sink.
+	sink := lode.NewSink(cfg, client)
+	pol := policy.NewStrictPolicy(sink)
+
+	// Build IPC frame sequence: file_write → item event → terminal event
+	var buf bytes.Buffer
+
+	// 1. file_write frame
+	fileWrite := &types.FileWriteFrame{
+		Type:        "file_write",
+		WriteID:     1,
+		Filename:    "product-image.png",
+		ContentType: "image/png",
+		Data:        []byte("fake-png-bytes"),
+	}
+	buf.Write(encodeFileWriteFrame(fileWrite))
+
+	// 2. Item event (this triggers strict policy → WriteEvents → flushes pending files)
+	itemEvent := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-1",
+		RunID:           "run-e2e",
+		Seq:             1,
+		Type:            types.EventTypeItem,
+		Ts:              "2026-03-22T10:00:00Z",
+		Payload:         map[string]any{"item_type": "product", "data": map[string]any{"name": "Widget"}},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(itemEvent))
+
+	// 3. Terminal event
+	terminal := &types.EventEnvelope{
+		ContractVersion: types.ContractVersion,
+		EventID:         "evt-2",
+		RunID:           "run-e2e",
+		Seq:             2,
+		Type:            types.EventTypeRunComplete,
+		Ts:              "2026-03-22T10:00:01Z",
+		Payload:         map[string]any{},
+		Attempt:         1,
+	}
+	buf.Write(encodeEventFrame(terminal))
+
+	// Run ingestion
+	var ackBuf bytes.Buffer
+	logger := log.NewLogger(runMeta)
+	engine := NewIngestionEngine(&buf, pol, NewArtifactManager(), client, logger, runMeta, nil, nil, &ackBuf)
+
+	if err := engine.Run(t.Context()); err != nil {
+		t.Fatalf("ingestion failed: %v", err)
+	}
+
+	// Verify file_write_ack was sent
+	if ackBuf.Len() == 0 {
+		t.Fatal("expected file_write_ack frame")
+	}
+
+	// Read snapshots from the dataset and verify sidecar_files metadata
+	ds, err := lode.NewReadDataset("quarry", factory)
+	if err != nil {
+		t.Fatalf("NewReadDataset failed: %v", err)
+	}
+
+	snapshots, err := ds.Snapshots(t.Context())
+	if err != nil {
+		t.Fatalf("Snapshots failed: %v", err)
+	}
+
+	if len(snapshots) == 0 {
+		t.Fatal("expected at least one snapshot")
+	}
+
+	// Verify exactly one snapshot carries sidecar_files metadata, and that
+	// it is the item/event flush snapshot (not duplicated onto the terminal
+	// snapshot or any other). This pins down the "flush on event write and
+	// drain afterward" contract.
+	metadataCount := 0
+	for _, snap := range snapshots {
+		raw, ok := snap.Manifest.Metadata[lode.MetadataKeySidecarFiles]
+		if !ok {
+			continue
+		}
+		files, ok := raw.([]any)
+		if !ok || len(files) == 0 {
+			continue
+		}
+		metadataCount++
+
+		// Verify it carries the correct file ref
+		if len(files) != 1 {
+			t.Fatalf("sidecar_files has %d entries, want 1", len(files))
+		}
+		ref, ok := files[0].(map[string]any)
+		if !ok {
+			t.Fatalf("file ref is %T, want map[string]any", files[0])
+		}
+		if ref["filename"] != "product-image.png" {
+			t.Errorf("filename = %v, want product-image.png", ref["filename"])
+		}
+		if ref["content_type"] != "image/png" {
+			t.Errorf("content_type = %v, want image/png", ref["content_type"])
+		}
+		// Size should match len("fake-png-bytes") = 14
+		if size, ok := ref["size"].(float64); !ok || int64(size) != 14 {
+			t.Errorf("size = %v, want 14", ref["size"])
+		}
+
+		// Verify this snapshot contains the item event (the first event
+		// flush), not the terminal event. Read the snapshot data and
+		// check for item_type in the record.
+		data, err := ds.Read(t.Context(), snap.ID)
+		if err != nil {
+			t.Fatalf("ds.Read failed: %v", err)
+		}
+		if len(data) != 1 {
+			t.Fatalf("snapshot has %d records, want 1", len(data))
+		}
+		record, ok := data[0].(map[string]any)
+		if !ok {
+			t.Fatalf("record is %T, want map[string]any", data[0])
+		}
+		if record["event_type"] != "item" {
+			t.Errorf("snapshot with sidecar_files has event_type=%v, want item", record["event_type"])
+		}
+	}
+	if metadataCount == 0 {
+		t.Fatal("no snapshot contains sidecar_files metadata — file_write refs did not survive to event flush")
+	}
+	if metadataCount > 1 {
+		t.Errorf("sidecar_files metadata found on %d snapshots, want exactly 1 (should only appear on item event flush)", metadataCount)
 	}
 }
